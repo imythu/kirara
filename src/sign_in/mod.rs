@@ -1,13 +1,16 @@
 pub mod scheduler;
 
-use std::thread;
+use std::net::{Shutdown, TcpStream};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tungstenite::{Message, connect};
+use tokio_util::sync::CancellationToken;
+use tungstenite::client::IntoClientRequest;
+use tungstenite::{HandshakeError, Message, client_tls};
 
 use crate::config::{BrowserlessConfig, GlobalConfig, LightpandaConfig};
 use crate::site::{SiteAuth, SiteRecord};
@@ -202,7 +205,7 @@ fn run_cdp_probe(
         });
     }
 
-    thread::sleep(Duration::from_secs(2));
+    client.wait(Duration::from_secs(2))?;
     let title = client
         .call(
             "Runtime.evaluate",
@@ -635,16 +638,166 @@ fn create_target_session(client: &mut CdpClient) -> Result<String, String> {
     Ok(session_id)
 }
 
+const CDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const CDP_IO_TIMEOUT: Duration = Duration::from_secs(30);
+const CDP_CALL_TIMEOUT: Duration = Duration::from_secs(60);
+const CDP_SHUTDOWN_ERROR: &str = "服务正在退出，已取消浏览器操作";
+
+struct AbortTask(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortTask {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+struct InterruptSocket(Arc<TcpStream>);
+
+impl Drop for InterruptSocket {
+    fn drop(&mut self) {
+        let _ = self.0.shutdown(Shutdown::Both);
+    }
+}
+
+struct CdpConnectionGuard {
+    socket: InterruptSocket,
+    _watcher: AbortTask,
+}
+
+impl CdpConnectionGuard {
+    fn new(stream: &TcpStream, shutdown: CancellationToken) -> Result<Self, String> {
+        let socket = InterruptSocket(Arc::new(
+            stream.try_clone().map_err(|error| error.to_string())?,
+        ));
+        let on_shutdown = InterruptSocket(socket.0.clone());
+        let watcher = tokio::spawn(async move {
+            // This guard also interrupts blocking IO if the runtime drops the
+            // watcher before it has a chance to observe cancellation.
+            let _on_shutdown = on_shutdown;
+            shutdown.cancelled().await;
+        });
+        Ok(Self {
+            socket,
+            _watcher: AbortTask(watcher),
+        })
+    }
+
+    fn deadline(&self, duration: Duration) -> AbortTask {
+        let socket = self.socket.0.clone();
+        AbortTask(tokio::spawn(async move {
+            tokio::time::sleep(duration).await;
+            let _ = socket.shutdown(Shutdown::Both);
+        }))
+    }
+}
+
 struct CdpClient {
-    socket: tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>,
+    socket: tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<TcpStream>>,
+    connection: CdpConnectionGuard,
+    shutdown: CancellationToken,
     next_id: u64,
+}
+
+fn cdp_block_on<T>(
+    shutdown: &CancellationToken,
+    future: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    let handle = tokio::runtime::Handle::try_current()
+        .map_err(|error| format!("获取 tokio handle 失败: {error}"))?;
+    handle.block_on(async {
+        tokio::select! {
+            biased;
+            _ = shutdown.cancelled() => Err(CDP_SHUTDOWN_ERROR.to_string()),
+            result = future => result,
+        }
+    })
 }
 
 impl CdpClient {
     fn connect(endpoint: String) -> Result<Self, String> {
-        let (socket, _) =
-            connect(endpoint.as_str()).map_err(|e| format!("连接浏览器 CDP 失败: {}", e))?;
-        Ok(Self { socket, next_id: 0 })
+        Self::connect_with_shutdown(endpoint, crate::runtime_shutdown_token())
+    }
+
+    fn connect_with_shutdown(
+        mut endpoint: String,
+        shutdown: CancellationToken,
+    ) -> Result<Self, String> {
+        // Retain tungstenite::connect's limit of three redirects.
+        for attempt in 0..=3 {
+            let request = endpoint
+                .as_str()
+                .into_client_request()
+                .map_err(|error| format!("浏览器 CDP 地址无效: {error}"))?;
+            let port = request
+                .uri()
+                .port_u16()
+                .unwrap_or(match request.uri().scheme_str() {
+                    Some("ws") => 80,
+                    Some("wss") => 443,
+                    _ => return Err("浏览器 CDP 地址必须使用 ws 或 wss".to_string()),
+                });
+            let host = request
+                .uri()
+                .host()
+                .ok_or_else(|| "浏览器 CDP 地址缺少主机名".to_string())?
+                .trim_start_matches('[')
+                .trim_end_matches(']');
+            let stream = cdp_block_on(&shutdown, async {
+                tokio::time::timeout(
+                    CDP_CONNECT_TIMEOUT,
+                    tokio::net::TcpStream::connect((host, port)),
+                )
+                .await
+                .map_err(|_| "连接浏览器 CDP 超时".to_string())?
+                .map_err(|error| format!("连接浏览器 CDP 失败: {error}"))?
+                .into_std()
+                .map_err(|error| error.to_string())
+            })?;
+            stream
+                .set_nonblocking(false)
+                .map_err(|error| error.to_string())?;
+            stream
+                .set_nodelay(true)
+                .map_err(|error| error.to_string())?;
+            stream
+                .set_read_timeout(Some(CDP_IO_TIMEOUT))
+                .map_err(|error| error.to_string())?;
+            stream
+                .set_write_timeout(Some(CDP_IO_TIMEOUT))
+                .map_err(|error| error.to_string())?;
+            let connection = CdpConnectionGuard::new(&stream, shutdown.clone())?;
+            let handshake_deadline = connection.deadline(CDP_IO_TIMEOUT);
+            match client_tls(request, stream) {
+                Ok((socket, _)) => {
+                    drop(handshake_deadline);
+                    return Ok(Self {
+                        socket,
+                        connection,
+                        shutdown,
+                        next_id: 0,
+                    });
+                }
+                Err(HandshakeError::Failure(tungstenite::Error::Http(response)))
+                    if response.status().is_redirection() && attempt < 3 =>
+                {
+                    endpoint = response
+                        .headers()
+                        .get("Location")
+                        .and_then(|location| location.to_str().ok())
+                        .ok_or_else(|| "浏览器 CDP 重定向缺少有效地址".to_string())?
+                        .to_string();
+                }
+                Err(error) => return Err(format!("连接浏览器 CDP 失败: {error}")),
+            }
+        }
+        Err("浏览器 CDP 重定向次数过多".to_string())
+    }
+
+    fn wait(&self, duration: Duration) -> Result<(), String> {
+        cdp_block_on(&self.shutdown, async {
+            tokio::time::sleep(duration).await;
+            Ok(())
+        })
     }
 
     fn call(
@@ -653,6 +806,12 @@ impl CdpClient {
         params: Value,
         session_id: Option<&str>,
     ) -> Result<Value, String> {
+        if self.shutdown.is_cancelled() {
+            return Err(CDP_SHUTDOWN_ERROR.to_string());
+        }
+        // A stream of unrelated browser events must not extend the operation
+        // forever. The deadline also interrupts an incomplete WebSocket frame.
+        let _deadline = self.connection.deadline(CDP_CALL_TIMEOUT);
         self.next_id += 1;
         let id = self.next_id;
         let mut request = json!({
@@ -669,6 +828,9 @@ impl CdpClient {
             .map_err(|e| format!("发送 CDP 指令失败: {}", e))?;
 
         loop {
+            if self.shutdown.is_cancelled() {
+                return Err(CDP_SHUTDOWN_ERROR.to_string());
+            }
             let message = self
                 .socket
                 .read()
@@ -691,7 +853,9 @@ impl CdpClient {
 
 impl Drop for CdpClient {
     fn drop(&mut self) {
-        let _ = self.socket.close(None);
+        // A WebSocket close frame can itself block on a stalled peer. Close the
+        // underlying connection directly when releasing this blocking client.
+        let _ = self.connection.socket.0.shutdown(Shutdown::Both);
     }
 }
 
@@ -747,7 +911,7 @@ fn run_cdp_sign_in_blocking(
 }
 
 fn run_open_page_sign_in(client: &mut CdpClient, session_id: &str) -> Result<SignInOutput, String> {
-    thread::sleep(Duration::from_secs(7));
+    client.wait(Duration::from_secs(7))?;
     let text = page_text_via_cdp(client, session_id)?;
     if let Some(result) = classify_sign_in_text(&text) {
         return Ok(result);
@@ -770,7 +934,7 @@ fn run_cloudflare_sign_in(
 
     let clicked = evaluate_bool_via_cdp(client, session_id, CLICK_SIGN_IN_SCRIPT)?;
     if clicked {
-        thread::sleep(Duration::from_millis(2500));
+        client.wait(Duration::from_millis(2500))?;
     } else {
         for url in [
             format!("{}/attendance.php?action=sign", base_url),
@@ -816,9 +980,9 @@ fn run_ocr_captcha_sign_in(
 
     let clicked = evaluate_bool_via_cdp(client, session_id, CLICK_SIGN_IN_SCRIPT)?;
     if clicked {
-        thread::sleep(Duration::from_millis(2500));
+        client.wait(Duration::from_millis(2500))?;
         if handle_captcha_if_present(client, session_id, ocr_api_key)? {
-            thread::sleep(Duration::from_millis(2500));
+            client.wait(Duration::from_millis(2500))?;
         }
     } else {
         for url in [
@@ -834,7 +998,7 @@ fn run_ocr_captcha_sign_in(
                     return Ok(result);
                 }
                 if handle_captcha_if_present(client, session_id, ocr_api_key)? {
-                    thread::sleep(Duration::from_millis(2500));
+                    client.wait(Duration::from_millis(2500))?;
                 }
             }
         }
@@ -896,7 +1060,7 @@ fn navigate_via_cdp(
             if let Some(error_text) = value.get("errorText").and_then(Value::as_str) {
                 return Err(format!("{context}: {error_text}"));
             }
-            thread::sleep(Duration::from_secs(2));
+            client.wait(Duration::from_secs(2))?;
             Ok(())
         }
         Err(error) => Err(format!("{context}: {error}")),
@@ -929,7 +1093,7 @@ fn wait_for_cloudflare(client: &mut CdpClient, session_id: &str) -> Result<(), S
         if started.elapsed() >= MAX_WAIT {
             return Err("Cloudflare 挑战未通过，请检查 cf_clearance cookie 或代理".to_string());
         }
-        thread::sleep(POLL_INTERVAL);
+        client.wait(POLL_INTERVAL)?;
     }
 }
 
@@ -1017,50 +1181,47 @@ fn handle_captcha_if_present(
 }
 
 fn ocr_space_recognize(api_key: &str, data_url: &str) -> Result<String, String> {
-    let handle = tokio::runtime::Handle::try_current()
-        .map_err(|e| format!("获取 tokio handle 失败: {}", e))?;
-    handle
-        .block_on(async {
-            let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(20))
-                .build()
-                .map_err(|e| format!("构建 OCR HTTP 客户端失败: {}", e))?;
-            let form = reqwest::multipart::Form::new()
-                .text("apikey", api_key.to_string())
-                .text("language", "auto".to_string())
-                .text("scale", "true".to_string())
-                .text("base64Image", data_url.to_string());
-            let resp = client
-                .post("https://api.ocr.space/parse/image")
-                .multipart(form)
-                .send()
-                .await
-                .map_err(|e| format!("OCR 请求失败: {}", e))?;
-            let value: Value = resp
-                .json()
-                .await
-                .map_err(|e| format!("解析 OCR 响应失败: {}", e))?;
-            if value
-                .get("IsErroredOnProcessing")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-            {
-                let msg = value
-                    .get("ErrorMessage")
-                    .and_then(Value::as_str)
-                    .unwrap_or("未知错误");
-                return Err(format!("OCR 处理出错: {}", msg));
-            }
-            let text = value
-                .get("ParsedResults")
-                .and_then(|v| v.get(0))
-                .and_then(|v| v.get("ParsedText"))
+    cdp_block_on(&crate::runtime_shutdown_token(), async {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|e| format!("构建 OCR HTTP 客户端失败: {}", e))?;
+        let form = reqwest::multipart::Form::new()
+            .text("apikey", api_key.to_string())
+            .text("language", "auto".to_string())
+            .text("scale", "true".to_string())
+            .text("base64Image", data_url.to_string());
+        let resp = client
+            .post("https://api.ocr.space/parse/image")
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("OCR 请求失败: {}", e))?;
+        let value: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("解析 OCR 响应失败: {}", e))?;
+        if value
+            .get("IsErroredOnProcessing")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            let msg = value
+                .get("ErrorMessage")
                 .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            Ok(text)
-        })
-        .map_err(|e| format!("OCR 任务失败: {}", e))
+                .unwrap_or("未知错误");
+            return Err(format!("OCR 处理出错: {}", msg));
+        }
+        let text = value
+            .get("ParsedResults")
+            .and_then(|v| v.get(0))
+            .and_then(|v| v.get("ParsedText"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        Ok(text)
+    })
+    .map_err(|e| format!("OCR 任务失败: {}", e))
 }
 
 fn evaluate_string_await_via_cdp(
@@ -1375,6 +1536,130 @@ pub fn normalize_sign_in_method(value: &str) -> String {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use tokio::io::AsyncReadExt;
+
+    async fn assert_cdp_handshake_is_cancellable(scheme: &str) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("{scheme}://{}/", listener.local_addr().unwrap());
+        let shutdown = CancellationToken::new();
+        let client_shutdown = shutdown.clone();
+        let client = tokio::task::spawn_blocking(move || {
+            CdpClient::connect_with_shutdown(endpoint, client_shutdown).map(|_| ())
+        });
+        let (mut peer, _) = tokio::time::timeout(Duration::from_secs(5), listener.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut handshake = [0; 4096];
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), peer.read(&mut handshake))
+                .await
+                .unwrap()
+                .unwrap()
+                > 0
+        );
+        // Keep the peer open without replying to its TLS/WebSocket handshake.
+        shutdown.cancel();
+        let result = tokio::time::timeout(Duration::from_secs(2), client)
+            .await
+            .expect("CDP handshake did not stop after cancellation")
+            .unwrap();
+        assert!(result.is_err());
+        drop(peer);
+    }
+
+    #[tokio::test]
+    async fn cdp_shutdown_interrupts_a_stalled_websocket_handshake() {
+        assert_cdp_handshake_is_cancellable("ws").await;
+    }
+
+    #[tokio::test]
+    async fn cdp_shutdown_interrupts_a_stalled_tls_handshake() {
+        assert_cdp_handshake_is_cancellable("wss").await;
+    }
+
+    async fn stalled_cdp_peer(
+        listener: tokio::net::TcpListener,
+        received: tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (peer, _) = listener.accept().await.unwrap();
+        let peer = peer.into_std().unwrap();
+        peer.set_nonblocking(false).unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        peer.set_write_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        tokio::task::spawn_blocking(move || {
+            let mut socket = tungstenite::accept(peer).unwrap();
+            assert!(socket.read().unwrap().is_text());
+            received.send(()).unwrap();
+            // Never reply to the command; wait for the client to close its socket.
+            assert!(socket.read().is_err());
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn cdp_shutdown_interrupts_a_stalled_command_response() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("ws://{}/", listener.local_addr().unwrap());
+        let shutdown = CancellationToken::new();
+        let client_shutdown = shutdown.clone();
+        let (received, ready) = tokio::sync::oneshot::channel();
+        let peer = tokio::spawn(stalled_cdp_peer(listener, received));
+        let client = tokio::task::spawn_blocking(move || {
+            let mut client = CdpClient::connect_with_shutdown(endpoint, client_shutdown)?;
+            client.call("Browser.getVersion", json!({}), None)
+        });
+        tokio::time::timeout(Duration::from_secs(5), ready)
+            .await
+            .unwrap()
+            .unwrap();
+        shutdown.cancel();
+        assert!(
+            tokio::time::timeout(Duration::from_secs(2), client)
+                .await
+                .expect("CDP read did not stop after cancellation")
+                .unwrap()
+                .is_err()
+        );
+        peer.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn cdp_runtime_drop_interrupts_a_blocking_command() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("ws://{}/", listener.local_addr().unwrap());
+        let (received, ready) = tokio::sync::oneshot::channel();
+        let peer = tokio::spawn(stalled_cdp_peer(listener, received));
+        let (finished, done) = tokio::sync::oneshot::channel();
+        let thread = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+                tokio::task::spawn_blocking(move || {
+                    let mut client =
+                        CdpClient::connect_with_shutdown(endpoint, CancellationToken::new())
+                            .unwrap();
+                    assert!(client.call("Browser.getVersion", json!({}), None).is_err());
+                });
+                ready.await.unwrap();
+            });
+            // No explicit cancellation: dropping the watcher must still close
+            // the socket so runtime teardown can join its blocking thread.
+            drop(runtime);
+            let _ = finished.send(());
+        });
+        tokio::time::timeout(Duration::from_secs(2), done)
+            .await
+            .expect("runtime drop waited indefinitely for blocking CDP IO")
+            .unwrap();
+        thread.join().unwrap();
+        peer.await.unwrap();
+    }
 
     #[test]
     fn lightpanda_endpoint_uses_global_browser_configuration() {

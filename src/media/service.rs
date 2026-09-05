@@ -607,11 +607,19 @@ impl MediaService {
             })?;
         let service = self.clone();
         let task_owner = owner.clone();
+        let shutdown = crate::runtime_shutdown_token();
         let task = tokio::spawn(
             async move {
-                service
-                    .run_claimed_subscription(record, &task_owner, SUBSCRIPTION_LEASE_SECONDS)
-                    .await
+                tokio::select! {
+                    biased;
+                    _ = shutdown.cancelled() => {
+                        service.db.recover_subscription_leases_for_owners(&[task_owner.clone()]).await?;
+                        Err(MediaServiceError::App(AppError::Server {
+                            message: "manual subscription interrupted by server shutdown".into(),
+                        }))
+                    }
+                    result = service.run_claimed_subscription(record, &task_owner, SUBSCRIPTION_LEASE_SECONDS) => result,
+                }
             }
             .in_current_span(),
         );

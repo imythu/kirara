@@ -1,4 +1,5 @@
 import type { GlobalConfig } from "@/types";
+import { desktopFetch, desktopLogs, isDesktop, type LogHandlers } from "./desktop";
 
 export const API_BASE = "";
 
@@ -23,7 +24,7 @@ export const defaultSettings: GlobalConfig = {
 };
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await (isDesktop ? desktopFetch : fetch)(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
@@ -41,6 +42,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export function subscribeLogs(handlers: LogHandlers): { close: () => void } {
+  if (isDesktop) return desktopLogs(handlers);
+  const source = new EventSource(`${API_BASE}/api/system/logs/stream`);
+  source.onopen = handlers.onOpen;
+  source.onerror = handlers.onError;
+  source.addEventListener("log", (event) => handlers.onLog((event as MessageEvent<string>).data));
+  return { close: () => source.close() };
 }
 
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION as string | undefined;

@@ -3,7 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/imythu/kirara?style=flat-square)](https://github.com/imythu/kirara/releases)
 [![Docker Image](https://img.shields.io/github/v/release/imythu/kirara?style=flat-square&label=ghcr.io)](https://github.com/imythu/kirara/pkgs/container/kirara)
 
-云母是一套面向 PT 用户的 Web 管理工具，提供自动追剧、电影订阅、多站资源搜索、qBittorrent 下载、刷流任务和站点数据总览。
+云母是一套面向 PT 用户的管理工具，提供自动追剧、电影订阅、多站资源搜索、qBittorrent 下载、刷流任务和站点数据总览。Windows 和 macOS 提供桌面应用，Linux 和 Docker 提供 Web 服务。
 
 云母的英文项目名为 **Kirara**，仓库、二进制、Docker 镜像和新建数据库统一使用 `kirara`。项目已从 [imythu/rflush](https://github.com/imythu/rflush) 迁移至本仓库，后续更新、问题反馈和发布均在这里进行。
 
@@ -25,20 +25,31 @@
 - 导出站点账号总览图片
 - React Web 界面，适配桌面端和移动端
 
-配置、订阅、下载记录和运行状态保存在 SQLite 数据库中，默认路径为 `data/kirara.db`。
+配置、订阅、下载记录和运行状态保存在本地 SQLite 数据库中，路径见[数据目录](#数据目录)。
 
 ## 快速开始
 
-### 直接运行
+### Windows / macOS 桌面应用
 
-从 [GitHub Releases](https://github.com/imythu/kirara/releases) 下载对应平台的压缩包，解压后运行：
+从 [GitHub Releases](https://github.com/imythu/kirara/releases) 下载对应系统的安装包，并核对同一版本的 `SHA256SUMS.txt`：
+
+| 系统 | 安装包 | 使用方式 |
+| --- | --- | --- |
+| Windows x64 | `kirara-2.0.0-x86_64-pc-windows-msvc-setup.exe` | 运行安装程序，完成后从开始菜单打开 Kirara |
+| macOS Apple Silicon | `kirara-2.0.0-aarch64-apple-darwin.dmg` | 打开映像，将 Kirara 拖入“应用程序”，然后打开 |
+
+桌面应用启动后直接显示管理界面，无需打开终端或浏览器。自动扫描、下载队列和定时任务随应用运行；退出应用后停止执行。
+
+当前 Windows 安装包未配置开发者签名，macOS 使用临时签名且未经过 Apple 公证，首次打开可能出现系统的发布者验证提示。macOS 可按 [Apple 的说明](https://support.apple.com/zh-cn/102445)在“隐私与安全性”中允许打开已确认来源的应用。
+
+从 1.x 命令行版本升级时，请先按[桌面版数据迁移](#桌面版数据迁移)保留原有配置。
+
+### Linux 直接运行
+
+从 [GitHub Releases](https://github.com/imythu/kirara/releases) 下载对应架构的 `.tar.gz` 压缩包，解压后运行：
 
 ```bash
-# Linux
 ./kirara
-
-# Windows PowerShell
-.\kirara.exe
 ```
 
 默认访问地址：
@@ -71,7 +82,7 @@ http://127.0.0.1:3000
 docker run --name kirara \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/data:/data \
-  ghcr.io/imythu/kirara:1.0.0
+  ghcr.io/imythu/kirara:2.0.0
 ```
 
 自动构建提供 `latest-beta`（Linux amd64）；正式版提供 `latest`（Linux amd64 / arm64）。
@@ -241,7 +252,7 @@ KIRARA_DATA_DIR=/data
 
 ## 安全说明
 
-云母当前不内置用户认证。默认只监听 `127.0.0.1`。
+云母当前不内置用户认证。Linux 命令行服务默认只监听 `127.0.0.1`。
 
 如果监听 `0.0.0.0`、暴露到局域网或通过公网访问，必须自行限制网络访问，并放在带身份认证的反向代理后。CORS 限制不能替代身份认证。
 
@@ -251,7 +262,14 @@ TMDB Token、PT Cookie、API Key、Passkey 和下载器密码保存在本地 SQL
 
 ## 数据目录
 
-默认目录：
+桌面应用使用系统应用数据目录，数据库位置如下：
+
+| 平台 | 数据库 |
+| --- | --- |
+| Windows | `%APPDATA%\io.github.imythu.kirara\kirara.db` |
+| macOS | `~/Library/Application Support/io.github.imythu.kirara/kirara.db` |
+
+Linux 命令行服务默认路径：
 
 ```text
 ./data/kirara.db
@@ -274,9 +292,18 @@ TMDB Token、PT Cookie、API Key、Passkey 和下载器密码保存在本地 SQL
 
 升级或迁移前建议备份整个数据目录。
 
+### 桌面版数据迁移
+
+1. 停止旧程序，备份完整数据目录，包括数据库以及可能存在的 `-wal`、`-shm` 文件。
+2. 如已打开新版桌面应用，先退出应用。
+3. 将旧数据目录的完整内容复制到对应平台的应用数据目录。Windows 可在资源管理器地址栏输入 `%APPDATA%\io.github.imythu.kirara`；macOS 可在访达中使用“前往文件夹”打开 `~/Library/Application Support/io.github.imythu.kirara`。目录不存在时可自行创建。
+4. 打开 Kirara，核对站点、下载器、订阅和任务状态。
+
+旧数据库名为 `rflush.db` 时无需重命名。目标目录中已有 `kirara.db` 时会优先使用该文件；请先将新版生成的空数据目录移至备份位置，再复制旧数据，避免误打开空库。
+
 ## 开发
 
-后端：
+Web 服务后端：
 
 ```bash
 cargo run
@@ -286,17 +313,17 @@ cargo run
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
 前端开发服务器默认运行在 `http://127.0.0.1:5173`，并将 `/api` 请求代理到 `http://127.0.0.1:3000`。
 
-本地构建：
+本地构建命令行服务：
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 
 cd ..
@@ -304,6 +331,25 @@ cargo build --release
 ```
 
 发布构建会将 `frontend/dist` 嵌入 Rust 可执行文件。
+
+Windows / macOS 桌面开发需要安装 Rust、Node.js 和 [Tauri 2 的系统依赖](https://v2.tauri.app/start/prerequisites/)。在仓库根目录执行：
+
+```bash
+npm --prefix frontend ci
+npm exec --prefix frontend -- tauri dev
+```
+
+桌面安装包构建：
+
+```bash
+# Windows
+npm exec --prefix frontend -- tauri build --bundles nsis
+
+# macOS
+npm exec --prefix frontend -- tauri build --bundles dmg
+```
+
+Tauri 会自动运行前端构建。安装包输出到 `target/release/bundle/nsis` 或 `target/release/bundle/dmg`。后端公共库位于 `src/lib.rs`，命令行入口和 `src-tauri` 桌面入口共用同一套业务实现。
 
 ## 感谢与参考
 

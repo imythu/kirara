@@ -21,7 +21,7 @@ import { Dialog, getFocusableElements } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { API_BASE, APP_VERSION, api, defaultSettings } from "@/lib/api";
+import { APP_VERSION, api, defaultSettings, subscribeLogs } from "@/lib/api";
 import type { GlobalConfig } from "@/types";
 
 const MAX_LOG_LINES = 500;
@@ -172,10 +172,6 @@ function setHash(page: AppPage, remembered?: string) {
   }
 }
 
-function getLogsStreamUrl() {
-  return `${API_BASE}/api/system/logs/stream`;
-}
-
 function extractLogLevel(line: string): LogLevel | null {
   const normalized = line.toLowerCase();
   if (normalized.includes(" trace ")) return "trace";
@@ -323,7 +319,7 @@ export default function App() {
     if (!logsOpen) return;
 
     let closed = false;
-    let source: EventSource | null = null;
+    let source: { close: () => void } | null = null;
     let flushTimer: number | null = null;
     setLogs([]);
     pendingLogsRef.current = [];
@@ -347,30 +343,25 @@ export default function App() {
 
     flushTimer = window.setInterval(flushLogs, LOG_FLUSH_INTERVAL_MS);
 
-    source = new EventSource(getLogsStreamUrl());
-    source.onopen = () => {
-      if (!closed) {
-        setLogsConnected(true);
-      }
-    };
-    source.onmessage = () => undefined;
-    source.addEventListener("log", (event) => {
-      if (closed) return;
-      const message = event as MessageEvent<string>;
-      try {
-        const payload = JSON.parse(message.data) as { encoded_line?: string };
-        if (typeof payload.encoded_line === "string") {
-          enqueueLog(decodeURIComponent(payload.encoded_line));
+    source = subscribeLogs({
+      onOpen: () => {
+        if (!closed) setLogsConnected(true);
+      },
+      onLog: (data) => {
+        if (closed) return;
+        try {
+          const payload = JSON.parse(data) as { encoded_line?: string };
+          if (typeof payload.encoded_line === "string") {
+            enqueueLog(decodeURIComponent(payload.encoded_line));
+          }
+        } catch {
+          enqueueLog(data);
         }
-      } catch {
-        enqueueLog(message.data);
-      }
+      },
+      onError: () => {
+        if (!closed) setLogsConnected(false);
+      },
     });
-    source.onerror = () => {
-      if (!closed) {
-        setLogsConnected(false);
-      }
-    };
 
     return () => {
       closed = true;

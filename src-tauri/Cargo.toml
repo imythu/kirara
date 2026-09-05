@@ -1,0 +1,32 @@
+[package]
+name = "kirara-desktop"
+version = "2.0.0"
+edition = "2024"
+description = "Kirara desktop application"
+default-run = "kirara-desktop"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kirara = { path = ".." }
+bytes = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["io-util"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

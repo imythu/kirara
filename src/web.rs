@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::listener::{ListenEndpoint, Listener};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -12,7 +12,7 @@ use chrono::Utc;
 use futures::stream;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{info, info_span, warn};
@@ -72,6 +72,7 @@ pub struct AppState {
     tag_rule_scheduler: Arc<TagRuleScheduler>,
     relocation_scheduler: Arc<RelocationScheduler>,
     self_use: bool,
+    shutdown: CancellationToken,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,12 +123,13 @@ impl AppState {
             tag_rule_scheduler,
             relocation_scheduler,
             self_use,
+            shutdown: CancellationToken::new(),
         }
     }
 }
 
 pub async fn serve(
-    listener: TcpListener,
+    listener: Listener,
     db: Database,
     scheduler: Arc<BrushScheduler>,
     sign_in_scheduler: Arc<SignInScheduler>,
@@ -140,11 +142,12 @@ pub async fn serve(
     tag_rule_scheduler: Arc<TagRuleScheduler>,
     relocation_scheduler: Arc<RelocationScheduler>,
     self_use: bool,
+    shutdown: CancellationToken,
 ) -> Result<(), AppError> {
-    let addr = listener.local_addr().map_err(|error| AppError::Server {
+    let addr = listener.endpoint().map_err(|error| AppError::Server {
         message: format!("failed to read bound web server address: {error}"),
     })?;
-    let state = AppState::new(
+    let mut state = AppState::new(
         db,
         scheduler,
         sign_in_scheduler,
@@ -158,26 +161,31 @@ pub async fn serve(
         Arc::clone(&relocation_scheduler),
         self_use,
     );
+    state.shutdown = shutdown.clone();
     let app = app_router(state, relocation_scheduler);
-    if !addr.ip().is_loopback() {
+    if matches!(&addr, ListenEndpoint::Tcp(addr) if !addr.ip().is_loopback()) {
         warn!(
             "web server is listening on a non-loopback address; place kirara behind an authenticated reverse proxy and restrict network access"
         );
     }
-    info!("web server listening on http://{}", addr);
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(async {
-        if let Err(error) = tokio::signal::ctrl_c().await {
-            info!("failed to listen for Ctrl+C: {}", error);
-        } else {
-            info!("Ctrl+C received, shutting down web server");
+    info!("web server listening on {}", addr);
+    let server = std::future::IntoFuture::into_future(
+        axum::serve(listener, app).with_graceful_shutdown(shutdown.clone().cancelled_owned()),
+    );
+    tokio::pin!(server);
+    let result = tokio::select! {
+        result = &mut server => result,
+        _ = shutdown.cancelled() => {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), &mut server).await {
+                Ok(result) => result,
+                Err(_) => {
+                    warn!("HTTP shutdown grace period elapsed; closing remaining requests");
+                    Ok(())
+                }
+            }
         }
-    })
-    .await
-    .map_err(|e| AppError::Server {
+    };
+    result.map_err(|e| AppError::Server {
         message: format!("server exited: {}", e),
     })
 }
@@ -2719,7 +2727,12 @@ fn validate_site_auth_type(site_type: SiteType, auth: &SiteAuth) -> Result<(), A
     if site_type == SiteType::MTeam && !matches!(auth, SiteAuth::ApiKey { .. }) {
         return Err(ApiError::bad_request("M-Team 站点必须使用 API Key 认证"));
     }
-    if site_type == SiteType::Gazelle && !matches!(auth, SiteAuth::Cookie { .. } | SiteAuth::CookiePasskey { .. }) {
+    if site_type == SiteType::Gazelle
+        && !matches!(
+            auth,
+            SiteAuth::Cookie { .. } | SiteAuth::CookiePasskey { .. }
+        )
+    {
         return Err(ApiError::bad_request("Gazelle 账户统计需要 Cookie 认证"));
     }
     Ok(())
@@ -4678,29 +4691,38 @@ async fn list_brush_task_torrents(
     }))
 }
 
-async fn stream_logs() -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>>
-{
+async fn stream_logs(
+    State(state): State<AppState>,
+) -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>> {
     let receiver = crate::logging::subscribe_logs();
-    let stream = stream::unfold(receiver, |mut receiver| async move {
-        loop {
-            match receiver.recv().await {
-                Ok(line) => {
-                    let payload = serde_json::json!({
-                        "encoded_line": urlencoding::encode(&line).into_owned()
-                    })
-                    .to_string();
-                    let event = Event::default().event("log").data(payload);
-                    return Some((Ok(event), receiver));
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                    continue;
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                    return None;
+    let stream = stream::unfold(
+        (receiver, state.shutdown),
+        |(mut receiver, shutdown)| async move {
+            loop {
+                let received = tokio::select! {
+                    biased;
+                    _ = shutdown.cancelled() => return None,
+                    result = receiver.recv() => result,
+                };
+                match received {
+                    Ok(line) => {
+                        let payload = serde_json::json!({
+                            "encoded_line": urlencoding::encode(&line).into_owned()
+                        })
+                        .to_string();
+                        let event = Event::default().event("log").data(payload);
+                        return Some((Ok(event), (receiver, shutdown)));
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        continue;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        return None;
+                    }
                 }
             }
-        }
-    });
+        },
+    );
 
     Sse::new(stream).keep_alive(KeepAlive::default())
 }

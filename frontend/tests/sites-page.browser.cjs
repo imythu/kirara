@@ -61,7 +61,9 @@ const sites = [
     assert.equal(await dialog('PT 数据总览').getByText('暂无站点统计数据', { exact: true }).count(), 0);
     overviewFailure = false;
     await dialog('PT 数据总览').getByRole('button', { name: '重新加载总览' }).click();
-    await dialog('PT 数据总览').getByText('2 个站点有账户数据', { exact: true }).waitFor();
+    const accountDataMetric = dialog('PT 数据总览').getByText('有账户数据', { exact: true }).locator('..').locator('..');
+    await accountDataMetric.getByText('2', { exact: true }).waitFor();
+    assert.equal(await accountDataMetric.getByText('/ 3', { exact: true }).innerText(), '/ 3');
     await close('PT 数据总览');
     await page.getByLabel('搜索站点', { exact: true }).fill('不存在');
     await visibleButton('清除筛选').click();

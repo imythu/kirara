@@ -76,9 +76,19 @@ fn normalize_log_filter(level: &str) -> String {
     directives.join(",")
 }
 
-pub fn init_logging(filter: EnvFilter) {
+pub fn init_logging(filter: EnvFilter) -> Result<(), AppError> {
+    // CLI and desktop share this library; a second in-process start must not
+    // attempt to install another global subscriber.
+    static INIT: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = INIT.lock().map_err(|error| AppError::Server {
+        message: format!("logging initialization failed: {error}"),
+    })?;
+    if let Some(handle) = reload_handle().get() {
+        return handle.reload(filter).map_err(|error| AppError::Server {
+            message: format!("failed to reload log filter: {error}"),
+        });
+    }
     let (filter_layer, handle) = reload::Layer::new(filter);
-    let _ = reload_handle().set(handle);
 
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_target(false)
@@ -89,7 +99,12 @@ pub fn init_logging(filter: EnvFilter) {
     tracing_subscriber::registry()
         .with(filter_layer)
         .with(fmt_layer)
-        .init();
+        .try_init()
+        .map_err(|error| AppError::Server {
+            message: format!("failed to initialize logging: {error}"),
+        })?;
+    let _ = reload_handle().set(handle);
+    Ok(())
 }
 
 pub fn update_log_filter(log_level: Option<&str>) -> Result<(), AppError> {
