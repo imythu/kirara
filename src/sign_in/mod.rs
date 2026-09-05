@@ -165,19 +165,31 @@ pub async fn execute_task(
                 build_lightpanda_endpoint(&settings.lightpanda, settings.use_proxy_for_lightpanda)?;
             run_cdp_sign_in(
                 endpoint,
-                base_url,
-                cookie,
+                base_url.clone(),
+                cookie.clone(),
                 task.sign_in_method,
-                settings.ocr_api_key,
+                settings.ocr_api_key.clone(),
             )
-            .await?
+            .await
         }
         SIGN_IN_BROWSER_BROWSERLESS => {
-            run_browserless_sign_in(&settings.browserless, base_url, cookie, task.browserless)
-                .await?
+            run_browserless_sign_in(
+                &settings.browserless,
+                base_url.clone(),
+                cookie.clone(),
+                task.browserless,
+            )
+            .await
         }
         _ => return Err(format!("未知签到浏览器: {}", task.browser)),
     };
+    if is_qingwa_url(&base_url) {
+        match qingwa_bonus_exchange(&site, &settings, &cookie).await {
+            Ok(message) => tracing::info!("[签到][{}] 青蛙附加兑换: {}", task.name, message),
+            Err(message) => tracing::warn!("[签到][{}] 青蛙附加兑换: {}", task.name, message),
+        }
+    }
+    let output = output?;
     let finished_at = Utc::now().to_rfc3339();
 
     Ok(SignInResult {
@@ -234,6 +246,82 @@ fn run_cdp_probe(
     })
 }
 
+fn is_qingwa_url(base_url: &str) -> bool {
+    reqwest::Url::parse(base_url).ok().is_some_and(|url| {
+        matches!(
+            url.host_str()
+                .unwrap_or_default()
+                .trim_start_matches("www."),
+            "qingwapt.com" | "qingwapt.org" | "qingwa.pro"
+        )
+    })
+}
+
+fn summarize_qingwa_exchange(value: &Value) -> String {
+    let message = value
+        .get("msg")
+        .and_then(Value::as_str)
+        .unwrap_or("响应缺少 msg");
+    let status = if value.get("success").and_then(Value::as_bool) == Some(true) {
+        "兑换成功"
+    } else if value.get("success").and_then(Value::as_bool) == Some(false)
+        && message.trim_end_matches(['。', '.']) == "超过限购数量"
+    {
+        "已达限购数量（重复调用）"
+    } else {
+        "兑换失败"
+    };
+    format!("{}: {}", status, compact_text(message).unwrap_or_default())
+}
+
+async fn qingwa_bonus_exchange(
+    site: &SiteRecord,
+    settings: &GlobalConfig,
+    cookie: &str,
+) -> Result<String, String> {
+    let base_url = site.base_url.trim_end_matches('/');
+    let mut builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none());
+    if site.use_proxy {
+        if let Some(proxy) = settings.proxy.as_deref().filter(|v| !v.trim().is_empty()) {
+            builder = builder.proxy(reqwest::Proxy::all(proxy).map_err(|_| "代理配置无效")?);
+        }
+    }
+    let headers = crate::site::site_request_header_map(&crate::site::parse_site_request_headers(
+        &site.request_headers,
+    )?)?;
+    let response = builder.build().map_err(|_| "创建 HTTP 客户端失败")?
+        .post(format!("{}/api/bonus-shop/exchange", base_url))
+        .headers(headers)
+        .header("accept", "*/*")
+        .header("accept-language", "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,zh-TW;q=0.6")
+        .header("cookie", cookie)
+        .header("origin", base_url)
+        .header("referer", format!("{}/bonusshop.php", base_url))
+        .header("dnt", "1")
+        .header("priority", "u=1, i")
+        .header("sec-ch-ua", "\"Chromium\";v=\"152\", \"Not?A_Brand\";v=\"24\", \"Google Chrome\";v=\"152\"")
+        .header("sec-ch-ua-mobile", "?0")
+        .header("sec-ch-ua-platform", "\"Windows\"")
+        .header("sec-fetch-dest", "empty")
+        .header("sec-fetch-mode", "cors")
+        .header("sec-fetch-site", "same-origin")
+        .header("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36")
+        .multipart(reqwest::multipart::Form::new().text("id", "28").text("amount", "1"))
+        .send().await.map_err(|_| "兑换 HTTP 请求失败或超时")?;
+    let status = response.status();
+    let value = response
+        .json::<Value>()
+        .await
+        .map_err(|_| format!("兑换返回无效 JSON（HTTP {}）", status))?;
+    Ok(format!(
+        "HTTP {} {}",
+        status,
+        summarize_qingwa_exchange(&value)
+    ))
+}
+
 const BROWSERLESS_SIGN_IN_QUERY: &str = r#"
 mutation CheckIn(
   $cookies: [CookieInput!]!
@@ -267,20 +355,12 @@ mutation CheckIn(
     time
   }
 
-  waitForSelector(
-    selector: $selector
-    visible: true
-    timeout: $actionTimeout
-  ) {
-    time
-  }
+  beforeClick: html { html }
 
-  click(
-    selector: $selector
-    visible: true
-    timeout: $actionTimeout
-  ) {
-    time
+  submit: if(selector: $selector, visible: true) {
+    click(selector: $selector, visible: true, timeout: $actionTimeout) {
+      time
+    }
   }
 
   waitAfterClick: waitForTimeout(time: $postClickWaitMs) {
@@ -402,6 +482,14 @@ async fn run_browserless_sign_in(
         return Err("Cookie 不能为空".to_string());
     }
 
+    // A generic submit selector otherwise clicks iloli's header search form.
+    let selector = if task_config.cf_mode == BROWSERLESS_CF_MODE_TURNSTILE
+        && task_config.selector == DEFAULT_BROWSERLESS_SELECTOR
+    {
+        "form:has(.cf-turnstile) input[type='submit'], form[action*='attendance'] input[type='submit']"
+    } else {
+        &task_config.selector
+    };
     let request_timeout_ms = timings
         .wait_ms
         .saturating_add(timings.solve_timeout)
@@ -415,7 +503,7 @@ async fn run_browserless_sign_in(
         json!({
             "cookies": cookies,
             "url": target_url.as_str(),
-            "selector": task_config.selector,
+            "selector": selector,
             "waitMs": timings.wait_ms,
             "solveTimeout": timings.solve_timeout,
             "actionTimeout": timings.action_timeout,
@@ -529,7 +617,65 @@ fn browserless_cookies(cookie_header: &str, domain: &str, url: &str) -> Vec<Valu
         .collect()
 }
 
+fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
+    let document = Html::parse_document(html);
+    let selector = Selector::parse("body").ok()?;
+    let body = document.select(&selector).next()?;
+    let text = body
+        .descendants()
+        .filter_map(|node| {
+            let text = node.value().as_text()?;
+            let hidden = node.ancestors().any(|ancestor| {
+                ancestor
+                    .value()
+                    .as_element()
+                    .is_some_and(|el| matches!(el.name(), "script" | "style" | "template"))
+            });
+            (!hidden).then_some(text.to_string())
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    if text.contains("未登录") || text.contains("必须在登录后才能访问") {
+        return None;
+    }
+    let (status, message) = if [
+        "已签到",
+        "已经签到",
+        "今日已签",
+        "今天已签",
+        "重复签到",
+        "签到已得",
+        "已簽到",
+        "已經簽到",
+    ]
+    .iter()
+    .any(|phrase| text.contains(phrase))
+    {
+        ("already", "今日已经签到")
+    } else if ["签到成功", "簽到成功", "成功签到"]
+        .iter()
+        .any(|phrase| text.contains(phrase))
+    {
+        ("success", "Browserless 签到成功")
+    } else {
+        return None;
+    };
+    Some(SignInOutput {
+        status: status.to_string(),
+        message: message.to_string(),
+    })
+}
+
 fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String> {
+    // A completed attendance page may have no button; BQL still returns HTML
+    // after a selector timeout. Inspect visible outcome text before action errors.
+    for path in ["/data/html/html", "/data/beforeClick/html"] {
+        if let Some(html) = result.pointer(path).and_then(Value::as_str) {
+            if let Some(output) = classify_browserless_html(html) {
+                return Ok(output);
+            }
+        }
+    }
     if let Some(message) = browserless_error_message(result) {
         return Err(message);
     }
@@ -548,7 +694,9 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
     if solve_found == Some(true) && solve_solved == Some(false) {
         return Err("Browserless 找到 Cloudflare 验证，但未能完成验证".to_string());
     }
-    if data.get("click").is_none_or(Value::is_null) {
+    if data.get("click").is_none_or(Value::is_null)
+        && data.pointer("/submit/click").is_none_or(Value::is_null)
+    {
         return Err("Browserless 未执行签到点击，请检查 selector".to_string());
     }
 
@@ -558,19 +706,6 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
         .unwrap_or_default();
     if html.contains("未登录") || html.contains("必须在登录后才能访问") {
         return Err("Cookie 无效或已过期".to_string());
-    }
-    if html.contains("签到成功") {
-        return Ok(SignInOutput {
-            status: "success".to_string(),
-            message: "Browserless 签到成功".to_string(),
-        });
-    }
-    if html.contains("已经签到") || html.contains("今日已签到") || html.contains("今天已经签到")
-    {
-        return Ok(SignInOutput {
-            status: "already".to_string(),
-            message: "今日已经签到".to_string(),
-        });
     }
     if html.contains("cf-turnstile") || html.contains("立即签到") {
         return Ok(SignInOutput {
@@ -1859,6 +1994,50 @@ mod tests {
         }))
         .unwrap_err();
         assert!(error.contains("未能完成验证"));
+    }
+
+    #[test]
+    fn browserless_completed_page_survives_missing_button_errors() {
+        for (html, status) in [
+            ("<main>您今天已经签到，请勿重复签到。</main>", "already"),
+            ("<main>签到成功</main>", "success"),
+            ("<main>签到已得100</main>", "already"),
+        ] {
+            let output = summarize_browserless_sign_in(&json!({
+                "errors": [{"message": "selector timeout"}],
+                "data": {"goto": {"status": 200}, "click": null, "html": {"html": html}}
+            }))
+            .unwrap();
+            assert_eq!(output.status, status);
+        }
+        assert!(
+            classify_browserless_html(
+                "<script>const message='签到成功';</script><main>立即签到</main>"
+            )
+            .is_none()
+        );
+        assert!(
+            classify_browserless_html(&format!("<main>{}签到成功</main>", "站点导航 ".repeat(100)))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn qingwa_exchange_classifies_limits_and_failures() {
+        assert!(
+            summarize_qingwa_exchange(&json!({"success":false,"msg":"超过限购数量。"}))
+                .contains("重复调用")
+        );
+        assert!(
+            summarize_qingwa_exchange(&json!({"success":true,"msg":"兑换成功"}))
+                .starts_with("兑换成功")
+        );
+        assert!(
+            summarize_qingwa_exchange(&json!({"success":false,"msg":"余额不足"}))
+                .starts_with("兑换失败")
+        );
+        assert!(is_qingwa_url("https://www.qingwapt.com/"));
+        assert!(!is_qingwa_url("https://www.qingwapt.com.example.org/"));
     }
 
     #[test]

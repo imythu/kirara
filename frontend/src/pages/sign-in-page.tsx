@@ -49,7 +49,7 @@ type SignInView = "tasks" | "records";
 type SignInBrowser = "lightpanda" | "browserless";
 
 const DEFAULT_BROWSERLESS_TASK = {
-  selector: "input[type='submit']",
+  selector: "",
   cf_mode: "auto" as const,
   wait_ms: null,
   solve_timeout: null,
@@ -71,6 +71,20 @@ const emptyForm: SignInTaskRequest = {
   sign_in_method: "open_page",
   browserless: { ...DEFAULT_BROWSERLESS_TASK },
 };
+
+function siteCfPreset(site: SiteRecord | undefined): SignInTaskRequest["browserless"] | null {
+  if (!site) return null;
+  let host: string;
+  try { host = new URL(site.base_url).hostname.toLowerCase().replace(/^www\./, ""); }
+  catch { return null; }
+  if (host === "dstudio.me") {
+    return { ...DEFAULT_BROWSERLESS_TASK, selector: "input[type='submit']", cf_mode: "page" };
+  }
+  if (host === "mua.xloli.cc" || host === "share.ilolicon.com") {
+    return { ...DEFAULT_BROWSERLESS_TASK, selector: "form[action*='attendance.php'] input[type='submit']", cf_mode: "turnstile" };
+  }
+  return null;
+}
 
 function taskToForm(task: SignInTaskRecord): SignInTaskRequest {
   return {
@@ -203,6 +217,8 @@ export function SignInPage() {
   const suggestedTaskName = editingId === null
     ? nexusSites.find((site) => site.id === form.site_id)?.name.trim() ?? ""
     : "";
+  const selectedCfPreset = siteCfPreset(nexusSites.find((site) => site.id === form.site_id));
+  const showCfGuidance = form.browser === "browserless" || form.sign_in_method === "cloudflare";
   const browserlessTask = form.browserless ?? DEFAULT_BROWSERLESS_TASK;
   const browserlessDefaults = BROWSERLESS_DEFAULTS[browserlessTask.cf_mode];
 
@@ -230,6 +246,19 @@ export function SignInPage() {
 
   function setField<K extends keyof SignInTaskRequest>(key: K, value: SignInTaskRequest[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function selectSite(siteId: number) {
+    if (editingId !== null) { setField("site_id", siteId); return; }
+    const preset = siteCfPreset(nexusSites.find((site) => site.id === siteId));
+    setForm((current) => ({
+      ...current,
+      site_id: siteId,
+      browser: preset ? "browserless" : current.browser,
+      sign_in_method: preset ? "cloudflare" : "open_page",
+      browserless: { ...(preset ?? DEFAULT_BROWSERLESS_TASK) },
+    }));
+    setSubmitError("");
   }
 
   function setLightpandaField<K extends keyof GlobalConfig["lightpanda"]>(
@@ -303,12 +332,14 @@ export function SignInPage() {
       !isBrowserConfigured(settings, "lightpanda") && isBrowserConfigured(settings, "browserless")
         ? "browserless"
         : "lightpanda";
+    const preset = siteCfPreset(nexusSites[0]);
     setEditingId(null);
     setForm({
       ...emptyForm,
       site_id: nexusSites[0]?.id ?? 0,
-      browser: defaultBrowser,
-      browserless: { ...DEFAULT_BROWSERLESS_TASK },
+      browser: preset ? "browserless" : defaultBrowser,
+      sign_in_method: preset ? "cloudflare" : "open_page",
+      browserless: { ...(preset ?? DEFAULT_BROWSERLESS_TASK) },
     });
     setIntervalHours(8);
     setAdvancedOpen(false);
@@ -414,7 +445,7 @@ export function SignInPage() {
       return;
     }
     if (form.browser === "browserless" && !form.browserless?.selector.trim()) {
-      setSubmitError("Browserless selector 不能为空");
+      setSubmitError("请填写本站签到按钮的 Selector，再创建或保存任务。");
       return;
     }
 
@@ -424,7 +455,7 @@ export function SignInPage() {
       cron_expression: intervalToCron(intervalHours),
       browser: form.browser ?? "lightpanda",
       sign_in_method: form.sign_in_method ?? "open_page",
-      browserless: {
+      browserless: form.browser !== "browserless" && !form.browserless?.selector.trim() ? null : {
         ...(form.browserless ?? DEFAULT_BROWSERLESS_TASK),
         selector: (form.browserless?.selector ?? DEFAULT_BROWSERLESS_TASK.selector).trim(),
       },
@@ -983,7 +1014,7 @@ export function SignInPage() {
               <Select
                 id="sign-in-site"
                 value={form.site_id ? String(form.site_id) : ""}
-                onChange={(value) => setField("site_id", value === "" ? 0 : Number(value))}
+                onChange={(value) => selectSite(value === "" ? 0 : Number(value))}
                 options={nexusSites.length === 0 ? [{ value: "", label: "请先添加 NexusPHP 站点" }] : nexusSites.map((site) => ({ value: String(site.id), label: `${site.name} (${site.site_type})` }))}
               />
             </div>
@@ -1009,6 +1040,18 @@ export function SignInPage() {
               />
             </div>
 
+            {showCfGuidance ? (
+              <p id="sign-in-cf-guidance" className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+                {selectedCfPreset ? (
+                  <>此站已有 CF 签到预设，新建任务时自动填入。除非你知道自己在做什么，否则请勿随意修改。</>
+                ) : (
+                  <>此站暂无 CF 签到预设，请使用 Browserless 并填写本站的签到按钮 Selector、选择 CF 模式。也可通过{" "}
+                    <a href="https://github.com/imythu/kirara/issues/new" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">GitHub 联系作者新增支持</a>。
+                  </>
+                )}
+              </p>
+            ) : null}
+
             {form.browser === "browserless" ? (
               <>
                 <div className="space-y-2 sm:col-span-2">
@@ -1017,7 +1060,9 @@ export function SignInPage() {
                     id="browserless-selector"
                     value={browserlessTask.selector}
                     onChange={(event) => setBrowserlessTaskField("selector", event.target.value)}
-                    placeholder="input[type='submit']"
+                    placeholder="请填写本站签到按钮的 CSS Selector"
+                    aria-describedby="sign-in-cf-guidance"
+                    required
                     spellCheck={false}
                   />
                 </div>
@@ -1025,6 +1070,7 @@ export function SignInPage() {
                   <Label htmlFor="browserless-cf-mode">CF 模式</Label>
                   <Select
                     id="browserless-cf-mode"
+                    aria-describedby="sign-in-cf-guidance"
                     value={browserlessTask.cf_mode}
                     onChange={(value) => setBrowserlessTaskField("cf_mode", value as typeof browserlessTask.cf_mode)}
                     options={[
