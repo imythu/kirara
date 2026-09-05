@@ -35,10 +35,12 @@
 
 | 系统 | 安装包 | 使用方式 |
 | --- | --- | --- |
-| Windows x64 | `kirara-2.0.0-x86_64-pc-windows-msvc-setup.exe` | 运行安装程序，完成后从开始菜单打开 Kirara |
-| macOS Apple Silicon | `kirara-2.0.0-aarch64-apple-darwin.dmg` | 打开映像，将 Kirara 拖入“应用程序”，然后打开 |
+| Windows x64 | `kirara-2.1.0-x86_64-pc-windows-msvc-setup.exe` | 运行安装程序，完成后从开始菜单打开 Kirara |
+| macOS Apple Silicon | `kirara-2.1.0-aarch64-apple-darwin.dmg` | 打开映像，将 Kirara 拖入“应用程序”，然后打开 |
 
-桌面应用启动后直接显示管理界面，无需打开终端或浏览器。自动扫描、下载队列和定时任务随应用运行；退出应用后停止执行。
+桌面应用启动后直接显示管理界面，无需打开终端或浏览器。关闭窗口后，应用会隐藏到 Windows 系统托盘或 macOS 菜单栏，自动扫描、下载队列和定时任务继续在后台运行。
+
+从托盘或菜单栏图标选择“打开主窗口”可恢复界面；再次启动 Kirara 也会打开原有窗口。需要停止服务时，请在图标菜单中选择“退出”（macOS 也可使用 `⌘Q`）。
 
 当前 Windows 安装包未配置开发者签名，macOS 使用临时签名且未经过 Apple 公证，首次打开可能出现系统的发布者验证提示。macOS 可按 [Apple 的说明](https://support.apple.com/zh-cn/102445)在“隐私与安全性”中允许打开已确认来源的应用。
 
@@ -82,7 +84,7 @@ http://127.0.0.1:3000
 docker run --name kirara \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/data:/data \
-  ghcr.io/imythu/kirara:2.0.0
+  ghcr.io/imythu/kirara:2.1.0
 ```
 
 自动构建提供 `latest-beta`（Linux amd64）；正式版提供 `latest`（Linux amd64 / arm64）。
@@ -295,7 +297,7 @@ Linux 命令行服务默认路径：
 ### 桌面版数据迁移
 
 1. 停止旧程序，备份完整数据目录，包括数据库以及可能存在的 `-wal`、`-shm` 文件。
-2. 如已打开新版桌面应用，先退出应用。
+2. 如已打开新版桌面应用，先在托盘或菜单栏图标菜单中选择“退出”，确保后台服务已停止。
 3. 将旧数据目录的完整内容复制到对应平台的应用数据目录。Windows 可在资源管理器地址栏输入 `%APPDATA%\io.github.imythu.kirara`；macOS 可在访达中使用“前往文件夹”打开 `~/Library/Application Support/io.github.imythu.kirara`。目录不存在时可自行创建。
 4. 打开 Kirara，核对站点、下载器、订阅和任务状态。
 

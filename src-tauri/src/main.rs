@@ -2,6 +2,7 @@
 
 mod bridge;
 mod sse;
+mod tray;
 
 use std::sync::{
     Arc,
@@ -65,11 +66,7 @@ fn open_external(app: &tauri::AppHandle, url: &tauri::Url) {
 fn main() {
     let application = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            tray::show_main_window(app);
         }))
         // Native navigation handlers cover both anchors and window.open.
         .plugin(
@@ -79,9 +76,19 @@ fn main() {
         )
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            if window.label() == "main"
+                && let tauri::WindowEvent::CloseRequested { api, .. } = event
+            {
                 api.prevent_close();
-                window.app_handle().exit(0);
+                if let Err(error) = window.hide() {
+                    window
+                        .app_handle()
+                        .dialog()
+                        .message(format!("无法隐藏主窗口：{error}"))
+                        .title("Kirara")
+                        .kind(tauri_plugin_dialog::MessageDialogKind::Error)
+                        .show(|_| {});
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -97,6 +104,10 @@ fn main() {
                 .and_then(|directory| tauri::async_runtime::block_on(start_backend(directory)));
             let state = Arc::new(Backend::new(startup));
             app.manage(state.clone());
+            if let Err(error) = tray::create(app.handle()) {
+                let _ = tauri::async_runtime::block_on(state.shutdown());
+                return Err(error.into());
+            }
             let navigation_app = app.handle().clone();
             let new_window_app = app.handle().clone();
             let page_state = state.clone();
@@ -148,6 +159,21 @@ fn main() {
     let exiting = Arc::new(AtomicBool::new(false));
     let stopped = Arc::new(AtomicBool::new(false));
     application.run(move |app, event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Reopen { .. } = &event {
+            tray::show_main_window(app);
+        }
+
+        // Native macOS Quit can emit Exit without ExitRequested. Finish cleanup
+        // before returning: the event loop is ending and cannot service UI calls.
+        if matches!(&event, RunEvent::Exit) && !stopped.load(Ordering::Acquire) {
+            let state = app.state::<Arc<Backend>>();
+            if let Err(error) = tauri::async_runtime::block_on(state.shutdown()) {
+                eprintln!("服务退出时发生错误：{error}");
+            }
+            stopped.store(true, Ordering::Release);
+        }
+
         if let RunEvent::ExitRequested { api, code, .. } = event {
             if stopped.load(Ordering::Acquire) {
                 return;
