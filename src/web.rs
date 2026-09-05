@@ -229,6 +229,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
             "/api/sign-in-tasks/{id}",
             put(update_sign_in_task).delete(delete_sign_in_task),
         )
+        .route("/api/sign-in-profiles", get(list_sign_in_profiles))
         .route("/api/sign-in-tasks/{id}/start", post(start_sign_in_task))
         .route("/api/sign-in-tasks/{id}/stop", post(stop_sign_in_task))
         .route("/api/sign-in-tasks/{id}/run", post(run_sign_in_task_once))
@@ -3199,6 +3200,20 @@ struct SignInBrowserProbeRequest {
     browser: String,
 }
 
+async fn list_sign_in_profiles(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let sites = state.db.list_sites().await?;
+    let profiles: Vec<_> = sites
+        .iter()
+        .filter_map(|site| {
+            crate::sign_in::signers::known_profile(&site.base_url)
+                .map(|profile| serde_json::json!({ "site_id": site.id, "profile": profile }))
+        })
+        .collect();
+    Ok(Json(serde_json::json!(profiles)))
+}
+
 async fn list_sign_in_tasks(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<crate::sign_in::SignInTaskRecord>>, ApiError> {
@@ -3271,9 +3286,17 @@ async fn probe_sign_in_task_1_1_1_1(
         .get_sign_in_task(id)
         .await?
         .ok_or_else(|| ApiError::not_found("签到任务不存在"))?;
+    let site = state
+        .db
+        .get_site(task.site_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("所选站点不存在"))?;
+    let browser = crate::sign_in::signers::known_profile(&site.base_url)
+        .map(|profile| profile.browser.to_string())
+        .unwrap_or(task.browser);
     let settings = state.db.get_settings().await?;
-    validate_sign_in_browser_config(&task.browser, &settings)?;
-    let result = crate::sign_in::probe_browser_1_1_1_1(task.browser, settings)
+    validate_sign_in_browser_config(&browser, &settings)?;
+    let result = crate::sign_in::probe_browser_1_1_1_1(browser, settings)
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(result))
@@ -3310,6 +3333,12 @@ async fn validate_sign_in_task(
     state: &AppState,
     body: &mut crate::sign_in::SignInTaskRequest,
 ) -> Result<(), ApiError> {
+    let site = state
+        .db
+        .get_site(body.site_id)
+        .await?
+        .ok_or_else(|| ApiError::bad_request("所选站点不存在"))?;
+    crate::sign_in::signers::normalize_request(&site.base_url, body);
     body.name = body.name.trim().to_string();
     body.cron_expression = normalize_cron(&body.cron_expression);
     let browser = crate::sign_in::normalize_sign_in_browser(
@@ -3433,11 +3462,6 @@ async fn validate_sign_in_task(
     body.cron_expression
         .parse::<cron::Schedule>()
         .map_err(|e| ApiError::bad_request(format!("无效的cron表达式: {}", e)))?;
-    let site = state
-        .db
-        .get_site(body.site_id)
-        .await?
-        .ok_or_else(|| ApiError::bad_request("所选站点不存在"))?;
     if site.site_type != "nexusphp" && site.site_type != "nexus_php" {
         return Err(ApiError::bad_request("自动签到目前仅支持 NexusPHP 站点"));
     }

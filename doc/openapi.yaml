@@ -19,6 +19,30 @@ paths:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GlobalConfig'}}}}
         default: {$ref: '#/components/responses/Error'}
 
+  /api/sign-in-profiles:
+    get:
+      summary: 获取已自动适配站点的固定签到器
+      responses:
+        '200':
+          description: 仅包含已自动适配站点；任务保存及执行时由后端强制应用
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    site_id: {type: integer, format: int64}
+                    profile:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        label: {type: string}
+                        browser: {type: string, enum: [lightpanda, browserless]}
+                        sign_in_method: {type: string}
+                        browserless: {$ref: '#/components/schemas/BrowserlessTaskConfig'}
+        default: {$ref: '#/components/responses/Error'}
+
   /api/sign-in-tasks:
     get:
       responses:
@@ -806,6 +830,7 @@ components:
         value_type: {type: string, enum: [string, number, boolean, 'null'], default: string}
 
     BrowserlessTaskConfig:
+      description: 签到器内部配置。已适配站点由后端固定；通用验证码签到只采用路径、图片选择器、输入框选择器、按钮选择器和已签到提示五项。其余字段保留兼容读取，保存及运行时由签到器重新生成。
       type: object
       required: [selector, cf_mode, wait_ms, solve_timeout, action_timeout, post_click_wait_ms]
       properties:

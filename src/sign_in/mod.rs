@@ -1,4 +1,5 @@
 pub mod scheduler;
+pub mod signers;
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
@@ -203,31 +204,20 @@ pub async fn execute_task(
 
     let base_url = site.base_url.trim_end_matches('/').to_string();
     let started_at = Utc::now().to_rfc3339();
-    let output = match task.browser.as_str() {
-        SIGN_IN_BROWSER_LIGHTPANDA => {
-            let endpoint =
-                build_lightpanda_endpoint(&settings.lightpanda, settings.use_proxy_for_lightpanda)?;
-            run_cdp_sign_in(
-                endpoint,
-                base_url.clone(),
-                cookie.clone(),
-                task.sign_in_method,
-                settings.ocr_api_key.clone(),
-            )
-            .await
-        }
-        SIGN_IN_BROWSER_BROWSERLESS => {
-            run_browserless_sign_in(
-                &settings.browserless,
-                base_url.clone(),
-                cookie.clone(),
-                task.browserless,
-                &task.sign_in_method,
-            )
-            .await
-        }
-        _ => return Err(format!("未知签到浏览器: {}", task.browser)),
-    };
+    let signer = signers::resolve(
+        &base_url,
+        &task.browser,
+        &task.sign_in_method,
+        &task.browserless,
+    );
+    let output = signer
+        .sign_in(
+            base_url.clone(),
+            cookie.clone(),
+            &task.browserless,
+            &settings,
+        )
+        .await;
     if is_qingwa_url(&base_url) {
         match qingwa_bonus_exchange(&site, &settings, &cookie).await {
             Ok(message) => tracing::info!("[签到][{}] 青蛙附加兑换: {}", task.name, message),
