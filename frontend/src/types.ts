@@ -332,6 +332,10 @@ export type SignInTaskRequest = {
 };
 
 export type BrowserlessTaskConfig = {
+  attendance_path: string;
+  captcha_selector: string;
+  captcha_input_selector: string;
+  already_keywords: string;
   selector: string;
   cf_mode: "auto" | "page" | "turnstile";
   wait_ms: number | null;

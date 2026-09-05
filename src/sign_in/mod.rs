@@ -29,6 +29,14 @@ pub const DEFAULT_BROWSERLESS_SELECTOR: &str = "input[type='submit']";
 pub struct BrowserlessTaskConfig {
     #[serde(default = "default_browserless_selector")]
     pub selector: String,
+    #[serde(default = "default_attendance_path")]
+    pub attendance_path: String,
+    #[serde(default)]
+    pub captcha_selector: String,
+    #[serde(default)]
+    pub captcha_input_selector: String,
+    #[serde(default)]
+    pub already_keywords: String,
     #[serde(default = "default_browserless_cf_mode")]
     pub cf_mode: String,
     #[serde(default)]
@@ -45,6 +53,10 @@ impl Default for BrowserlessTaskConfig {
     fn default() -> Self {
         Self {
             selector: default_browserless_selector(),
+            attendance_path: default_attendance_path(),
+            captcha_selector: String::new(),
+            captcha_input_selector: String::new(),
+            already_keywords: String::new(),
             cf_mode: default_browserless_cf_mode(),
             wait_ms: None,
             solve_timeout: None,
@@ -52,6 +64,10 @@ impl Default for BrowserlessTaskConfig {
             post_click_wait_ms: None,
         }
     }
+}
+
+fn default_attendance_path() -> String {
+    "/attendance.php".to_string()
 }
 
 fn default_browserless_selector() -> String {
@@ -178,6 +194,7 @@ pub async fn execute_task(
                 base_url.clone(),
                 cookie.clone(),
                 task.browserless,
+                &task.sign_in_method,
             )
             .await
         }
@@ -322,56 +339,65 @@ async fn qingwa_bonus_exchange(
     ))
 }
 
-const BROWSERLESS_SIGN_IN_QUERY: &str = r#"
-mutation CheckIn(
-  $cookies: [CookieInput!]!
-  $url: String!
-  $selector: String!
-  $waitMs: Float!
-  $solveTimeout: Float!
-  $actionTimeout: Float!
-  $postClickWaitMs: Float!
-) {
-  setCookie: cookies(cookies: $cookies) {
-    cookies {
-      name
-      domain
-      path
-      secure
-    }
-  }
-
-  goto(url: $url, waitUntil: networkIdle) {
-    status
-  }
-
-  waitBeforeSolve: waitForTimeout(time: $waitMs) {
-    time
-  }
-
-  solve(type: cloudflare, timeout: $solveTimeout) {
-    found
-    solved
-    time
-  }
-
-  beforeClick: html { html }
-
-  submit: if(selector: $selector, visible: true) {
-    click(selector: $selector, visible: true, timeout: $actionTimeout) {
-      time
-    }
-  }
-
-  waitAfterClick: waitForTimeout(time: $postClickWaitMs) {
-    time
-  }
-
-  html {
-    html
-  }
+fn browserless_sign_in_query(image_captcha: bool) -> String {
+    let solve = if image_captcha {
+        "solve: solveImageCaptcha(captchaSelector: $captchaSelector, inputSelector: $captchaInputSelector, timeout: $solveTimeout) { found solved time }"
+    } else {
+        "solve(type: cloudflare, timeout: $solveTimeout) { found solved time }"
+    };
+    let image_variables = if image_captcha {
+        "$captchaSelector: String! $captchaInputSelector: String!"
+    } else {
+        ""
+    };
+    format!(
+        r#"
+mutation CheckIn($cookies: [CookieInput!]! $url: String! $selector: String!
+ $waitMs: Float! $solveTimeout: Float! $actionTimeout: Float! $postClickWaitMs: Float!
+ $guard: String! $submitCondition: String! {image_variables}) {{
+ cookies(cookies: $cookies) {{ cookies {{ name }} }}
+ goto(url: $url, waitUntil: networkIdle) {{ status }}
+ waitBefore: waitForTimeout(time: $waitMs) {{ time }}
+ checkBefore: evaluate(content: $guard) {{ value }}
+ beforeClick: html {{ html }}
+ pending: ifnot(selector: "html[data-rflush-already]") {{
+  {solve}
+  checkAfter: evaluate(content: $guard) {{ value }}
+  afterSolve: html {{ html }}
+  pending: ifnot(selector: "html[data-rflush-already]") {{
+   submit: if(selector: $submitCondition) {{
+    click(selector: $selector, visible: true, timeout: $actionTimeout) {{ time }}
+   }}
+   waitAfter: waitForTimeout(time: $postClickWaitMs) {{ time }}
+  }}
+ }}
+ html {{ html }}
+}}
+"#
+    )
 }
-"#;
+
+fn already_guard_script(keywords: &str, image_input: Option<&str>) -> String {
+    let phrases: Vec<_> = keywords
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    format!(
+        r#"(() => {{
+ const phrases = {};
+ const inputSelector = {};
+ const ready = inputSelector && !!document.querySelector(inputSelector)?.value?.trim();
+ document.documentElement.toggleAttribute('data-rflush-image-ready', !!ready);
+ const text = document.body?.innerText || '';
+ const matched = phrases.some(phrase => text.includes(phrase));
+ document.documentElement.toggleAttribute('data-rflush-already', matched);
+ return matched;
+}})()"#,
+        json!(phrases),
+        json!(image_input)
+    )
+}
 
 const BROWSERLESS_PROBE_QUERY: &str = r#"
 mutation Probe($url: String!) {
@@ -470,9 +496,16 @@ async fn run_browserless_sign_in(
     base_url: String,
     cookie_header: String,
     task_config: BrowserlessTaskConfig,
+    sign_in_method: &str,
 ) -> Result<SignInOutput, String> {
     let timings = resolve_browserless_timings(&task_config)?;
-    let target_url = reqwest::Url::parse(&format!("{}/attendance.php", base_url))
+    let image_captcha = sign_in_method == SIGN_IN_METHOD_OCR_CAPTCHA;
+    let path = if image_captcha {
+        task_config.attendance_path.as_str()
+    } else {
+        "/attendance.php"
+    };
+    let target_url = reqwest::Url::parse(&format!("{}{}", base_url, path))
         .map_err(|error| format!("签到地址无效: {}", error))?;
     let domain = target_url
         .host_str()
@@ -483,7 +516,8 @@ async fn run_browserless_sign_in(
     }
 
     // A generic submit selector otherwise clicks iloli's header search form.
-    let selector = if task_config.cf_mode == BROWSERLESS_CF_MODE_TURNSTILE
+    let selector = if !image_captcha
+        && task_config.cf_mode == BROWSERLESS_CF_MODE_TURNSTILE
         && task_config.selector == DEFAULT_BROWSERLESS_SELECTOR
     {
         "form:has(.cf-turnstile) input[type='submit'], form[action*='attendance'] input[type='submit']"
@@ -498,10 +532,14 @@ async fn run_browserless_sign_in(
         .saturating_add(30_000);
     let result = post_browserless_bql(
         service_config,
-        BROWSERLESS_SIGN_IN_QUERY,
+        &browserless_sign_in_query(image_captcha),
         "CheckIn",
         json!({
             "cookies": cookies,
+            "guard": already_guard_script(&task_config.already_keywords, image_captcha.then_some(task_config.captcha_input_selector.as_str())),
+            "submitCondition": if image_captcha { "html[data-rflush-image-ready]" } else { selector },
+            "captchaSelector": task_config.captcha_selector,
+            "captchaInputSelector": task_config.captcha_input_selector,
             "url": target_url.as_str(),
             "selector": selector,
             "waitMs": timings.wait_ms,
@@ -638,6 +676,44 @@ fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
     if text.contains("未登录") || text.contains("必须在登录后才能访问") {
         return None;
     }
+    if document
+        .root_element()
+        .value()
+        .attr("data-rflush-already")
+        .is_some()
+    {
+        return Some(SignInOutput {
+            status: "already".into(),
+            message: "命中已签到提示，已跳过验证和点击".into(),
+        });
+    }
+    if serde_json::from_str::<Value>(text.trim())
+        .ok()
+        .is_some_and(|v| v.get("state").and_then(Value::as_str) == Some("success"))
+    {
+        return Some(SignInOutput {
+            status: "success".into(),
+            message: "Browserless 签到成功".into(),
+        });
+    }
+    // A calendar legend can say 已签到 even after a successful submission.
+    if ["签到成功", "簽到成功", "成功签到"]
+        .iter()
+        .any(|phrase| text.contains(phrase))
+    {
+        return Some(SignInOutput {
+            status: "success".into(),
+            message: "Browserless 签到成功".into(),
+        });
+    }
+    // Calendar legends are not proof of completion while a captcha form remains.
+    if document
+        .select(&Selector::parse("input[name='imagestring']").ok()?)
+        .next()
+        .is_some()
+    {
+        return None;
+    }
     let (status, message) = if [
         "已签到",
         "已经签到",
@@ -669,7 +745,11 @@ fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
 fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String> {
     // A completed attendance page may have no button; BQL still returns HTML
     // after a selector timeout. Inspect visible outcome text before action errors.
-    for path in ["/data/html/html", "/data/beforeClick/html"] {
+    for path in [
+        "/data/html/html",
+        "/data/pending/afterSolve/html",
+        "/data/beforeClick/html",
+    ] {
         if let Some(html) = result.pointer(path).and_then(Value::as_str) {
             if let Some(output) = classify_browserless_html(html) {
                 return Ok(output);
@@ -689,13 +769,17 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
         });
     }
 
-    let solve_found = data.pointer("/solve/found").and_then(Value::as_bool);
-    let solve_solved = data.pointer("/solve/solved").and_then(Value::as_bool);
+    let solve_data = data.get("pending").unwrap_or(data);
+    let solve_found = solve_data.pointer("/solve/found").and_then(Value::as_bool);
+    let solve_solved = solve_data.pointer("/solve/solved").and_then(Value::as_bool);
     if solve_found == Some(true) && solve_solved == Some(false) {
-        return Err("Browserless 找到 Cloudflare 验证，但未能完成验证".to_string());
+        return Err("Browserless 找到验证码，但未能完成验证".to_string());
     }
     if data.get("click").is_none_or(Value::is_null)
         && data.pointer("/submit/click").is_none_or(Value::is_null)
+        && data
+            .pointer("/pending/pending/submit/click")
+            .is_none_or(Value::is_null)
     {
         return Err("Browserless 未执行签到点击，请检查 selector".to_string());
     }
@@ -1958,6 +2042,35 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["token with space"]
         );
+    }
+
+    #[test]
+    fn browserless_image_result_and_already_guard_are_distinct() {
+        let success = summarize_browserless_sign_in(&json!({"data": {
+            "html": {"html": "<html><body><pre>{\"state\":\"success\",\"integral\":\"10\"}</pre></body></html>"}
+        }})).unwrap();
+        assert_eq!(success.status, "success");
+        let calendar =
+            classify_browserless_html("<body><h1>签到成功</h1><p>橙色日期代表已签到</p></body>")
+                .unwrap();
+        assert_eq!(calendar.status, "success");
+        assert!(
+            classify_browserless_html(
+                "<body>橙色日期代表已签到<form><input name='imagestring'></form></body>"
+            )
+            .is_none()
+        );
+        let already = summarize_browserless_sign_in(&json!({"data": {
+            "goto": {"status": 200}, "pending": null,
+            "html": {"html": "<html data-rflush-already><body>您已领取今天的奖励</body></html>"}
+        }}))
+        .unwrap();
+        assert_eq!(already.status, "already");
+        let failed = summarize_browserless_sign_in(&json!({"data": {
+            "goto": {"status": 200}, "pending": {"solve": {"found": true, "solved": false}},
+            "html": {"html": "<body><form>验证码<input name='imagestring'></form></body>"}
+        }}));
+        assert!(failed.is_err());
     }
 
     #[test]

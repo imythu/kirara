@@ -3334,6 +3334,43 @@ async fn validate_sign_in_task(
             "Browserless selector 不能超过 2048 个字符",
         ));
     }
+    browserless.attendance_path = browserless.attendance_path.trim().to_string();
+    browserless.captcha_selector = browserless.captcha_selector.trim().to_string();
+    browserless.captcha_input_selector = browserless.captcha_input_selector.trim().to_string();
+    browserless.already_keywords = browserless.already_keywords.trim().to_string();
+    if browserless.already_keywords.chars().count() > 4096 {
+        return Err(ApiError::bad_request("已签到提示文字不能超过 4096 个字符"));
+    }
+    if body.sign_in_method.as_deref() == Some(crate::sign_in::SIGN_IN_METHOD_OCR_CAPTCHA) {
+        if browser != crate::sign_in::SIGN_IN_BROWSER_BROWSERLESS {
+            return Err(ApiError::bad_request("图片验证码签到请使用 Browserless"));
+        }
+        let path = &browserless.attendance_path;
+        if !path.starts_with('/')
+            || path.starts_with("//")
+            || path.contains('\\')
+            || path.contains('#')
+            || path.chars().any(char::is_control)
+            || path.len() > 2048
+        {
+            return Err(ApiError::bad_request(
+                "签到路径必须是以 / 开头的站内路径，不能包含域名、反斜杠或片段",
+            ));
+        }
+        for selector in [
+            &browserless.captcha_selector,
+            &browserless.captcha_input_selector,
+        ] {
+            if selector.is_empty()
+                || selector.chars().count() > 2048
+                || scraper::Selector::parse(selector).is_err()
+            {
+                return Err(ApiError::bad_request(
+                    "请填写有效的验证码图片和输入框 CSS Selector（最多 2048 字符）",
+                ));
+            }
+        }
+    }
     browserless.cf_mode = crate::sign_in::normalize_browserless_cf_mode(&browserless.cf_mode)
         .ok_or_else(|| ApiError::bad_request("Browserless cf_mode 必须是 auto、page 或 turnstile"))?
         .to_string();

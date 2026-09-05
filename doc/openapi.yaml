@@ -798,6 +798,10 @@ components:
       type: object
       required: [selector, cf_mode, wait_ms, solve_timeout, action_timeout, post_click_wait_ms]
       properties:
+        attendance_path: {type: string, default: /attendance.php, description: 图片验证码签到使用的站内路径；皇后预设为 /plugin_sign-in.php}
+        captcha_selector: {type: string, default: '', description: 验证码图片的 CSS Selector}
+        captcha_input_selector: {type: string, default: '', description: 验证码输入框的 CSS Selector}
+        already_keywords: {type: string, default: '', maxLength: 4096, description: 每行一条已签到提示；命中任意一条后跳过验证和提交；留空不启用}
         selector: {type: string, default: "input[type='submit']"}
         cf_mode: {type: string, enum: [auto, page, turnstile], default: auto}
         wait_ms: {type: integer, format: int64, nullable: true, minimum: 0, maximum: 3600000}

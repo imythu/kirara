@@ -50,6 +50,10 @@ type SignInBrowser = "lightpanda" | "browserless";
 
 const DEFAULT_BROWSERLESS_TASK = {
   selector: "",
+  attendance_path: "/attendance.php",
+  captcha_selector: "",
+  captcha_input_selector: "",
+  already_keywords: "",
   cf_mode: "auto" as const,
   wait_ms: null,
   solve_timeout: null,
@@ -86,6 +90,19 @@ function siteCfPreset(site: SiteRecord | undefined): SignInTaskRequest["browserl
   return null;
 }
 
+function siteImagePreset(site: SiteRecord | undefined): SignInTaskRequest["browserless"] | null {
+  if (!site) return null;
+  let host: string;
+  try { host = new URL(site.base_url).hostname.toLowerCase(); } catch { return null; }
+  if (host === "open.cd" || host.endsWith(".open.cd")) {
+    return { ...DEFAULT_BROWSERLESS_TASK, attendance_path: "/plugin_sign-in.php", captcha_selector: "#frmSignin img", captcha_input_selector: "#imagestring", selector: "#ok" };
+  }
+  if (host === "p.t-baozi.cc") {
+    return { ...DEFAULT_BROWSERLESS_TASK, captcha_selector: "form[action='attendance.php'] img[alt='CAPTCHA']", captcha_input_selector: "form[action='attendance.php'] input[name='imagestring']", selector: "form[action='attendance.php'] input[type='submit']" };
+  }
+  return null;
+}
+
 function taskToForm(task: SignInTaskRecord): SignInTaskRequest {
   return {
     name: task.name,
@@ -93,7 +110,7 @@ function taskToForm(task: SignInTaskRecord): SignInTaskRequest {
     cron_expression: task.cron_expression,
     browser: task.browser === "browserless" ? "browserless" : "lightpanda",
     sign_in_method: task.sign_in_method,
-    browserless: { ...task.browserless },
+    browserless: { ...DEFAULT_BROWSERLESS_TASK, ...task.browserless },
   };
 }
 
@@ -112,7 +129,7 @@ function displayStatus(status: string | null | undefined) {
 
 function signInMethodLabel(method: string | null | undefined) {
   if (method === "cloudflare") return "CF 签到";
-  if (method === "ocr_captcha") return "OCR 验证码签到";
+  if (method === "ocr_captcha") return "图片验证码签到";
   return "打开页面签到";
 }
 
@@ -218,7 +235,9 @@ export function SignInPage() {
     ? nexusSites.find((site) => site.id === form.site_id)?.name.trim() ?? ""
     : "";
   const selectedCfPreset = siteCfPreset(nexusSites.find((site) => site.id === form.site_id));
-  const showCfGuidance = form.browser === "browserless" || form.sign_in_method === "cloudflare";
+  const imageCaptcha = form.sign_in_method === "ocr_captcha";
+  const selectedImagePreset = siteImagePreset(nexusSites.find((site) => site.id === form.site_id));
+  const showCfGuidance = !imageCaptcha && (form.browser === "browserless" || form.sign_in_method === "cloudflare");
   const browserlessTask = form.browserless ?? DEFAULT_BROWSERLESS_TASK;
   const browserlessDefaults = BROWSERLESS_DEFAULTS[browserlessTask.cf_mode];
 
@@ -245,10 +264,22 @@ export function SignInPage() {
   }, []);
 
   function setField<K extends keyof SignInTaskRequest>(key: K, value: SignInTaskRequest[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      if (key === "sign_in_method" && value === "ocr_captcha") {
+        return { ...current, sign_in_method: value, browser: "browserless", browserless: { ...(siteImagePreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK), already_keywords: current.browserless?.already_keywords ?? "" } };
+      }
+      if (key === "sign_in_method" && value === "cloudflare" && current.sign_in_method === "ocr_captcha") {
+        return { ...current, sign_in_method: value, browserless: { ...(siteCfPreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK), already_keywords: current.browserless?.already_keywords ?? "" } };
+      }
+      return { ...current, [key]: value };
+    });
   }
 
   function selectSite(siteId: number) {
+    if (form.sign_in_method === "ocr_captcha") {
+      setForm(current => ({ ...current, site_id: siteId, browserless: { ...(siteImagePreset(nexusSites.find(site => site.id === siteId)) ?? DEFAULT_BROWSERLESS_TASK) } }));
+      return;
+    }
     if (editingId !== null) { setField("site_id", siteId); return; }
     const preset = siteCfPreset(nexusSites.find((site) => site.id === siteId));
     setForm((current) => ({
@@ -349,7 +380,12 @@ export function SignInPage() {
 
   function openEdit(task: SignInTaskRecord) {
     setEditingId(task.id);
-    setForm(taskToForm(task));
+    const next = taskToForm(task);
+    if (task.sign_in_method === "ocr_captcha" && task.browser !== "browserless") {
+      next.browser = "browserless";
+      next.browserless = { ...(siteImagePreset(nexusSites.find(site => site.id === task.site_id)) ?? DEFAULT_BROWSERLESS_TASK) };
+    }
+    setForm(next);
     setIntervalHours(cronToInterval(task.cron_expression));
     setAdvancedOpen(false);
     setSubmitError("");
@@ -362,9 +398,9 @@ export function SignInPage() {
     setForm((current) => ({
       ...current,
       cron_expression: source.cron_expression,
-      browser: source.browser === "browserless" ? "browserless" : "lightpanda",
+      browser: source.sign_in_method === "ocr_captcha" || source.browser === "browserless" ? "browserless" : "lightpanda",
       sign_in_method: source.sign_in_method,
-      browserless: { ...source.browserless },
+      browserless: source.sign_in_method === "ocr_captcha" && source.browser !== "browserless" ? { ...(siteImagePreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK) } : { ...DEFAULT_BROWSERLESS_TASK, ...source.browserless },
     }));
     setIntervalHours(cronToInterval(source.cron_expression));
   }
@@ -449,6 +485,10 @@ export function SignInPage() {
       return;
     }
 
+    if (imageCaptcha && (!browserlessTask.captcha_selector.trim() || !browserlessTask.captcha_input_selector.trim() || !browserlessTask.attendance_path.trim())) {
+      setSubmitError("请填写签到路径、验证码图片和输入框的 Selector。");
+      return;
+    }
     const body: SignInTaskRequest = {
       ...form,
       name: form.name.trim(),
@@ -699,7 +739,7 @@ export function SignInPage() {
                         <div className="truncate"><span className="font-medium text-foreground">站点: </span>{siteNameById.get(task.site_id) ?? `#${task.site_id}`}</div>
                         <div className="truncate"><span className="font-medium text-foreground">浏览器: </span>{browserLabel(task.browser)}</div>
                         <div className="truncate"><span className="font-medium text-foreground">间隔: </span>每 {cronToInterval(task.cron_expression)} 小时</div>
-                        <div className="truncate"><span className="font-medium text-foreground">方式: </span>{task.browser === "browserless" ? `CF ${browserlessCfModeLabel(task.browserless.cf_mode)}` : signInMethodLabel(task.sign_in_method)}</div>
+                        <div className="truncate"><span className="font-medium text-foreground">方式: </span>{task.browser === "browserless" && task.sign_in_method !== "ocr_captcha" ? `CF ${browserlessCfModeLabel(task.browserless.cf_mode)}` : signInMethodLabel(task.sign_in_method)}</div>
                         <div className="truncate"><span className="font-medium text-foreground">最近时间: </span>{formatDate(task.last_run_at)}</div>
                         <div className="truncate sm:col-span-2 xl:col-span-5"><span className="font-medium text-foreground">最近消息: </span>{task.last_message || "-"}</div>
                       </div>
@@ -1032,13 +1072,41 @@ export function SignInPage() {
               <Select
                 id="sign-in-browser"
                 value={form.browser ?? "lightpanda"}
-                onChange={(value) => setField("browser", value as SignInBrowser)}
+                onChange={(value) => { setField("browser", value as SignInBrowser); if (value === "lightpanda" && imageCaptcha) setField("sign_in_method", "open_page"); }}
                 options={[
                   { value: "lightpanda", label: "Lightpanda" },
                   { value: "browserless", label: "Browserless" },
                 ]}
               />
             </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="sign-in-method">签到方式</Label>
+              <Select id="sign-in-method" value={form.browser === "browserless" && form.sign_in_method === "open_page" ? "cloudflare" : form.sign_in_method ?? "open_page"}
+                onChange={(value) => setField("sign_in_method", value)}
+                options={form.browser === "browserless" ? [
+                  { value: "cloudflare", label: "CF 签到" },
+                  { value: "ocr_captcha", label: "图片验证码签到" },
+                ] : [
+                  { value: "open_page", label: "打开页面签到" },
+                  { value: "cloudflare", label: "CF 签到" },
+                  { value: "ocr_captcha", label: "图片验证码签到（Browserless）" },
+                ]} />
+            </div>
+
+            {imageCaptcha ? <>
+              <p id="sign-in-image-guidance" className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+                {selectedImagePreset ? "此站已有图片验证码签到预设，选择此方式时自动填入。除非你知道自己在做什么，否则请勿随意修改。" : <>此站暂无图片验证码签到预设，请填写本站验证码图片、输入框和签到按钮的 Selector。也可通过 <a href="https://github.com/imythu/kirara/issues/new" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">GitHub 联系作者新增支持</a>。</>}
+              </p>
+              {([
+                ["attendance_path", "签到路径", "/attendance.php"],
+                ["captcha_selector", "验证码图片 Selector", "请填写验证码图片的 CSS Selector"],
+                ["captcha_input_selector", "验证码输入框 Selector", "请填写验证码输入框的 CSS Selector"],
+              ] as const).map(([key, label, placeholder]) => <div key={key} className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`browserless-${key}`}>{label}</Label>
+                <Input id={`browserless-${key}`} value={browserlessTask[key]} onChange={event => setBrowserlessTaskField(key, event.target.value)} placeholder={placeholder} required spellCheck={false} maxLength={2048} aria-describedby="sign-in-image-guidance" />
+              </div>)}
+            </> : null}
 
             {showCfGuidance ? (
               <p id="sign-in-cf-guidance" className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
@@ -1055,18 +1123,18 @@ export function SignInPage() {
             {form.browser === "browserless" ? (
               <>
                 <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="browserless-selector">Selector</Label>
+                  <Label htmlFor="browserless-selector">签到按钮 Selector</Label>
                   <Input
                     id="browserless-selector"
                     value={browserlessTask.selector}
                     onChange={(event) => setBrowserlessTaskField("selector", event.target.value)}
                     placeholder="请填写本站签到按钮的 CSS Selector"
-                    aria-describedby="sign-in-cf-guidance"
+                    aria-describedby={imageCaptcha ? "sign-in-image-guidance" : "sign-in-cf-guidance"}
                     required
                     spellCheck={false}
                   />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                {!imageCaptcha ? <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="browserless-cf-mode">CF 模式</Label>
                   <Select
                     id="browserless-cf-mode"
@@ -1079,8 +1147,13 @@ export function SignInPage() {
                       { value: "turnstile", label: "Turnstile" },
                     ]}
                   />
-                </div>
+                </div> : null}
 
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="browserless-already-keywords">已签到／重复签到提示文字</Label>
+                  <textarea id="browserless-already-keywords" className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={browserlessTask.already_keywords} onChange={event => setBrowserlessTaskField("already_keywords", event.target.value)} placeholder="例如：您今天已经签到，请勿重复签到。" maxLength={4096} aria-describedby="browserless-already-help" />
+                  <p id="browserless-already-help" className="text-xs leading-relaxed text-muted-foreground">每行一条，命中任意一条即结束，不再验证或点击。留空不启用提前跳过。请填写明确的已签到提示，避免使用日历说明中的“已签到”等泛词。</p>
+                </div>
                 <div className="overflow-hidden rounded-2xl border border-border sm:col-span-2">
                   <button
                     type="button"
@@ -1101,7 +1174,7 @@ export function SignInPage() {
                     <div id="browserless-advanced-settings" className="space-y-4 border-t border-border px-4 py-4">
                       <p id="browserless-advanced-warning" className="flex items-start gap-2 text-sm font-medium text-destructive" role="alert">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                        不要随意修改。填写任一项后，该值将替代当前 CF 模式的默认值；留空则继续使用默认值。
+                        不要随意修改。填写任一项后，该值将替代当前验证方式的默认值；留空则继续使用默认值。
                       </p>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
@@ -1169,21 +1242,7 @@ export function SignInPage() {
                   ) : null}
                 </div>
               </>
-            ) : (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="sign-in-method">签到方式</Label>
-                <Select
-                  id="sign-in-method"
-                  value={form.sign_in_method ?? "open_page"}
-                  onChange={(value) => setField("sign_in_method", value)}
-                  options={[
-                    { value: "open_page", label: "打开页面签到" },
-                    { value: "cloudflare", label: "CF 签到" },
-                    { value: "ocr_captcha", label: "OCR 验证码签到" },
-                  ]}
-                />
-              </div>
-            )}
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-3 border-t border-border pt-4">
