@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "正式版版本号，例如 0.2.0；留空则自动生成 snapshot 版本"
+        description: "正式版版本号，例如 1.0.0；留空则自动生成 snapshot 版本"
         required: false
         default: ""
       prerelease:
@@ -55,6 +55,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Check public documentation
+        shell: bash
+        run: |
+          if git grep -qiE 'self[_ -]?use' -- '*.md' '*.rst' '*.txt' 'doc/**'; then
+            echo "public documentation contains internal-only content" >&2
+            exit 1
+          fi
+
       - name: Compute release metadata
         id: meta
         shell: bash
@@ -73,6 +81,10 @@ jobs:
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
+            if [[ "$VERSION" != "$BASE_VERSION" ]]; then
+              echo "release version must match Cargo.toml" >&2
+              exit 1
+            fi
             RELEASE_KIND="manual"
             if [[ "${{ inputs.prerelease }}" == "true" ]]; then
               PRERELEASE="true"
@@ -319,7 +331,7 @@ jobs:
   release:
     name: Create Release
     needs: [prepare, build, docker-linux-manifest]
-    if: always() && needs.build.result == 'success'
+    if: always() && needs.build.result == 'success' && needs.docker-linux-manifest.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -375,7 +387,11 @@ jobs:
             echo "- 发布时间（UTC）：\`${PUBLISHED_AT}\`"
             echo
             echo "## 交付物"
-            echo "- GitHub Release 附件：Linux / Windows 多架构二进制包"
+            if [[ "$RELEASE_KIND" == "manual" ]]; then
+              echo "- 二进制包：Linux amd64 / arm64、Windows x64、macOS Apple Silicon"
+            else
+              echo "- 二进制包：Linux amd64"
+            fi
             echo "- 校验文件：\`SHA256SUMS.txt\`"
             echo "- Docker 镜像：\`${IMAGE}:${VERSION}\`"
             if [[ -n "$CHANNEL_TAG" ]]; then
@@ -391,7 +407,11 @@ jobs:
             if [[ -n "$PREVIOUS_TAG" ]]; then
               echo "- 对比范围：\`${PREVIOUS_TAG}..${TAG}\`"
             fi
-            git log --no-merges --pretty=format:"- %s (%h)" "$CHANGE_RANGE" || true
+            if [[ "$RELEASE_KIND" == "manual" ]]; then
+              cat "release-notes/${VERSION}.md"
+            else
+              git log --no-merges --pretty=format:"- %s (%h)" "$CHANGE_RANGE" | grep -viE 'self[_ -]?use' || true
+            fi
             echo
             if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${MANUAL_RELEASE_NOTES}" ]]; then
               echo
@@ -400,6 +420,10 @@ jobs:
             fi
           } > artifacts/RELEASE_NOTES.md
 
+          if grep -qiE 'self[_ -]?use' artifacts/RELEASE_NOTES.md; then
+            echo "release notes contain internal-only content" >&2
+            exit 1
+          fi
           cat artifacts/RELEASE_NOTES.md
 
       - name: Create GitHub Release

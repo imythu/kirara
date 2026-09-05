@@ -2684,7 +2684,7 @@ impl RelocationScheduler {
 
     pub async fn start(&self) {
         if !self.enabled_by_environment {
-            info!("media relocation scheduler disabled because SELF_USE is not true");
+            info!("media relocation scheduler disabled");
             return;
         }
         while self.running.load(Ordering::Relaxed) {

@@ -38,7 +38,7 @@ docker run --name kirara \
   ghcr.io/imythu/kirara:latest-beta
 ```
 
-`latest-beta` 为自动构建预发布（Linux amd64）；正式版发布后使用 `latest`（Linux amd64 / arm64），也可使用具体版本标签。不要把旧仓库的版本号直接当作新镜像中已存在的标签。
+`latest-beta` 为自动构建预发布（Linux amd64）；正式版使用 `latest`（Linux amd64 / arm64），也可使用具体版本标签。不要把旧仓库的版本号直接当作新镜像中已存在的标签。
 
 ## 开发者
 

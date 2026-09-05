@@ -65,16 +65,16 @@ http://127.0.0.1:3000
 
 ### Docker
 
-使用自动构建的 Linux `amd64` 镜像：
+正式版镜像支持 Linux `amd64` 和 `arm64`：
 
 ```bash
 docker run --name kirara \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/data:/data \
-  ghcr.io/imythu/kirara:latest-beta
+  ghcr.io/imythu/kirara:1.0.0
 ```
 
-自动构建提供 `latest-beta`（Linux amd64）；正式版发布后提供 `latest`（Linux amd64 / arm64）。
+自动构建提供 `latest-beta`（Linux amd64）；正式版提供 `latest`（Linux amd64 / arm64）。
 
 指定版本：
 
