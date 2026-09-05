@@ -3334,6 +3334,53 @@ async fn validate_sign_in_task(
             "Browserless selector 不能超过 2048 个字符",
         ));
     }
+    if !matches!(
+        browserless.submit_method.as_str(),
+        "click" | "form" | "ajax"
+    ) {
+        return Err(ApiError::bad_request("提交方式必须是 click、form 或 ajax"));
+    }
+    if browserless.result_rules.len() > 30 {
+        return Err(ApiError::bad_request("结果识别规则最多 30 条"));
+    }
+    for rule in &mut browserless.result_rules {
+        rule.selector = rule.selector.trim().to_string();
+        rule.field = rule.field.trim().to_string();
+        if !matches!(rule.outcome.as_str(), "already" | "success" | "failed")
+            || !matches!(rule.kind.as_str(), "text" | "selector" | "json")
+            || !matches!(
+                rule.value_type.as_str(),
+                "string" | "boolean" | "number" | "null"
+            )
+        {
+            return Err(ApiError::bad_request("结果识别规则类型无效"));
+        }
+        if rule.selector.len() > 2048 || rule.field.len() > 2048 || rule.value.len() > 4096 {
+            return Err(ApiError::bad_request("结果识别规则内容过长"));
+        }
+        if rule.kind != "json"
+            && ((!rule.selector.is_empty() && scraper::Selector::parse(&rule.selector).is_err())
+                || (rule.kind == "selector" && rule.selector.is_empty()))
+        {
+            return Err(ApiError::bad_request("结果规则需要有效的 CSS Selector"));
+        }
+        if rule.kind == "text" && rule.value.trim().is_empty() {
+            return Err(ApiError::bad_request("文字规则的提示内容不能为空"));
+        }
+        if rule.kind == "json" {
+            if !rule.field.starts_with('/') {
+                return Err(ApiError::bad_request(
+                    "JSON 字段路径必须以 / 开头，例如 /state 或 /data/status",
+                ));
+            }
+            if rule.value_type == "boolean" && !matches!(rule.value.as_str(), "true" | "false") {
+                return Err(ApiError::bad_request("布尔值必须填写 true 或 false"));
+            }
+            if rule.value_type == "number" && !rule.value.parse::<f64>().is_ok_and(f64::is_finite) {
+                return Err(ApiError::bad_request("数字规则需要有效数字"));
+            }
+        }
+    }
     browserless.attendance_path = browserless.attendance_path.trim().to_string();
     browserless.captcha_selector = browserless.captcha_selector.trim().to_string();
     browserless.captcha_input_selector = browserless.captcha_input_selector.trim().to_string();

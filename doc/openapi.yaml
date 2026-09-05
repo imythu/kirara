@@ -794,10 +794,28 @@ components:
         address: {type: string, format: uri, nullable: true, pattern: '^https?://'}
         token: {type: string, nullable: true, format: password}
 
+    SignInResultRule:
+      type: object
+      required: [outcome, kind]
+      properties:
+        outcome: {type: string, enum: [success, already, failed]}
+        kind: {type: string, enum: [text, selector, json]}
+        selector: {type: string, default: '', description: 可见元素选择器；文字匹配留空时使用整个页面}
+        field: {type: string, default: '', description: JSON Pointer 路径，例如 /state 或 /data/status}
+        value: {type: string, default: ''}
+        value_type: {type: string, enum: [string, number, boolean, 'null'], default: string}
+
     BrowserlessTaskConfig:
       type: object
       required: [selector, cf_mode, wait_ms, solve_timeout, action_timeout, post_click_wait_ms]
       properties:
+        submit_method: {type: string, enum: [click, form, ajax], default: click, description: 点击按钮、原生表单提交或同源 AJAX 表单提交}
+        result_rules:
+          type: array
+          default: []
+          maxItems: 30
+          description: 优先级为失败、已签到、成功；提交前只匹配失败和已签到；配置规则后未命中按结果未知处理
+          items: {$ref: '#/components/schemas/SignInResultRule'}
         attendance_path: {type: string, default: /attendance.php, description: 图片验证码签到使用的站内路径；皇后预设为 /plugin_sign-in.php}
         captcha_selector: {type: string, default: '', description: 验证码图片的 CSS Selector}
         captcha_input_selector: {type: string, default: '', description: 验证码输入框的 CSS Selector}

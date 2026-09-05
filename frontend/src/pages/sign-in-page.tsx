@@ -37,6 +37,7 @@ import type {
   BrowserProbeResult,
   GlobalConfig,
   SignInRecord,
+  SignInResultRule,
   SignInTaskRecord,
   SignInTaskRequest,
   SiteRecord,
@@ -54,6 +55,8 @@ function defaultLightpandaEndpoint(region: string) {
 }
 
 const DEFAULT_BROWSERLESS_TASK = {
+  submit_method: "click" as const,
+  result_rules: [] as SignInResultRule[],
   selector: "",
   attendance_path: "/attendance.php",
   captcha_selector: "",
@@ -100,10 +103,16 @@ function siteImagePreset(site: SiteRecord | undefined): SignInTaskRequest["brows
   let host: string;
   try { host = new URL(site.base_url).hostname.toLowerCase(); } catch { return null; }
   if (host === "open.cd" || host.endsWith(".open.cd")) {
-    return { ...DEFAULT_BROWSERLESS_TASK, attendance_path: "/plugin_sign-in.php", captcha_selector: "#frmSignin img", captcha_input_selector: "#imagestring", selector: "#ok", already_keywords: "已签到\n已簽到" };
+    return { ...DEFAULT_BROWSERLESS_TASK, attendance_path: "/plugin_sign-in.php", captcha_selector: "#frmSignin img", captcha_input_selector: "#imagestring", selector: "#ok", already_keywords: "", submit_method: "ajax", result_rules: [
+      { outcome: "success", kind: "json", selector: "", field: "/state", value: "success", value_type: "string" },
+      { outcome: "success", kind: "json", selector: "", field: "/state", value: "false", value_type: "string" },
+    ] };
   }
   if (host === "p.t-baozi.cc") {
-    return { ...DEFAULT_BROWSERLESS_TASK, captcha_selector: "form[action='attendance.php'] img[alt='CAPTCHA']", captcha_input_selector: "form[action='attendance.php'] input[name='imagestring']", selector: "form[action='attendance.php'] input[type='submit']", already_keywords: "签到成功" };
+    return { ...DEFAULT_BROWSERLESS_TASK, captcha_selector: "form[action='attendance.php'] img[alt='CAPTCHA']", captcha_input_selector: "form[action='attendance.php'] input[name='imagestring']", selector: "form[action='attendance.php'] input[type='submit']", already_keywords: "签到成功", result_rules: [
+      { outcome: "success", kind: "text", selector: ".attendance-hero__copy", field: "", value: "签到成功", value_type: "string" },
+      { outcome: "failed", kind: "text", selector: "", field: "", value: "验证码错误", value_type: "string" },
+    ] };
   }
   return null;
 }
@@ -251,7 +260,7 @@ export function SignInPage() {
   const imageCaptcha = form.sign_in_method === "ocr_captcha";
   const selectedImagePreset = siteImagePreset(nexusSites.find((site) => site.id === form.site_id));
   const showCfGuidance = !imageCaptcha && (form.browser === "browserless" || form.sign_in_method === "cloudflare");
-  const browserlessTask = form.browserless ?? DEFAULT_BROWSERLESS_TASK;
+  const browserlessTask = { ...DEFAULT_BROWSERLESS_TASK, ...form.browserless };
   const browserlessDefaults = BROWSERLESS_DEFAULTS[browserlessTask.cf_mode];
 
   function loadData() {
@@ -280,7 +289,7 @@ export function SignInPage() {
     setForm((current) => {
       if (key === "sign_in_method" && value === "ocr_captcha") {
         const preset = siteImagePreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK;
-        return { ...current, sign_in_method: value, browser: "browserless", browserless: { ...preset, already_keywords: current.browserless?.already_keywords.trim() ? current.browserless.already_keywords : preset.already_keywords } };
+        return { ...current, sign_in_method: value, browser: "browserless", browserless: { ...preset, already_keywords: current.browserless?.already_keywords?.trim() ? current.browserless.already_keywords : preset.already_keywords } };
       }
       if (key === "sign_in_method" && value === "cloudflare" && current.sign_in_method === "ocr_captcha") {
         return { ...current, sign_in_method: value, browserless: { ...(siteCfPreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK), already_keywords: current.browserless?.already_keywords ?? "" } };
@@ -412,6 +421,10 @@ export function SignInPage() {
       browserless: source.sign_in_method === "ocr_captcha" && source.browser !== "browserless" ? { ...(siteImagePreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK) } : { ...DEFAULT_BROWSERLESS_TASK, ...source.browserless },
     }));
     setIntervalHours(cronToInterval(source.cron_expression));
+  }
+
+  function updateResultRule(index: number, patch: Partial<SignInResultRule>) {
+    setBrowserlessTaskField("result_rules", browserlessTask.result_rules.map((rule, i) => i === index ? { ...rule, ...patch } : rule));
   }
 
   function closeForm() {
@@ -645,7 +658,7 @@ export function SignInPage() {
           <div className="grid gap-3 border-b border-border pb-4 md:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)]">
             <div className="relative min-w-0">
               <Label htmlFor="sign-in-search" className="sr-only">快速搜索</Label>
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 id="sign-in-search"
                 type="search"
@@ -686,7 +699,7 @@ export function SignInPage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted">
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               加载中...
             </div>
@@ -698,13 +711,13 @@ export function SignInPage() {
               tabIndex={0}
               className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
-              <p className="mb-3 text-xs text-muted" aria-live="polite">
+              <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
                 显示 {filteredTasks.length} / {tasks.length} 个任务
               </p>
               {tasks.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted">暂无自动签到任务，点击上方按钮添加。</div>
+                <div className="py-12 text-center text-sm text-muted-foreground">暂无自动签到任务，点击上方按钮添加。</div>
               ) : filteredTasks.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted">没有匹配的任务，请更换关键词或站点筛选。</div>
+                <div className="py-12 text-center text-sm text-muted-foreground">没有匹配的任务，请更换关键词或站点筛选。</div>
               ) : (
                 <div className="grid gap-3">
                   {filteredTasks.map((task) => (
@@ -720,7 +733,7 @@ export function SignInPage() {
                               {displayStatus(task.last_status)}
                             </span>
                           </div>
-                          <div className="mt-0.5 text-[11px] text-muted">#{task.id}</div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">#{task.id}</div>
                         </div>
                         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                           <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => void runAction(api(`/api/sign-in-tasks/${task.id}/run`, { method: "POST" }), "已触发运行一次")}>
@@ -765,13 +778,13 @@ export function SignInPage() {
               tabIndex={0}
               className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
-              <p className="mb-3 text-xs text-muted" aria-live="polite">
+              <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
                 显示 {filteredRecords.length} / {records.length} 条日志，最多保留最近 100 条
               </p>
               {records.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted">暂无签到执行日志。</div>
+                <div className="py-12 text-center text-sm text-muted-foreground">暂无签到执行日志。</div>
               ) : filteredRecords.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted">没有匹配的执行日志，请更换关键词或站点筛选。</div>
+                <div className="py-12 text-center text-sm text-muted-foreground">没有匹配的执行日志，请更换关键词或站点筛选。</div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -791,13 +804,13 @@ export function SignInPage() {
                           <div className="max-w-48 truncate font-medium" title={taskNameById.get(record.task_id)}>
                             {taskNameById.get(record.task_id) ?? `任务 #${record.task_id}`}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-muted">#{record.task_id}</div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">#{record.task_id}</div>
                         </TableCell>
                         <TableCell>{record.site_name || siteNameById.get(record.site_id) || `#${record.site_id}`}</TableCell>
                         <TableCell><span className={`rounded-full px-3 py-1 text-xs font-medium ${statusBadge(record.status)}`}>{displayStatus(record.status)}</span></TableCell>
-                        <TableCell className="max-w-[360px] truncate text-muted" title={record.message}>{record.message || "-"}</TableCell>
-                        <TableCell className="text-muted">{formatDate(record.started_at)}</TableCell>
-                        <TableCell className="text-muted">{formatDate(record.finished_at)}</TableCell>
+                        <TableCell className="max-w-[360px] truncate text-muted-foreground" title={record.message}>{record.message || "-"}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDate(record.started_at)}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDate(record.finished_at)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -846,7 +859,7 @@ export function SignInPage() {
                     >
                       {browser === "lightpanda" ? <Zap className="h-4 w-4 shrink-0" /> : <Cloud className="h-4 w-4 shrink-0" />}
                       <span className="truncate">{browserLabel(browser)}</span>
-                      <span className={cn("hidden text-[10px] sm:inline", configured ? "text-emerald-600 dark:text-emerald-400" : "text-muted")}>
+                      <span className={cn("hidden text-[10px] sm:inline", configured ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
                         {configured ? "已配置" : "未配置"}
                       </span>
                     </button>
@@ -957,7 +970,7 @@ export function SignInPage() {
                       placeholder={DEFAULT_BROWSERLESS_ADDRESS}
                       aria-describedby="browserless-address-help"
                     />
-                    <p id="browserless-address-help" className="text-xs leading-relaxed text-muted">已提供默认云端地址，也支持自定义服务根地址或完整的 /stealth/bql 地址。</p>
+                    <p id="browserless-address-help" className="text-xs leading-relaxed text-muted-foreground">已提供默认云端地址，也支持自定义服务根地址或完整的 /stealth/bql 地址。</p>
                   </div>
                   <p id="browserless-token-help" className="text-xs leading-relaxed text-muted sm:col-span-2">首次使用：<a href="https://www.browserless.io/signup/email?plan=free" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">注册 Browserless 账号</a>，登录 <a href="https://browserless.io/account/" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">账户控制台</a>，在 API Key 区域复制 Token，填入下方后点击“保存并测试”。</p>
                   <div className="space-y-2 sm:col-span-2">
@@ -976,7 +989,7 @@ export function SignInPage() {
               )}
             </>
           ) : (
-            <div className="flex items-center justify-center py-8 text-sm text-muted">
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               加载配置中...
             </div>
@@ -1051,7 +1064,7 @@ export function SignInPage() {
                 placeholder="每日签到"
               />
               {suggestedTaskName ? (
-                <div id="sign-in-name-suggestion" className="flex min-h-7 flex-wrap items-center gap-1.5 text-xs text-muted">
+                <div id="sign-in-name-suggestion" className="flex min-h-7 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   <span>推荐名称</span>
                   <button
                     type="button"
@@ -1169,8 +1182,37 @@ export function SignInPage() {
                   <Label htmlFor="browserless-already-keywords">已签到／重复签到提示文字</Label>
                   <textarea id="browserless-already-keywords" className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={browserlessTask.already_keywords} onChange={event => setBrowserlessTaskField("already_keywords", event.target.value)} placeholder="例如：您今天已经签到，请勿重复签到。" maxLength={4096} aria-describedby="browserless-already-help" />
                   <p id="browserless-already-help" className="text-xs leading-relaxed text-muted-foreground">每行一条，命中任意一条即结束，不再验证或点击。留空不启用提前跳过。请填写明确的已签到提示，避免使用日历说明中的“已签到”等泛词。</p>
-                  {imageCaptcha && selectedImagePreset?.attendance_path === "/plugin_sign-in.php" ? <p className="text-xs leading-relaxed text-muted-foreground">皇后当前签到入口在已签到后仍会显示验证码，默认提示可能无法命中；仅配置文字不能保证提前跳过。</p> : null}
+                  {imageCaptcha && selectedImagePreset?.attendance_path === "/plugin_sign-in.php" ? <p className="text-xs leading-relaxed text-muted-foreground">皇后通过提交后的 JSON 响应识别成功；签到前没有可靠提示时，此项可留空。</p> : null}
                 </div>
+                <details className="rounded-2xl border border-border sm:col-span-2">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">提交方式与结果识别</summary>
+                  <div className="space-y-4 border-t border-border p-4">
+                    <p className="text-xs leading-relaxed text-muted-foreground">已知站点已填入预设，请勿随意修改。失败规则优先于已签到和成功规则；同类规则命中任意一条即可。已签到和失败规则也会在提交前检查。</p>
+                    {(imageCaptcha ? selectedImagePreset : selectedCfPreset) ? <Button type="button" variant="outline" onClick={() => setField("browserless", { ...(imageCaptcha ? selectedImagePreset : selectedCfPreset)! })}>恢复本站预设</Button> : null}
+                    <div className="space-y-2">
+                      <Label htmlFor="browserless-submit-method">提交方式</Label>
+                      <Select id="browserless-submit-method" value={browserlessTask.submit_method} onChange={value => setBrowserlessTaskField("submit_method", value as typeof browserlessTask.submit_method)} options={[
+                        { value: "click", label: "点击按钮" }, { value: "form", label: "提交原表单" }, { value: "ajax", label: "AJAX 提交原表单并等待响应" },
+                      ]} />
+                      <p className="text-xs leading-relaxed text-muted-foreground">表单方式使用签到按钮对应的原表单，保留隐藏字段。AJAX 方式按原表单地址、方法和编码发送请求，支持 JSON 或响应原文匹配；可见元素规则用于点击或原生表单后的页面。仅支持同站地址。</p>
+                    </div>
+                    {browserlessTask.result_rules.map((rule, index) => <div key={index} className="space-y-3 border-t border-border pt-4">
+                      <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">规则 {index + 1}</span><Button type="button" variant="outline" aria-label={`删除第 ${index + 1} 条规则`} onClick={() => setBrowserlessTaskField("result_rules", browserlessTask.result_rules.filter((_, i) => i !== index))}>删除</Button></div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2"><Label htmlFor={`rule-outcome-${index}`}>识别结果</Label><Select id={`rule-outcome-${index}`} value={rule.outcome} onChange={value => updateResultRule(index, { outcome: value as SignInResultRule["outcome"] })} options={[{value:"success",label:"签到成功"},{value:"already",label:"已经签到"},{value:"failed",label:"签到失败"}]} /></div>
+                        <div className="space-y-2"><Label htmlFor={`rule-kind-${index}`}>匹配方式</Label><Select id={`rule-kind-${index}`} value={rule.kind} onChange={value => updateResultRule(index, { kind: value as SignInResultRule["kind"] })} options={[{value:"text",label:"文字包含"},{value:"selector",label:"可见元素存在"},{value:"json",label:"JSON 字段等于"}]} /></div>
+                      </div>
+                      {rule.kind === "json" ? <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2"><Label htmlFor={`rule-field-${index}`}>JSON 字段路径</Label><Input id={`rule-field-${index}`} value={rule.field} onChange={event => updateResultRule(index, {field:event.target.value})} placeholder="/state 或 /data/status" maxLength={2048} /></div>
+                        <div className="space-y-2"><Label htmlFor={`rule-type-${index}`}>值类型</Label><Select id={`rule-type-${index}`} value={rule.value_type} onChange={value => updateResultRule(index, {value_type:value as SignInResultRule["value_type"]})} options={[{value:"string",label:"字符串"},{value:"boolean",label:"布尔值"},{value:"number",label:"数字"},{value:"null",label:"null"}]} /></div>
+                      </div> : <div className="space-y-2"><Label htmlFor={`rule-selector-${index}`}>匹配区域 Selector{rule.kind === "text" ? "（可留空）" : ""}</Label><Input id={`rule-selector-${index}`} value={rule.selector} onChange={event => updateResultRule(index, {selector:event.target.value})} placeholder={rule.kind === "text" ? "留空匹配页面可见文字" : "填写可见结果元素的 Selector"} maxLength={2048} /></div>}
+                      {rule.kind !== "selector" && !(rule.kind === "json" && rule.value_type === "null") ? <div className="space-y-2"><Label htmlFor={`rule-value-${index}`}>{rule.kind === "text" ? "提示文字" : "期望值"}</Label><Input id={`rule-value-${index}`} value={rule.value} onChange={event => updateResultRule(index, {value:event.target.value})} placeholder={rule.kind === "json" && rule.value_type === "boolean" ? "true 或 false" : "例如：success"} maxLength={4096} /><p className="text-xs text-muted-foreground">字符串直接填写，不加引号；字符串 false 与布尔值 false 分别匹配。</p></div> : null}
+                    </div>)}
+                    <Button type="button" variant="outline" disabled={browserlessTask.result_rules.length >= 30} onClick={() => setBrowserlessTaskField("result_rules", [...browserlessTask.result_rules, {outcome:"success",kind:"text",selector:"",field:"",value:"",value_type:"string"}])}>添加识别规则</Button>
+                    <p className="text-xs leading-relaxed text-muted-foreground">不配置规则时沿用旧版结果识别。配置后未命中任何规则，会记录“结果未知”，不会把点击完成或验证码识别完成当作成功。</p>
+                  </div>
+                </details>
+
                 <div className="overflow-hidden rounded-2xl border border-border sm:col-span-2">
                   <button
                     type="button"

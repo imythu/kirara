@@ -579,7 +579,7 @@ impl Database {
                      browserless_solve_timeout, browserless_action_timeout,
                      browserless_post_click_wait_ms, enabled,
                      last_status, last_message, last_run_at, created_at, updated_at,
-                 attendance_path, captcha_selector, captcha_input_selector, already_keywords
+                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules
                      FROM sign_in_tasks ORDER BY id",
                 )
                 .map_err(sql_error)?;
@@ -604,7 +604,7 @@ impl Database {
                  browserless_solve_timeout, browserless_action_timeout,
                  browserless_post_click_wait_ms, enabled,
                  last_status, last_message, last_run_at, created_at, updated_at,
-                 attendance_path, captcha_selector, captcha_input_selector, already_keywords
+                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules
                  FROM sign_in_tasks WHERE id = ?",
                 params![id],
                 map_sign_in_task,
@@ -629,8 +629,8 @@ impl Database {
                   lightpanda_region, browser, proxy, country, sign_in_method,
                   browserless_selector, browserless_cf_mode, browserless_wait_ms,
                   browserless_solve_timeout, browserless_action_timeout,
-                  browserless_post_click_wait_ms, enabled, created_at, updated_at, attendance_path, captcha_selector, captcha_input_selector, already_keywords)
-                  VALUES (?, ?, ?, NULL, '', 'euwest', ?, 'fast_dc', NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)",
+                  browserless_post_click_wait_ms, enabled, created_at, updated_at, attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules)
+                  VALUES (?, ?, ?, NULL, '', 'euwest', ?, 'fast_dc', NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     req.name,
                     req.site_id,
@@ -651,6 +651,8 @@ impl Database {
                     browserless.captcha_selector,
                     browserless.captcha_input_selector,
                     browserless.already_keywords,
+                    browserless.submit_method,
+                    serde_json::to_string(&browserless.result_rules).expect("serializable result rules"),
                 ],
             )
             .map_err(sql_error)?;
@@ -676,7 +678,7 @@ impl Database {
                  name = ?, site_id = ?, cron_expression = ?, browser = ?, sign_in_method = ?,
                  browserless_selector = ?, browserless_cf_mode = ?, browserless_wait_ms = ?,
                  browserless_solve_timeout = ?, browserless_action_timeout = ?,
-                 browserless_post_click_wait_ms = ?, updated_at = ?, attendance_path = ?, captcha_selector = ?, captcha_input_selector = ?, already_keywords = ?
+                 browserless_post_click_wait_ms = ?, updated_at = ?, attendance_path = ?, captcha_selector = ?, captcha_input_selector = ?, already_keywords = ?, submit_method = ?, result_rules = ?
                  WHERE id = ?",
                 params![
                     req.name,
@@ -697,6 +699,8 @@ impl Database {
                     browserless.captcha_selector,
                     browserless.captcha_input_selector,
                     browserless.already_keywords,
+                    browserless.submit_method,
+                    serde_json::to_string(&browserless.result_rules).expect("serializable result rules"),
                     id,
                 ],
             )
@@ -2705,6 +2709,8 @@ impl Database {
                 ("captcha_selector", "ALTER TABLE sign_in_tasks ADD COLUMN captcha_selector TEXT NOT NULL DEFAULT ''"),
                 ("captcha_input_selector", "ALTER TABLE sign_in_tasks ADD COLUMN captcha_input_selector TEXT NOT NULL DEFAULT ''"),
                 ("already_keywords", "ALTER TABLE sign_in_tasks ADD COLUMN already_keywords TEXT NOT NULL DEFAULT ''"),
+                ("submit_method", "ALTER TABLE sign_in_tasks ADD COLUMN submit_method TEXT NOT NULL DEFAULT 'click'"),
+                ("result_rules", "ALTER TABLE sign_in_tasks ADD COLUMN result_rules TEXT NOT NULL DEFAULT '[]'"),
             ] {
                 ensure_column(&conn, "sign_in_tasks", column, sql)?;
             }
@@ -3486,6 +3492,14 @@ fn map_sign_in_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<SignInTaskRecor
             captcha_selector: row.get(19)?,
             captcha_input_selector: row.get(20)?,
             already_keywords: row.get(21)?,
+            submit_method: row.get(22)?,
+            result_rules: serde_json::from_str(&row.get::<_, String>(23)?).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    23,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?,
         },
         enabled: row.get::<_, i32>(12)? != 0,
         last_status: row.get(13)?,
@@ -4162,6 +4176,15 @@ mod migration_tests {
                     captcha_selector: "#frmSignin img".into(),
                     captcha_input_selector: "#imagestring".into(),
                     already_keywords: "今日已签到\n请勿重复签到".into(),
+                    submit_method: "ajax".into(),
+                    result_rules: vec![crate::sign_in::SignInResultRule {
+                        outcome: "success".into(),
+                        kind: "json".into(),
+                        selector: "".into(),
+                        field: "/state".into(),
+                        value: "false".into(),
+                        value_type: "string".into(),
+                    }],
                 }),
             })
             .await
@@ -4178,6 +4201,9 @@ mod migration_tests {
 
         let task = reopened.get_sign_in_task(task_id).await.unwrap().unwrap();
         assert_eq!(task.browser, crate::sign_in::SIGN_IN_BROWSER_BROWSERLESS);
+        assert_eq!(task.browserless.submit_method, "ajax");
+        assert_eq!(task.browserless.result_rules[0].value, "false");
+        assert_eq!(task.browserless.result_rules[0].value_type, "string");
         assert_eq!(task.browserless.selector, "button.check-in");
         assert_eq!(
             task.browserless.cf_mode,
@@ -4211,6 +4237,8 @@ mod migration_tests {
             .await
             .unwrap();
         let tasks = reopened.list_sign_in_tasks().await.unwrap();
+        assert_eq!(tasks[0].browserless.submit_method, "ajax");
+        assert_eq!(tasks[0].browserless.result_rules[0].field, "/state");
         assert_eq!(tasks[0].browserless.already_keywords, "已完成今日签到");
         assert_eq!(tasks[0].browserless.attendance_path, "/plugin_sign-in.php");
     }

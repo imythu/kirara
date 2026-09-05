@@ -26,6 +26,28 @@ pub const BROWSERLESS_CF_MODE_TURNSTILE: &str = "turnstile";
 pub const DEFAULT_BROWSERLESS_SELECTOR: &str = "input[type='submit']";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignInResultRule {
+    pub outcome: String,
+    pub kind: String,
+    #[serde(default)]
+    pub selector: String,
+    #[serde(default)]
+    pub field: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default = "default_rule_value_type")]
+    pub value_type: String,
+}
+
+fn default_rule_value_type() -> String {
+    "string".into()
+}
+
+fn default_submit_method() -> String {
+    "click".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserlessTaskConfig {
     #[serde(default = "default_browserless_selector")]
     pub selector: String,
@@ -37,6 +59,10 @@ pub struct BrowserlessTaskConfig {
     pub captcha_input_selector: String,
     #[serde(default)]
     pub already_keywords: String,
+    #[serde(default = "default_submit_method")]
+    pub submit_method: String,
+    #[serde(default)]
+    pub result_rules: Vec<SignInResultRule>,
     #[serde(default = "default_browserless_cf_mode")]
     pub cf_mode: String,
     #[serde(default)]
@@ -57,6 +83,8 @@ impl Default for BrowserlessTaskConfig {
             captcha_selector: String::new(),
             captcha_input_selector: String::new(),
             already_keywords: String::new(),
+            submit_method: default_submit_method(),
+            result_rules: Vec::new(),
             cf_mode: default_browserless_cf_mode(),
             wait_ms: None,
             solve_timeout: None,
@@ -339,11 +367,27 @@ async fn qingwa_bonus_exchange(
     ))
 }
 
-fn browserless_sign_in_query(image_captcha: bool) -> String {
+fn browserless_sign_in_query(image_captcha: bool, script_submit: bool) -> String {
     let solve = if image_captcha {
         "solve: solveImageCaptcha(captchaSelector: $captchaSelector, inputSelector: $captchaInputSelector, timeout: $solveTimeout) { found solved time }"
     } else {
         "solve(type: cloudflare, timeout: $solveTimeout) { found solved time }"
+    };
+    let (submit_variables, submit_action) = if script_submit {
+        (
+            "$submitScript: String!",
+            "submitForm: evaluate(content: $submitScript) { value }",
+        )
+    } else {
+        (
+            "$selector: String!",
+            "click(selector: $selector, visible: true, timeout: $actionTimeout) { time }",
+        )
+    };
+    let action_variables = if script_submit {
+        ""
+    } else {
+        "$actionTimeout: Float!"
     };
     let image_variables = if image_captcha {
         "$captchaSelector: String! $captchaInputSelector: String!"
@@ -352,49 +396,121 @@ fn browserless_sign_in_query(image_captcha: bool) -> String {
     };
     format!(
         r#"
-mutation CheckIn($cookies: [CookieInput!]! $url: String! $selector: String!
- $waitMs: Float! $solveTimeout: Float! $actionTimeout: Float! $postClickWaitMs: Float!
- $guard: String! $submitCondition: String! {image_variables}) {{
+mutation CheckIn($cookies: [CookieInput!]! $url: String! {submit_variables}
+ $waitMs: Float! $solveTimeout: Float! {action_variables} $postClickWaitMs: Float!
+ $guard: String! $resultScript: String! $submitCondition: String! {image_variables}) {{
  cookies(cookies: $cookies) {{ cookies {{ name }} }}
  goto(url: $url, waitUntil: networkIdle) {{ status }}
  waitBefore: waitForTimeout(time: $waitMs) {{ time }}
  checkBefore: evaluate(content: $guard) {{ value }}
  beforeClick: html {{ html }}
- pending: ifnot(selector: "html[data-rflush-already]") {{
+ pending: ifnot(selector: "html[data-rflush-stop]") {{
   {solve}
   checkAfter: evaluate(content: $guard) {{ value }}
   afterSolve: html {{ html }}
-  pending: ifnot(selector: "html[data-rflush-already]") {{
+  pending: ifnot(selector: "html[data-rflush-stop]") {{
    submit: if(selector: $submitCondition) {{
-    click(selector: $selector, visible: true, timeout: $actionTimeout) {{ time }}
+    {submit_action}
    }}
    waitAfter: waitForTimeout(time: $postClickWaitMs) {{ time }}
   }}
  }}
  html {{ html }}
+ result: evaluate(content: $resultScript) {{ value }}
 }}
 "#
     )
 }
 
-fn already_guard_script(keywords: &str, image_input: Option<&str>) -> String {
-    let phrases: Vec<_> = keywords
-        .lines()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
+fn form_submit_script(selector: &str, method: &str, timeout: u64) -> String {
+    format!(
+        r#"(async () => {{
+ const target = document.querySelector({});
+ const form = target instanceof HTMLFormElement ? target : target?.form;
+ if (!(form instanceof HTMLFormElement)) throw new Error('未找到提交目标对应的表单');
+ if ({} === 'form') {{ HTMLFormElement.prototype.submit.call(form); return 'submitted'; }}
+ const action = new URL(form.action, location.href);
+ if (action.origin !== location.origin) throw new Error('AJAX 提交仅支持本站表单');
+ const data = new FormData(form);
+ if (target?.name && !target.disabled) data.append(target.name, target.value);
+ const method = form.method.toUpperCase();
+ let body;
+ if (method === 'GET') {{ for (const [key, value] of data) action.searchParams.append(key, String(value)); }}
+ else if (form.enctype === 'multipart/form-data') body = data;
+ else body = new URLSearchParams(data);
+ const response = await fetch(action.href, {{ method, credentials: 'same-origin', body, signal: AbortSignal.timeout({}) }});
+ const text = await response.text();
+ window.__rflushResponse = {{status: response.status, text}};
+ // Show the response as text; do not execute scripts returned by the endpoint.
+ const pre = document.createElement('pre'); pre.textContent = text;
+ document.body.replaceChildren(pre);
+ return response.status;
+}})()"#,
+        json!(selector),
+        json!(method),
+        timeout
+    )
+}
+
+fn result_rule_script(
+    config: &BrowserlessTaskConfig,
+    before: bool,
+    image_input: Option<&str>,
+) -> String {
     format!(
         r#"(() => {{
- const phrases = {};
- const inputSelector = {};
- const ready = inputSelector && !!document.querySelector(inputSelector)?.value?.trim();
+ const rules = {};
+ const before = {};
+ const keywords = {};
+ const input = {};
+ const ready = input && !!document.querySelector(input)?.value?.trim();
  document.documentElement.toggleAttribute('data-rflush-image-ready', !!ready);
- const text = document.body?.innerText || '';
- const matched = phrases.some(phrase => text.includes(phrase));
- document.documentElement.toggleAttribute('data-rflush-already', matched);
- return matched;
+ const visible = el => !!el && !!el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
+ const text = selector => Array.from(document.querySelectorAll(selector || 'body')).filter(visible).map(el => el.innerText || '').join('\n');
+ const response = window.__rflushResponse;
+ let payload;
+ try {{ payload = JSON.parse(response ? response.text : document.body?.innerText || ''); }} catch {{}}
+ const matches = rule => {{
+  if (rule.kind === 'selector') return Array.from(document.querySelectorAll(rule.selector)).some(visible);
+  if (rule.kind === 'text') return text(rule.selector).includes(rule.value);
+  if (rule.kind === 'json') {{
+   let current = payload;
+   for (const key of rule.field.slice(1).split('/').map(k => k.replace(/~1/g, '/').replace(/~0/g, '~'))) {{
+    if (current === null || typeof current !== 'object' || !Object.prototype.hasOwnProperty.call(current, key)) return false;
+    current = current[key];
+   }}
+   const expected = rule.value_type === 'number' ? Number(rule.value) : rule.value_type === 'boolean' ? rule.value === 'true' : rule.value_type === 'null' ? null : rule.value;
+   return current === expected;
+  }}
+  return false;
+ }};
+ let result = null;
+ if (!before && response && (response.status < 200 || response.status >= 300)) result = {{status:'failed', message:'表单提交失败（HTTP ' + response.status + '）'}};
+ for (const outcome of ['failed', 'already', 'success']) {{
+  if (result || (before && outcome === 'success')) continue;
+  if (rules.some(rule => rule.outcome === outcome && matches(rule))) result = {{status:outcome, message:{{failed:'命中签到失败规则',already:'命中已签到规则',success:'命中签到成功规则'}}[outcome]}};
+ }}
+ if (!result && keywords.some(word => text('').includes(word))) result = {{status:'already', message:'命中已签到提示'}};
+ if (before) {{
+  document.documentElement.toggleAttribute('data-rflush-stop', !!result);
+  if (result) document.documentElement.setAttribute('data-rflush-outcome', JSON.stringify(result));
+  else document.documentElement.removeAttribute('data-rflush-outcome');
+ }} else {{
+  const stopped = document.documentElement.getAttribute('data-rflush-outcome');
+  if (stopped) result = JSON.parse(stopped);
+ }}
+ return JSON.stringify(result);
 }})()"#,
-        json!(phrases),
+        json!(config.result_rules),
+        before,
+        json!(
+            config
+                .already_keywords
+                .lines()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+        ),
         json!(image_input)
     )
 }
@@ -510,6 +626,7 @@ async fn run_browserless_sign_in(
     let domain = target_url
         .host_str()
         .ok_or_else(|| "签到地址缺少域名".to_string())?;
+    let script_submit = task_config.submit_method != "click";
     let cookies = browserless_cookies(&cookie_header, domain, target_url.as_str());
     if cookies.is_empty() {
         return Err("Cookie 不能为空".to_string());
@@ -532,11 +649,13 @@ async fn run_browserless_sign_in(
         .saturating_add(30_000);
     let result = post_browserless_bql(
         service_config,
-        &browserless_sign_in_query(image_captcha),
+        &browserless_sign_in_query(image_captcha, script_submit),
         "CheckIn",
         json!({
             "cookies": cookies,
-            "guard": already_guard_script(&task_config.already_keywords, image_captcha.then_some(task_config.captcha_input_selector.as_str())),
+            "guard": result_rule_script(&task_config, true, image_captcha.then_some(task_config.captcha_input_selector.as_str())),
+            "submitScript": form_submit_script(selector, &task_config.submit_method, timings.action_timeout),
+            "resultScript": result_rule_script(&task_config, false, None),
             "submitCondition": if image_captcha { "html[data-rflush-image-ready]" } else { selector },
             "captchaSelector": task_config.captcha_selector,
             "captchaInputSelector": task_config.captcha_input_selector,
@@ -551,7 +670,7 @@ async fn run_browserless_sign_in(
     )
     .await?;
 
-    summarize_browserless_sign_in(&result)
+    summarize_configured_result(&result, !task_config.result_rules.is_empty())
 }
 
 async fn post_browserless_bql(
@@ -687,14 +806,39 @@ fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
             message: "命中已签到提示，已跳过验证和点击".into(),
         });
     }
-    if serde_json::from_str::<Value>(text.trim())
-        .ok()
-        .is_some_and(|v| v.get("state").and_then(Value::as_str) == Some("success"))
-    {
-        return Some(SignInOutput {
-            status: "success".into(),
-            message: "Browserless 签到成功".into(),
-        });
+    if let Ok(value) = serde_json::from_str::<Value>(text.trim()) {
+        if let Some(state) = value.get("state").and_then(Value::as_str) {
+            if state == "success" {
+                return Some(SignInOutput {
+                    status: "success".into(),
+                    message: "Browserless 签到成功".into(),
+                });
+            }
+            if let Some(message) = value
+                .get("msg")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
+                let already = [
+                    "已经签到",
+                    "已經簽到",
+                    "已签到",
+                    "已簽到",
+                    "重复签到",
+                    "重複簽到",
+                ]
+                .iter()
+                .any(|phrase| message.contains(phrase));
+                return Some(SignInOutput {
+                    status: if already { "already" } else { "failed" }.into(),
+                    message: message.to_string(),
+                });
+            }
+            return Some(SignInOutput {
+                status: "failed".into(),
+                message: format!("站点返回签到失败（state={}），未提供具体原因", state),
+            });
+        }
     }
     // A calendar legend can say 已签到 even after a successful submission.
     if ["签到成功", "簽到成功", "成功签到"]
@@ -742,6 +886,38 @@ fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
     })
 }
 
+fn summarize_configured_result(result: &Value, configured: bool) -> Result<SignInOutput, String> {
+    for path in [
+        "/data/result/value",
+        "/data/pending/checkAfter/value",
+        "/data/checkBefore/value",
+    ] {
+        if let Some(value) = result.pointer(path).and_then(Value::as_str)
+            && let Ok(value) = serde_json::from_str::<Value>(value)
+            && let (Some(status), Some(message)) = (
+                value.get("status").and_then(Value::as_str),
+                value.get("message").and_then(Value::as_str),
+            )
+            && matches!(status, "success" | "already" | "failed")
+        {
+            return Ok(SignInOutput {
+                status: status.into(),
+                message: message.into(),
+            });
+        }
+    }
+    if configured {
+        if let Some(error) = browserless_error_message(result) {
+            return Err(error);
+        }
+        return Ok(SignInOutput {
+            status: "failed".into(),
+            message: "结果未知：未命中任何签到结果规则".into(),
+        });
+    }
+    summarize_browserless_sign_in(result)
+}
+
 fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String> {
     // A completed attendance page may have no button; BQL still returns HTML
     // after a selector timeout. Inspect visible outcome text before action errors.
@@ -779,6 +955,9 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
         && data.pointer("/submit/click").is_none_or(Value::is_null)
         && data
             .pointer("/pending/pending/submit/click")
+            .is_none_or(Value::is_null)
+        && data
+            .pointer("/pending/pending/submit/submitForm/value")
             .is_none_or(Value::is_null)
     {
         return Err("Browserless 未执行签到点击，请检查 selector".to_string());
@@ -1830,6 +2009,32 @@ pub fn normalize_sign_in_method(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn configured_results_require_a_match_and_preserve_outcomes() {
+        for status in ["success", "already", "failed"] {
+            let result = serde_json::json!({"data":{"result":{"value":serde_json::json!({"status":status,"message":"rule"}).to_string()}}});
+            assert_eq!(
+                super::summarize_configured_result(&result, true)
+                    .unwrap()
+                    .status,
+                status
+            );
+        }
+        let unknown = serde_json::json!({"data":{"html":{"html":"<body>签到成功</body>"},"result":{"value":"null"}}});
+        let output = super::summarize_configured_result(&unknown, true).unwrap();
+        assert_eq!(output.status, "failed");
+        assert!(output.message.contains("结果未知"));
+        assert_eq!(
+            super::summarize_configured_result(&unknown, false)
+                .unwrap()
+                .status,
+            "success"
+        );
+        let old: super::BrowserlessTaskConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.submit_method, "click");
+        assert!(old.result_rules.is_empty());
+    }
+
     use super::*;
     use chrono::TimeZone;
     use tokio::io::AsyncReadExt;
@@ -2042,6 +2247,32 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["token with space"]
         );
+    }
+
+    #[test]
+    fn opencd_json_rejections_report_the_server_result() {
+        for (response, expected_status, expected_message) in [
+            (r#"{"state":"false"}"#, "failed", "state=false"),
+            (
+                r#"{"state":"error","msg":"验证码错误"}"#,
+                "failed",
+                "验证码错误",
+            ),
+            (
+                r#"{"state":"error","msg":"今天已经签到"}"#,
+                "already",
+                "今天已经签到",
+            ),
+        ] {
+            let result = summarize_browserless_sign_in(&json!({"data": {
+                "goto": {"status": 200},
+                "pending": {"pending": {"submit": {"submitForm": {"value": "200"}}}},
+                "html": {"html": format!("<body><pre>{}</pre></body>", response)}
+            }}))
+            .unwrap();
+            assert_eq!(result.status, expected_status);
+            assert!(result.message.contains(expected_message));
+        }
     }
 
     #[test]

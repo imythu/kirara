@@ -331,7 +331,18 @@ export type SignInTaskRequest = {
   browserless?: BrowserlessTaskConfig | null;
 };
 
+export type SignInResultRule = {
+  outcome: "success" | "already" | "failed";
+  kind: "text" | "selector" | "json";
+  selector: string;
+  field: string;
+  value: string;
+  value_type: "string" | "number" | "boolean" | "null";
+};
+
 export type BrowserlessTaskConfig = {
+  submit_method: "click" | "form" | "ajax";
+  result_rules: SignInResultRule[];
   attendance_path: string;
   captcha_selector: string;
   captcha_input_selector: string;
