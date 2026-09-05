@@ -263,6 +263,8 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         run: |
           set -euo pipefail
+          # The cargo cache includes target; discard installers from earlier releases.
+          rm -rf "target/${{ matrix.target }}/release/bundle"
           printf '%s\n' '{"build":{"beforeBuildCommand":""}}' > tauri-ci.conf.json
           npm exec --yes --package @tauri-apps/cli@2.11.4 -- tauri build \
             --target "${{ matrix.target }}" \
@@ -283,6 +285,9 @@ jobs:
             INSTALLERS=(target/${{ matrix.target }}/release/bundle/${{ matrix.bundle }}/*.${{ matrix.extension }})
             if [[ "${#INSTALLERS[@]}" != "1" ]]; then
               echo "expected one desktop installer, found ${#INSTALLERS[@]}" >&2
+              if (( ${#INSTALLERS[@]} > 0 )); then
+                printf '  %s\n' "${INSTALLERS[@]}" >&2
+              fi
               exit 1
             fi
             if [[ "${{ matrix.bundle }}" == "nsis" ]]; then
