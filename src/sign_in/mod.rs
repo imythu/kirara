@@ -1,7 +1,9 @@
 pub mod scheduler;
 
+use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
@@ -641,6 +643,7 @@ fn create_target_session(client: &mut CdpClient) -> Result<String, String> {
 const CDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const CDP_IO_TIMEOUT: Duration = Duration::from_secs(30);
 const CDP_CALL_TIMEOUT: Duration = Duration::from_secs(60);
+const CDP_IO_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const CDP_SHUTDOWN_ERROR: &str = "服务正在退出，已取消浏览器操作";
 
 struct AbortTask(tokio::task::JoinHandle<()>);
@@ -651,11 +654,23 @@ impl Drop for AbortTask {
     }
 }
 
-struct InterruptSocket(Arc<TcpStream>);
+struct CdpConnectionState {
+    socket: TcpStream,
+    interrupted: AtomicBool,
+}
+
+impl CdpConnectionState {
+    fn interrupt(&self) {
+        self.interrupted.store(true, Ordering::Release);
+        let _ = self.socket.shutdown(Shutdown::Both);
+    }
+}
+
+struct InterruptSocket(Arc<CdpConnectionState>);
 
 impl Drop for InterruptSocket {
     fn drop(&mut self) {
-        let _ = self.0.shutdown(Shutdown::Both);
+        self.0.interrupt();
     }
 }
 
@@ -666,9 +681,10 @@ struct CdpConnectionGuard {
 
 impl CdpConnectionGuard {
     fn new(stream: &TcpStream, shutdown: CancellationToken) -> Result<Self, String> {
-        let socket = InterruptSocket(Arc::new(
-            stream.try_clone().map_err(|error| error.to_string())?,
-        ));
+        let socket = InterruptSocket(Arc::new(CdpConnectionState {
+            socket: stream.try_clone().map_err(|error| error.to_string())?,
+            interrupted: AtomicBool::new(false),
+        }));
         let on_shutdown = InterruptSocket(socket.0.clone());
         let watcher = tokio::spawn(async move {
             // This guard also interrupts blocking IO if the runtime drops the
@@ -686,13 +702,71 @@ impl CdpConnectionGuard {
         let socket = self.socket.0.clone();
         AbortTask(tokio::spawn(async move {
             tokio::time::sleep(duration).await;
-            let _ = socket.shutdown(Shutdown::Both);
+            socket.interrupt();
         }))
     }
 }
 
+// Present blocking Read/Write semantics to tungstenite and rustls while each
+// actual socket operation remains nonblocking. On Windows, shutdown on a cloned
+// handle does not reliably interrupt a recv already blocked in a handshake.
+struct CdpStream {
+    socket: TcpStream,
+    connection: Arc<CdpConnectionState>,
+    shutdown: CancellationToken,
+}
+
+impl CdpStream {
+    fn wait_for_io<T>(
+        &mut self,
+        mut operation: impl FnMut(&mut TcpStream) -> io::Result<T>,
+    ) -> io::Result<T> {
+        let deadline = Instant::now() + CDP_IO_TIMEOUT;
+        loop {
+            if self.shutdown.is_cancelled() || self.connection.interrupted.load(Ordering::Acquire) {
+                // Interrupted is retried by the TLS/HTTP handshake layers;
+                // cancellation must instead terminate the current operation.
+                return Err(io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    CDP_SHUTDOWN_ERROR,
+                ));
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "浏览器 CDP 读写超时",
+                ));
+            }
+            match operation(&mut self.socket) {
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(CDP_IO_POLL_INTERVAL.min(remaining));
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                result => return result,
+            }
+        }
+    }
+}
+
+impl Read for CdpStream {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.wait_for_io(|socket| socket.read(buffer))
+    }
+}
+
+impl Write for CdpStream {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.wait_for_io(|socket| socket.write(buffer))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.wait_for_io(TcpStream::flush)
+    }
+}
+
 struct CdpClient {
-    socket: tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<TcpStream>>,
+    socket: tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<CdpStream>>,
     connection: CdpConnectionGuard,
     shutdown: CancellationToken,
     next_id: u64,
@@ -754,19 +828,18 @@ impl CdpClient {
                 .map_err(|error| error.to_string())
             })?;
             stream
-                .set_nonblocking(false)
+                .set_nonblocking(true)
                 .map_err(|error| error.to_string())?;
             stream
                 .set_nodelay(true)
                 .map_err(|error| error.to_string())?;
-            stream
-                .set_read_timeout(Some(CDP_IO_TIMEOUT))
-                .map_err(|error| error.to_string())?;
-            stream
-                .set_write_timeout(Some(CDP_IO_TIMEOUT))
-                .map_err(|error| error.to_string())?;
             let connection = CdpConnectionGuard::new(&stream, shutdown.clone())?;
             let handshake_deadline = connection.deadline(CDP_IO_TIMEOUT);
+            let stream = CdpStream {
+                socket: stream,
+                connection: connection.socket.0.clone(),
+                shutdown: shutdown.clone(),
+            };
             match client_tls(request, stream) {
                 Ok((socket, _)) => {
                     drop(handshake_deadline);
@@ -806,7 +879,9 @@ impl CdpClient {
         params: Value,
         session_id: Option<&str>,
     ) -> Result<Value, String> {
-        if self.shutdown.is_cancelled() {
+        if self.shutdown.is_cancelled()
+            || self.connection.socket.0.interrupted.load(Ordering::Acquire)
+        {
             return Err(CDP_SHUTDOWN_ERROR.to_string());
         }
         // A stream of unrelated browser events must not extend the operation
@@ -828,7 +903,9 @@ impl CdpClient {
             .map_err(|e| format!("发送 CDP 指令失败: {}", e))?;
 
         loop {
-            if self.shutdown.is_cancelled() {
+            if self.shutdown.is_cancelled()
+                || self.connection.socket.0.interrupted.load(Ordering::Acquire)
+            {
                 return Err(CDP_SHUTDOWN_ERROR.to_string());
             }
             let message = self
@@ -855,7 +932,7 @@ impl Drop for CdpClient {
     fn drop(&mut self) {
         // A WebSocket close frame can itself block on a stalled peer. Close the
         // underlying connection directly when releasing this blocking client.
-        let _ = self.connection.socket.0.shutdown(Shutdown::Both);
+        self.connection.socket.0.interrupt();
     }
 }
 

@@ -239,7 +239,17 @@ jobs:
 
       - name: Test backend on desktop platform
         if: matrix.kind == 'desktop'
-        run: cargo test --locked --package kirara --package kirara-desktop --lib --tests --target ${{ matrix.target }}
+        env:
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
+        run: cargo test --locked --package kirara --lib --tests --target ${{ matrix.target }}
+
+      - name: Test desktop bridge on desktop platform
+        if: matrix.kind == 'desktop'
+        env:
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
+        run: cargo test --locked --package kirara-desktop --tests --target ${{ matrix.target }}
 
       - name: Build Linux binary
         if: matrix.kind == 'cli'
