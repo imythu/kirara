@@ -48,6 +48,11 @@ const SIGN_IN_VIEWS = ["tasks", "records"] as const;
 type SignInView = "tasks" | "records";
 type SignInBrowser = "lightpanda" | "browserless";
 
+const DEFAULT_BROWSERLESS_ADDRESS = "https://production-sfo.browserless.io";
+function defaultLightpandaEndpoint(region: string) {
+  return `wss://${region === "uswest" ? "uswest" : "euwest"}.cloud.lightpanda.io/ws`;
+}
+
 const DEFAULT_BROWSERLESS_TASK = {
   selector: "",
   attendance_path: "/attendance.php",
@@ -95,11 +100,19 @@ function siteImagePreset(site: SiteRecord | undefined): SignInTaskRequest["brows
   let host: string;
   try { host = new URL(site.base_url).hostname.toLowerCase(); } catch { return null; }
   if (host === "open.cd" || host.endsWith(".open.cd")) {
-    return { ...DEFAULT_BROWSERLESS_TASK, attendance_path: "/plugin_sign-in.php", captcha_selector: "#frmSignin img", captcha_input_selector: "#imagestring", selector: "#ok" };
+    return { ...DEFAULT_BROWSERLESS_TASK, attendance_path: "/plugin_sign-in.php", captcha_selector: "#frmSignin img", captcha_input_selector: "#imagestring", selector: "#ok", already_keywords: "已签到\n已簽到" };
   }
   if (host === "p.t-baozi.cc") {
-    return { ...DEFAULT_BROWSERLESS_TASK, captcha_selector: "form[action='attendance.php'] img[alt='CAPTCHA']", captcha_input_selector: "form[action='attendance.php'] input[name='imagestring']", selector: "form[action='attendance.php'] input[type='submit']" };
+    return { ...DEFAULT_BROWSERLESS_TASK, captcha_selector: "form[action='attendance.php'] img[alt='CAPTCHA']", captcha_input_selector: "form[action='attendance.php'] input[name='imagestring']", selector: "form[action='attendance.php'] input[type='submit']", already_keywords: "签到成功" };
   }
+  return null;
+}
+
+function siteSignInPreset(site: SiteRecord | undefined) {
+  const image = siteImagePreset(site);
+  if (image) return { browser: "browserless" as const, sign_in_method: "ocr_captcha", browserless: image };
+  const cf = siteCfPreset(site);
+  if (cf) return { browser: "browserless" as const, sign_in_method: "cloudflare", browserless: cf };
   return null;
 }
 
@@ -266,7 +279,8 @@ export function SignInPage() {
   function setField<K extends keyof SignInTaskRequest>(key: K, value: SignInTaskRequest[K]) {
     setForm((current) => {
       if (key === "sign_in_method" && value === "ocr_captcha") {
-        return { ...current, sign_in_method: value, browser: "browserless", browserless: { ...(siteImagePreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK), already_keywords: current.browserless?.already_keywords ?? "" } };
+        const preset = siteImagePreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK;
+        return { ...current, sign_in_method: value, browser: "browserless", browserless: { ...preset, already_keywords: current.browserless?.already_keywords.trim() ? current.browserless.already_keywords : preset.already_keywords } };
       }
       if (key === "sign_in_method" && value === "cloudflare" && current.sign_in_method === "ocr_captcha") {
         return { ...current, sign_in_method: value, browserless: { ...(siteCfPreset(nexusSites.find(site => site.id === current.site_id)) ?? DEFAULT_BROWSERLESS_TASK), already_keywords: current.browserless?.already_keywords ?? "" } };
@@ -276,18 +290,13 @@ export function SignInPage() {
   }
 
   function selectSite(siteId: number) {
-    if (form.sign_in_method === "ocr_captcha") {
-      setForm(current => ({ ...current, site_id: siteId, browserless: { ...(siteImagePreset(nexusSites.find(site => site.id === siteId)) ?? DEFAULT_BROWSERLESS_TASK) } }));
-      return;
-    }
-    if (editingId !== null) { setField("site_id", siteId); return; }
-    const preset = siteCfPreset(nexusSites.find((site) => site.id === siteId));
-    setForm((current) => ({
+    const preset = siteSignInPreset(nexusSites.find(site => site.id === siteId));
+    setForm(current => ({
       ...current,
       site_id: siteId,
-      browser: preset ? "browserless" : current.browser,
-      sign_in_method: preset ? "cloudflare" : "open_page",
-      browserless: { ...(preset ?? DEFAULT_BROWSERLESS_TASK) },
+      browser: preset?.browser ?? current.browser,
+      sign_in_method: preset?.sign_in_method ?? (current.sign_in_method === "ocr_captcha" ? "ocr_captcha" : "open_page"),
+      browserless: { ...(preset?.browserless ?? DEFAULT_BROWSERLESS_TASK) },
     }));
     setSubmitError("");
   }
@@ -330,7 +339,7 @@ export function SignInPage() {
     setSettingsDraft({
       ...settings,
       lightpanda: { ...settings.lightpanda },
-      browserless: { ...settings.browserless },
+      browserless: { ...settings.browserless, address: settings.browserless.address?.trim() || DEFAULT_BROWSERLESS_ADDRESS },
     });
     setConfigFeedback(null);
     setSettingsOpen(true);
@@ -363,14 +372,14 @@ export function SignInPage() {
       !isBrowserConfigured(settings, "lightpanda") && isBrowserConfigured(settings, "browserless")
         ? "browserless"
         : "lightpanda";
-    const preset = siteCfPreset(nexusSites[0]);
+    const preset = siteSignInPreset(nexusSites[0]);
     setEditingId(null);
     setForm({
       ...emptyForm,
       site_id: nexusSites[0]?.id ?? 0,
-      browser: preset ? "browserless" : defaultBrowser,
-      sign_in_method: preset ? "cloudflare" : "open_page",
-      browserless: { ...(preset ?? DEFAULT_BROWSERLESS_TASK) },
+      browser: preset?.browser ?? defaultBrowser,
+      sign_in_method: preset?.sign_in_method ?? "open_page",
+      browserless: { ...(preset?.browserless ?? DEFAULT_BROWSERLESS_TASK) },
     });
     setIntervalHours(8);
     setAdvancedOpen(false);
@@ -856,20 +865,24 @@ export function SignInPage() {
                     <Label htmlFor="lightpanda-endpoint">Endpoint</Label>
                     <Input
                       id="lightpanda-endpoint"
-                      value={settingsDraft.lightpanda.endpoint ?? ""}
-                      onChange={(event) => setLightpandaField("endpoint", event.target.value || null)}
-                      placeholder="wss://euwest.cloud.lightpanda.io/ws?token=..."
+                      value={settingsDraft.lightpanda.endpoint ?? defaultLightpandaEndpoint(settingsDraft.lightpanda.region)}
+                      onChange={(event) => setLightpandaField("endpoint", event.target.value.trim() === defaultLightpandaEndpoint(settingsDraft.lightpanda.region) ? null : event.target.value || null)}
+                      placeholder={defaultLightpandaEndpoint(settingsDraft.lightpanda.region)}
+                      aria-describedby="lightpanda-endpoint-help"
                     />
                   </div>
+                  <p id="lightpanda-endpoint-help" className="text-xs leading-relaxed text-muted sm:col-span-2">默认云端地址随区域切换，填写下方 Token 即可连接。自建服务可填写自己的完整 Endpoint；清空恢复默认。</p>
+                  <p id="lightpanda-token-help" className="text-xs leading-relaxed text-muted sm:col-span-2">首次使用：前往 <a href="https://console.lightpanda.io/" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">Lightpanda 控制台注册／登录</a>，创建 API Token，复制到下方 Token，然后点击“保存并测试”。</p>
                   <div className="space-y-2">
-                    <Label htmlFor="lightpanda-token">Token</Label>
+                    <Label htmlFor="lightpanda-token">API Token</Label>
                     <Input
                       id="lightpanda-token"
                       type="password"
                       autoComplete="off"
                       value={settingsDraft.lightpanda.token ?? ""}
                       onChange={(event) => setLightpandaField("token", event.target.value || null)}
-                      placeholder="Lightpanda token"
+                      placeholder="粘贴控制台生成的 API Token"
+                      aria-describedby="lightpanda-token-help"
                     />
                   </div>
                   <div className="space-y-2">
@@ -941,19 +954,22 @@ export function SignInPage() {
                       type="url"
                       value={settingsDraft.browserless.address ?? ""}
                       onChange={(event) => setBrowserlessSettingField("address", event.target.value || null)}
-                      placeholder="https://production-sfo.browserless.io"
+                      placeholder={DEFAULT_BROWSERLESS_ADDRESS}
+                      aria-describedby="browserless-address-help"
                     />
-                    <p className="text-xs text-muted">支持服务根地址或完整的 /stealth/bql 地址。</p>
+                    <p id="browserless-address-help" className="text-xs leading-relaxed text-muted">已提供默认云端地址，也支持自定义服务根地址或完整的 /stealth/bql 地址。</p>
                   </div>
+                  <p id="browserless-token-help" className="text-xs leading-relaxed text-muted sm:col-span-2">首次使用：<a href="https://www.browserless.io/signup/email?plan=free" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">注册 Browserless 账号</a>，登录 <a href="https://browserless.io/account/" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">账户控制台</a>，在 API Key 区域复制 Token，填入下方后点击“保存并测试”。</p>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="browserless-token">Token</Label>
+                    <Label htmlFor="browserless-token">API Key / Token</Label>
                     <Input
                       id="browserless-token"
                       type="password"
                       autoComplete="off"
                       value={settingsDraft.browserless.token ?? ""}
                       onChange={(event) => setBrowserlessSettingField("token", event.target.value || null)}
-                      placeholder="Browserless token"
+                      placeholder="粘贴控制台中的 API Key / Token"
+                      aria-describedby="browserless-token-help"
                     />
                   </div>
                 </div>
@@ -1153,6 +1169,7 @@ export function SignInPage() {
                   <Label htmlFor="browserless-already-keywords">已签到／重复签到提示文字</Label>
                   <textarea id="browserless-already-keywords" className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={browserlessTask.already_keywords} onChange={event => setBrowserlessTaskField("already_keywords", event.target.value)} placeholder="例如：您今天已经签到，请勿重复签到。" maxLength={4096} aria-describedby="browserless-already-help" />
                   <p id="browserless-already-help" className="text-xs leading-relaxed text-muted-foreground">每行一条，命中任意一条即结束，不再验证或点击。留空不启用提前跳过。请填写明确的已签到提示，避免使用日历说明中的“已签到”等泛词。</p>
+                  {imageCaptcha && selectedImagePreset?.attendance_path === "/plugin_sign-in.php" ? <p className="text-xs leading-relaxed text-muted-foreground">皇后当前签到入口在已签到后仍会显示验证码，默认提示可能无法命中；仅配置文字不能保证提前跳过。</p> : null}
                 </div>
                 <div className="overflow-hidden rounded-2xl border border-border sm:col-span-2">
                   <button
