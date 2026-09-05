@@ -207,7 +207,8 @@ jobs:
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
             BIN="target/${{ matrix.target }}/release/kirara.exe"
             ARCHIVE="kirara-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip"
-            7z a "$ARCHIVE" "$BIN"
+            ARCHIVE_PATH="${GITHUB_WORKSPACE}/${ARCHIVE}"
+            (cd "$(dirname "$BIN")" && 7z a "$ARCHIVE_PATH" "$(basename "$BIN")")
           else
             BIN="target/${{ matrix.target }}/release/kirara"
             ARCHIVE="kirara-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz"
