@@ -86,7 +86,7 @@ function formatDateTime(value: string | null | undefined): string {
 type SiteHealth = "healthy" | "failed" | "pending";
 const SITE_PAGE_SIZE = 20;
 const CUSTOM_SITE_PRESET = "__custom__";
-const sitePrimaryButtonClassName = "h-11 bg-none bg-secondary-foreground shadow-none";
+const sitePrimaryButtonClassName = "h-11";
 
 function getSiteHealth(site: SiteRecord): SiteHealth {
   if (site.stats?.last_error) return "failed";
@@ -338,28 +338,28 @@ function renderOverviewProofImage({
   }
 
   ctx.scale(scale, scale);
-  ctx.fillStyle = "#fbf7ff";
+  ctx.fillStyle = "#f6f3eb";
   ctx.fillRect(0, 0, width, height);
 
   const heroGradient = ctx.createLinearGradient(48, 48, 1552, 280);
-  heroGradient.addColorStop(0, "#fffaff");
-  heroGradient.addColorStop(0.58, "#f1e8ff");
-  heroGradient.addColorStop(1, "#dfd2ff");
-  drawRoundRect(ctx, 48, 48, 1504, 238, 36, heroGradient, "rgba(126, 96, 194, 0.18)");
+  heroGradient.addColorStop(0, "#fffdf8");
+  heroGradient.addColorStop(0.58, "#f0ece2");
+  heroGradient.addColorStop(1, "#e7dfcc");
+  drawRoundRect(ctx, 48, 48, 1504, 238, 36, heroGradient, "rgba(116, 109, 96, 0.18)");
 
-  drawRoundRect(ctx, 88, 88, 92, 92, 26, "#7d5cff");
+  drawRoundRect(ctx, 88, 88, 92, 92, 26, "#b44332");
   drawText(ctx, "云", 111, 148, { font: "900 42px Inter, system-ui, sans-serif", color: "#ffffff" });
-  drawText(ctx, "PT 账号数据", 208, 166, { font: "900 56px Inter, system-ui, sans-serif", color: "#20173d" });
+  drawText(ctx, "PT 账号数据", 208, 166, { font: "900 56px Inter, system-ui, sans-serif", color: "#292822" });
 
-  drawText(ctx, "汇总包含历史数据；图片生成时间不代表账户数据刷新时间。", 88, 246, { font: "500 20px Inter, system-ui, sans-serif", color: "#5f5478" });
+  drawText(ctx, "汇总包含历史数据；图片生成时间不代表账户数据刷新时间。", 88, 246, { font: "500 20px Inter, system-ui, sans-serif", color: "#746d60" });
 
   const generatedText = `生成时间 ${generatedAt.toLocaleString()}`;
-  drawRoundRect(ctx, 1120, 88, 360, 46, 23, "rgba(255,255,255,0.62)", "rgba(126, 96, 194, 0.16)");
-  drawText(ctx, generatedText, 1142, 119, { font: "800 18px Inter, system-ui, sans-serif", color: "#4a347f", maxWidth: 316 });
-  drawRoundRect(ctx, 1120, 150, 170, 46, 23, "rgba(255,255,255,0.62)", "rgba(126, 96, 194, 0.16)");
-  drawText(ctx, `${successfulRows.length} 个有数据`, 1142, 181, { font: "800 18px Inter, system-ui, sans-serif", color: "#4a347f" });
-  drawRoundRect(ctx, 1310, 150, 170, 46, 23, "rgba(255,255,255,0.62)", "rgba(126, 96, 194, 0.16)");
-  drawText(ctx, `${failedRows.length} 个失败`, 1332, 181, { font: "800 18px Inter, system-ui, sans-serif", color: failedRows.length ? "#d83a57" : "#4a347f" });
+  drawRoundRect(ctx, 1120, 88, 360, 46, 23, "rgba(255,255,255,0.62)", "rgba(116, 109, 96, 0.16)");
+  drawText(ctx, generatedText, 1142, 119, { font: "800 18px Inter, system-ui, sans-serif", color: "#5b4638", maxWidth: 316 });
+  drawRoundRect(ctx, 1120, 150, 170, 46, 23, "rgba(255,255,255,0.62)", "rgba(116, 109, 96, 0.16)");
+  drawText(ctx, `${successfulRows.length} 个有数据`, 1142, 181, { font: "800 18px Inter, system-ui, sans-serif", color: "#5b4638" });
+  drawRoundRect(ctx, 1310, 150, 170, 46, 23, "rgba(255,255,255,0.62)", "rgba(116, 109, 96, 0.16)");
+  drawText(ctx, `${failedRows.length} 个失败`, 1332, 181, { font: "800 18px Inter, system-ui, sans-serif", color: failedRows.length ? "#b63232" : "#5b4638" });
 
   const metrics = [
     ["总上传量", successfulRows.length ? uploaded.value : "—", successfulRows.length ? uploaded.unit : ""],
@@ -369,8 +369,8 @@ function renderOverviewProofImage({
   ];
   metrics.forEach(([label, value, unit], index) => {
     const x = 48 + index * 376;
-    drawRoundRect(ctx, x, 320, 352, 150, 26, "rgba(255,255,255,0.82)", "rgba(126, 96, 194, 0.16)");
-    drawText(ctx, label, x + 28, 362, { font: "800 20px Inter, system-ui, sans-serif", color: "#6d6289" });
+    drawRoundRect(ctx, x, 320, 352, 150, 26, "rgba(255,255,255,0.82)", "rgba(116, 109, 96, 0.16)");
+    drawText(ctx, label, x + 28, 362, { font: "800 20px Inter, system-ui, sans-serif", color: "#746d60" });
     const valueWidth = unit ? 205 : 296;
     let valueSize = 48;
     ctx.font = `900 ${valueSize}px Inter, system-ui, sans-serif`;
@@ -378,25 +378,25 @@ function renderOverviewProofImage({
       valueSize -= 1;
       ctx.font = `900 ${valueSize}px Inter, system-ui, sans-serif`;
     }
-    drawText(ctx, value, x + 28, 430, { font: ctx.font, color: "#20173d" });
-    drawText(ctx, unit, x + 245, 430, { font: "900 22px Inter, system-ui, sans-serif", color: "#7d5cff", maxWidth: 80 });
+    drawText(ctx, value, x + 28, 430, { font: ctx.font, color: "#292822" });
+    drawText(ctx, unit, x + 245, 430, { font: "900 22px Inter, system-ui, sans-serif", color: "#b44332", maxWidth: 80 });
   });
 
-  drawRoundRect(ctx, 48, 510, 1504, 154, 28, "rgba(255,255,255,0.72)", "rgba(126, 96, 194, 0.16)");
-  drawText(ctx, "上传量排行", 82, 554, { font: "900 26px Inter, system-ui, sans-serif", color: "#20173d" });
-  if (!topRows.length) drawText(ctx, "暂无账户数据，请先刷新站点统计", 82, 614, { font: "500 22px Inter, system-ui, sans-serif", color: "#6d6289" });
+  drawRoundRect(ctx, 48, 510, 1504, 154, 28, "rgba(255,255,255,0.72)", "rgba(116, 109, 96, 0.16)");
+  drawText(ctx, "上传量排行", 82, 554, { font: "900 26px Inter, system-ui, sans-serif", color: "#292822" });
+  if (!topRows.length) drawText(ctx, "暂无账户数据，请先刷新站点统计", 82, 614, { font: "500 22px Inter, system-ui, sans-serif", color: "#746d60" });
   topRows.forEach((row, index) => {
     const x = 82 + index * 360;
     const stats = row.stats;
-    drawRoundRect(ctx, x, 584, 328, 54, 18, "rgba(245,238,255,0.78)", "rgba(126, 96, 194, 0.12)");
-    drawRoundRect(ctx, x + 14, 597, 30, 30, 12, "#7d5cff");
+    drawRoundRect(ctx, x, 584, 328, 54, 18, "rgba(245,238,255,0.78)", "rgba(116, 109, 96, 0.12)");
+    drawRoundRect(ctx, x + 14, 597, 30, 30, 12, "#b44332");
     drawText(ctx, String(index + 1), x + 24, 619, { font: "900 16px Inter, system-ui, sans-serif", color: "#ffffff" });
-    drawText(ctx, row.site.name, x + 56, 609, { font: "900 18px Inter, system-ui, sans-serif", color: "#20173d", maxWidth: 255 });
-    drawText(ctx, stats ? formatBytes(stats.uploaded) : "-", x + 56, 630, { font: "800 15px Inter, system-ui, sans-serif", color: "#6d6289", maxWidth: 130 });
+    drawText(ctx, row.site.name, x + 56, 609, { font: "900 18px Inter, system-ui, sans-serif", color: "#292822", maxWidth: 255 });
+    drawText(ctx, stats ? formatBytes(stats.uploaded) : "-", x + 56, 630, { font: "800 15px Inter, system-ui, sans-serif", color: "#746d60", maxWidth: 130 });
   });
 
   const tableY = 732;
-  drawText(ctx, "站点明细", 48, tableY - 24, { font: "900 26px Inter, system-ui, sans-serif", color: "#20173d" });
+  drawText(ctx, "站点明细", 48, tableY - 24, { font: "900 26px Inter, system-ui, sans-serif", color: "#292822" });
   const cols = [
     ["站点", 74, 190],
     ["UID", 282, 140],
@@ -406,15 +406,15 @@ function renderOverviewProofImage({
     ["分享率", 1124, 120],
     ["状态", 1268, 210],
   ] as const;
-  drawRoundRect(ctx, 48, tableY, 1504, 48, 18, "rgba(238,229,255,0.92)", "rgba(126, 96, 194, 0.16)");
+  drawRoundRect(ctx, 48, tableY, 1504, 48, 18, "rgba(238,229,255,0.92)", "rgba(116, 109, 96, 0.16)");
   cols.forEach(([label, x]) =>
-    drawText(ctx, label, x, tableY + 31, { font: "900 16px Inter, system-ui, sans-serif", color: "#6d6289" }),
+    drawText(ctx, label, x, tableY + 31, { font: "900 16px Inter, system-ui, sans-serif", color: "#746d60" }),
   );
 
   rows.forEach((row, index) => {
     const y = tableY + 60 + index * tableRowHeight;
     const stats = row.stats;
-    drawRoundRect(ctx, 48, y, 1504, 66, 12, index % 2 === 0 ? "rgba(255,255,255,0.78)" : "rgba(246,240,255,0.72)", "rgba(126, 96, 194, 0.12)");
+    drawRoundRect(ctx, 48, y, 1504, 66, 12, index % 2 === 0 ? "rgba(255,255,255,0.78)" : "rgba(246,240,255,0.72)", "rgba(116, 109, 96, 0.12)");
     const values = [
       row.site.name,
       stats?.uid ?? "-",
@@ -427,14 +427,14 @@ function renderOverviewProofImage({
     cols.forEach(([, x, maxWidth], colIndex) =>
       drawText(ctx, values[colIndex], x, y + 31, {
         font: colIndex === 0 || colIndex === 3 ? "900 17px Inter, system-ui, sans-serif" : "700 16px Inter, system-ui, sans-serif",
-        color: row.error && colIndex === 6 ? "#d83a57" : colIndex === 3 ? "#20173d" : "#5f5478",
+        color: row.error && colIndex === 6 ? "#b63232" : colIndex === 3 ? "#292822" : "#746d60",
         maxWidth,
       }),
     );
-    drawText(ctx, row.site.stats?.last_checked_at ? `检查 ${formatDateTime(row.site.stats.last_checked_at)}` : "尚未检查", 1268, y + 53, { font: "500 13px Inter, system-ui, sans-serif", color: "#6d6289", maxWidth: 250 });
+    drawText(ctx, row.site.stats?.last_checked_at ? `检查 ${formatDateTime(row.site.stats.last_checked_at)}` : "尚未检查", 1268, y + 53, { font: "500 13px Inter, system-ui, sans-serif", color: "#746d60", maxWidth: 250 });
   });
 
-  drawText(ctx, "Generated by 云母", 48, height - 38, { font: "800 18px Inter, system-ui, sans-serif", color: "#7d5cff" });
+  drawText(ctx, "Generated by 云母", 48, height - 38, { font: "800 18px Inter, system-ui, sans-serif", color: "#b44332" });
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -1700,14 +1700,14 @@ export function SitesPage() {
               加载中…
             </div>
           ) : sitesError && sites.length === 0 ? null : sites.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-border py-14 text-center">
+            <div className="rounded-2xl border border-dashed border-border py-14 text-center">
               <Globe className="mx-auto size-8 text-muted" />
               <p className="mt-3 font-semibold">还没有配置 PT 站点</p>
               <p className="mt-1 text-sm text-muted">添加首个站点后即可测试连接并刷新账户数据。</p>
               <Button className={`mt-4 ${sitePrimaryButtonClassName}`} onClick={openAdd}><Plus className="mr-2 size-4" />添加站点</Button>
             </div>
           ) : filteredSites.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-border py-12 text-center text-sm text-muted">
+            <div className="rounded-2xl border border-dashed border-border py-12 text-center text-sm text-muted">
               <p>没有符合当前筛选条件的站点</p>
               <Button variant="outline" className="mt-4 h-11" onClick={() => {
                 setSiteQuery(""); setSiteTypeFilter("all"); setSiteStatusFilter("all");

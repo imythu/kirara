@@ -7,36 +7,36 @@ use crate::error::AppError;
 
 #[derive(Debug, Clone, Parser)]
 #[command(
-    name = "rflush",
+    name = "kirara",
     version,
     about = "PT 自动化管理控制台",
-    long_about = "启动 rflush Web 服务。\n\n默认行为:\n- 监听地址: 127.0.0.1:3000\n- 数据库: ./data/rflush.db\n\n指定 --data-dir 后，数据库和运行数据都写入该目录。\n\n示例:\n- rflush\n- rflush -H 127.0.0.1 -p 8080\n- rflush -d ./runtime-data\n- RFLUSH_DATA_DIR=/data rflush"
+    long_about = "启动 kirara Web 服务。\n\n默认行为:\n- 监听地址: 127.0.0.1:3000\n- 数据库: ./data/kirara.db\n\n指定 --data-dir 后，数据库和运行数据都写入该目录。\n\n示例:\n- kirara\n- kirara -H 127.0.0.1 -p 8080\n- kirara -d ./runtime-data\n- KIRARA_DATA_DIR=/data kirara"
 )]
 pub struct Cli {
     #[arg(
         short = 'H',
         long,
-        env = "RFLUSH_HOST",
+        env = "KIRARA_HOST",
         default_value = "127.0.0.1",
-        help = "Web 服务监听地址 (env: RFLUSH_HOST)"
+        help = "Web 服务监听地址 (env: KIRARA_HOST)"
     )]
     pub host: String,
 
     #[arg(
         short = 'p',
         long,
-        env = "RFLUSH_PORT",
+        env = "KIRARA_PORT",
         default_value_t = 3000,
-        help = "Web 服务监听端口 (env: RFLUSH_PORT)"
+        help = "Web 服务监听端口 (env: KIRARA_PORT)"
     )]
     pub port: u16,
 
     #[arg(
         short = 'd',
         long = "data-dir",
-        env = "RFLUSH_DATA_DIR",
+        env = "KIRARA_DATA_DIR",
         value_name = "DIR",
-        help = "应用数据目录。指定后数据库和运行数据都写入该目录 (env: RFLUSH_DATA_DIR)"
+        help = "应用数据目录。指定后数据库和运行数据都写入该目录 (env: KIRARA_DATA_DIR)"
     )]
     pub data_dir: Option<PathBuf>,
 }

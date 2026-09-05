@@ -72,7 +72,20 @@ impl Database {
                 path: data_dir.display().to_string(),
                 source,
             })?;
-        let path = data_dir.join("rflush.db");
+        let current_path = data_dir.join("kirara.db");
+        let legacy_path = data_dir.join("rflush.db");
+        let exists = |path: &Path| {
+            path.try_exists().map_err(|error| AppError::Database {
+                message: format!("cannot inspect {}: {error}", path.display()),
+            })
+        };
+        // Keep existing SQLite files (including WAL/SHM companions) in place.
+        // Never create a blank database just because the application was renamed.
+        let path = if exists(&current_path)? || !exists(&legacy_path)? {
+            current_path
+        } else {
+            legacy_path
+        };
         let db = Self { path };
         db.init().await?;
         Ok(db)
@@ -3907,9 +3920,50 @@ mod migration_tests {
     use tempfile::tempdir;
 
     #[tokio::test]
+    async fn kirara_reuses_legacy_database_without_losing_settings() {
+        let dir = tempdir().unwrap();
+        let legacy_path = dir.path().join("rflush.db");
+        let legacy = Database {
+            path: legacy_path.clone(),
+        };
+        legacy.init().await.unwrap();
+        let mut settings = legacy.get_settings().await.unwrap();
+        settings.log_level = Some("debug".into());
+        legacy.update_settings(&settings).await.unwrap();
+
+        let reopened = Database::open(dir.path()).await.unwrap();
+        assert_eq!(reopened.path, legacy_path);
+        assert_eq!(
+            reopened.get_settings().await.unwrap().log_level.as_deref(),
+            Some("debug")
+        );
+        assert!(!dir.path().join("kirara.db").exists());
+    }
+
+    #[tokio::test]
+    async fn kirara_new_database_takes_priority_when_both_names_exist() {
+        let dir = tempdir().unwrap();
+        let fresh = Database::open(dir.path()).await.unwrap();
+        assert_eq!(fresh.path, dir.path().join("kirara.db"));
+        let legacy = Database {
+            path: dir.path().join("rflush.db"),
+        };
+        legacy.init().await.unwrap();
+        let mut settings = legacy.get_settings().await.unwrap();
+        settings.log_level = Some("trace".into());
+        legacy.update_settings(&settings).await.unwrap();
+        let reopened = Database::open(dir.path()).await.unwrap();
+        assert_eq!(reopened.path, fresh.path);
+        assert_ne!(
+            reopened.get_settings().await.unwrap().log_level.as_deref(),
+            Some("trace")
+        );
+    }
+
+    #[tokio::test]
     async fn legacy_sites_receive_default_request_headers() {
         let dir = tempdir().unwrap();
-        let db_path = dir.path().join("rflush.db");
+        let db_path = dir.path().join("kirara.db");
         let conn = Connection::open(&db_path).unwrap();
         conn.execute_batch(
             "CREATE TABLE sites (
@@ -3965,7 +4019,7 @@ mod migration_tests {
             .await
             .unwrap();
 
-        let db_path = dir.path().join("rflush.db");
+        let db_path = dir.path().join("kirara.db");
         let conn = open_connection(&db_path).unwrap();
         conn.execute(
             "UPDATE sign_in_tasks
@@ -4135,7 +4189,7 @@ mod migration_tests {
     async fn legacy_automatic_qb_followups_are_stopped_at_database_boundary() {
         let dir = tempdir().unwrap();
         Database::open(dir.path()).await.unwrap();
-        let db_path = dir.path().join("rflush.db");
+        let db_path = dir.path().join("kirara.db");
         let conn = open_connection(&db_path).unwrap();
         let stages = [
             "copy_verified",
@@ -4312,7 +4366,7 @@ mod migration_tests {
             )
             .await
             .unwrap();
-        let db_path = dir.path().join("rflush.db");
+        let db_path = dir.path().join("kirara.db");
         let conn = open_connection(&db_path).unwrap();
         conn.execute_batch(
             "DROP INDEX idx_media_downloads_downloader_infohash;

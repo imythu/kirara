@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: rflush Backend API
+  title: kirara Backend API
   version: 1.0.0
 servers:
   - url: http://127.0.0.1:3000
@@ -108,7 +108,7 @@ paths:
 
   /api/sites/catalog:
     get:
-      summary: List searchable PT-Depiler site presets supported by rflush
+      summary: List searchable PT-Depiler site presets supported by kirara
       responses:
         '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SitePreset'}}}}}
         default: {$ref: '#/components/responses/Error'}
@@ -537,7 +537,7 @@ paths:
     delete:
       summary: Delete a media subscription
       description: >-
-        Deletes the subscription and all related rflush download records and automatic
+        Deletes the subscription and all related kirara download records and automatic
         copy or relocation jobs. It does not delete qBittorrent torrents or files, and
         an OpenList task that has already been submitted remotely cannot be recalled.
       parameters: [{$ref: '#/components/parameters/IdPath'}]
@@ -658,9 +658,9 @@ paths:
         '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MediaDownload'}}}}
         default: {$ref: '#/components/responses/Error'}
     delete:
-      summary: Delete a terminal media download record from rflush
+      summary: Delete a terminal media download record from kirara
       description: >-
-        Deletes local rflush history only. It never deletes a qB torrent, downloaded files, or
+        Deletes local kirara history only. It never deletes a qB torrent, downloaded files, or
         OpenList data. Submitted subscription targets are reopened atomically when this is their
         current canonical record. Active downloads, subscription work, relocation jobs, and stale
         client versions return 409.
@@ -890,7 +890,7 @@ components:
 
     SitePreset:
       type: object
-      description: PT-Depiler site metadata filtered to adapters currently supported by rflush.
+      description: PT-Depiler site metadata filtered to adapters currently supported by kirara.
       required: [ptd_id, name, site_type, base_url, aliases]
       properties:
         ptd_id: {type: string}
@@ -1434,7 +1434,7 @@ components:
           type: boolean
           default: false
           description: >-
-            For TV only, delete terminal rflush download and relocation history from the selected
+            For TV only, delete terminal kirara download and relocation history from the selected
             episode onward and reopen submitted targets. Does not delete qB or OpenList data and
             fails with 409 while related work is active.
 

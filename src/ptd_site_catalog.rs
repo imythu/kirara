@@ -1,4 +1,4 @@
-//! PT-Depiler site presets supported by the rflush adapters.
+//! PT-Depiler site presets supported by the kirara adapters.
 //!
 //! Generated from PT-Depiler site definitions at commit
 //! `e9fae952f8200ed06a0822baae6f6f6ae84b2f5a` (2026-08-31).
@@ -1198,7 +1198,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exposes_only_site_types_supported_by_rflush() {
+    fn exposes_only_site_types_supported_by_kirara() {
         assert_eq!(SITE_PRESETS.len(), 168);
         assert!(
             SITE_PRESETS

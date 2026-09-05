@@ -431,13 +431,14 @@ const EMPTY_RESOURCE_FORM: ResourceForm = {
   siteIds: [],
 };
 
-const RESOURCE_SITE_IDS_STORAGE_KEY = "rflush.media.resource-site-ids";
+const RESOURCE_SITE_IDS_STORAGE_KEY = "kirara.media.resource-site-ids";
 const DOWNLOAD_PAGE_SIZE = 20;
 
 function storedResourceSiteIds(): number[] | null {
   if (typeof window === "undefined") return null;
   try {
-    const value = window.localStorage.getItem(RESOURCE_SITE_IDS_STORAGE_KEY);
+    const value = window.localStorage.getItem(RESOURCE_SITE_IDS_STORAGE_KEY)
+      ?? window.localStorage.getItem("rflush.media.resource-site-ids");
     if (value === null) return null;
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return null;
@@ -2134,7 +2135,7 @@ export function MediaPage() {
         </Button>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-border bg-surface-container/60 p-2 shadow-sm lg:grid-cols-4" role="tablist" aria-label="自动追剧模式">
+      <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface-container p-1 lg:grid-cols-4" role="tablist" aria-label="自动追剧模式">
         {MODES.map((item) => {
           const Icon = item.icon;
           const active = mode === item.value;
@@ -2155,8 +2156,8 @@ export function MediaPage() {
                 document.getElementById(`media-tab-${MODES[next].value}`)?.focus();
               }}
               className={cn(
-                "flex min-h-11 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                active ? "bg-card text-foreground shadow-sm" : "text-muted hover:bg-accent hover:text-foreground",
+                "flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                active ? "bg-card text-primary shadow-sm" : "text-muted hover:bg-accent hover:text-foreground",
               )}
               onClick={() => setMode(item.value)}
             >
@@ -2493,7 +2494,7 @@ export function MediaPage() {
                 <span className="min-w-0">
                   <span className="block font-medium">从所选集开始重新抓取</span>
                   <span className="mt-1 block text-xs leading-5 text-muted">
-                    清理该集及后续剧集的 rflush 下载记录和已结束的自动复制记录，不会删除 qB 种子或 OpenList 文件。
+                    清理该集及后续剧集的 云母下载记录和已结束的自动复制记录，不会删除 qB 种子或 OpenList 文件。
                   </span>
                 </span>
               </label>
@@ -2535,7 +2536,7 @@ export function MediaPage() {
           <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
             <p className="leading-6 text-muted">
-              rflush 会删除所选范围内的本地下载历史和已结束的自动复制记录，并允许这些剧集再次入队。qB 种子和 OpenList 文件不会被删除；仍在运行的任务会阻止本次操作。
+              云母会删除所选范围内的本地下载历史和已结束的自动复制记录，并允许这些剧集再次入队。qB 种子和 OpenList 文件不会被删除；仍在运行的任务会阻止本次操作。
             </p>
           </div>
           <div className="flex justify-end gap-2">
@@ -2636,7 +2637,7 @@ export function MediaPage() {
         open={deleteSubscription !== null}
         onClose={closeDeleteSubscription}
         title="删除订阅"
-        description={`确定删除「${deleteSubscription?.title ?? ""}」？rflush 中的相关下载记录及其自动复制、迁移任务将一并删除；qB 中的种子和文件会保留，已提交到 OpenList 的远端任务无法撤回。`}
+        description={`确定删除「${deleteSubscription?.title ?? ""}」？云母中的相关下载记录及其自动复制、迁移任务将一并删除；qB 中的种子和文件会保留，已提交到 OpenList 的远端任务无法撤回。`}
       >
         <div className="flex flex-col gap-4 p-4 sm:p-6">
           {deleteSubscriptionError ? (
@@ -2665,7 +2666,7 @@ export function MediaPage() {
           <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
             <p className="leading-6 text-muted">
-              仅删除 rflush 本地记录和关联的已结束自动复制记录，不会删除 qB 中的种子、下载文件或 OpenList 数据。若这是该集当前的提交记录，关联订阅会回到该集以便重新扫描。
+              仅删除 云母本地记录和关联的已结束自动复制记录，不会删除 qB 中的种子、下载文件或 OpenList 数据。若这是该集当前的提交记录，关联订阅会回到该集以便重新扫描。
             </p>
           </div>
           {deleteDownloadError ? (
@@ -2799,7 +2800,7 @@ function NoticeBanner({ notice, onClose }: { notice: Notice; onClose: () => void
 
 function LoadingState({ label }: { label: string }) {
   return (
-    <div className="flex min-h-56 items-center justify-center gap-3 rounded-[24px] border border-border bg-card text-sm text-muted">
+    <div className="flex min-h-56 items-center justify-center gap-3 rounded-2xl border border-border bg-card text-sm text-muted">
       <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
       {label}
     </div>
@@ -2809,10 +2810,13 @@ function LoadingState({ label }: { label: string }) {
 function EmptyState({ icon: Icon, title, action }: { icon: typeof Film; title: string; action?: { label: string; onClick: () => void } }) {
   return (
     <div className="flex min-h-44 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-      <div className="flex size-11 items-center justify-center rounded-2xl bg-surface-container text-muted">
-        <Icon className="size-5" aria-hidden="true" />
-      </div>
+      {title === "暂无订阅" ? <img src="/kirara-rest.svg" alt="" className="kirara-empty-art" /> : (
+        <div className="flex size-11 items-center justify-center rounded-xl bg-surface-container text-muted">
+          <Icon className="size-5" aria-hidden="true" />
+        </div>
+      )}
       <div className="text-sm font-semibold">{title}</div>
+      {title === "暂无订阅" ? <p className="max-w-sm text-sm leading-6 text-muted">把想看的故事交给云母，从添加一部影视开始。</p> : null}
       {action ? <Button variant="outline" onClick={action.onClick}>{action.label}</Button> : null}
     </div>
   );
@@ -3451,7 +3455,7 @@ function SubscriptionsPanel({
                   const status = subscriptionStatus(subscription);
                   const completed = subscriptionIsCompleted(subscription);
                   return (
-                    <article key={subscription.id} className="rounded-[20px] border border-border bg-surface-container/45 p-4">
+                    <article key={subscription.id} className="rounded-xl border border-border bg-surface-container/45 p-4">
                       <div className="flex gap-3">
                         <Poster path={subscription.poster_path} title={subscription.title} className="w-16 shrink-0" />
                         <div className="min-w-0 flex-1">
@@ -3984,7 +3988,7 @@ function TmdbPanel({
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {results.map((media) => (
-              <Card key={`${media.media_type}:${media.tmdb_id}`} className="rounded-[20px]">
+              <Card key={`${media.media_type}:${media.tmdb_id}`} className="rounded-xl">
                 <CardContent className="flex h-full gap-4 p-4">
                   <Poster path={media.poster_path} title={media.title} className="w-24 shrink-0" />
                   <div className="flex min-w-0 flex-1 flex-col">
@@ -4290,7 +4294,7 @@ function ResourcesPanel({
 
                 <div className="grid gap-3 xl:hidden">
                   {visibleCandidates.map(({ candidate, localScope }) => (
-                    <article key={candidate.key} className="rounded-[20px] border border-border bg-surface-container/45 p-4">
+                    <article key={candidate.key} className="rounded-xl border border-border bg-surface-container/45 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <h3 className="line-clamp-2 text-sm font-semibold">{candidate.result.title}</h3>
@@ -4701,7 +4705,7 @@ function SettingsPanel({
               </div>
               <div className="grid gap-3 md:hidden">
                 {profiles.map((profile) => (
-                  <article key={profile.id} className="rounded-[20px] border border-border bg-surface-container/45 p-4">
+                  <article key={profile.id} className="rounded-xl border border-border bg-surface-container/45 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-semibold">{profile.name}</h3>

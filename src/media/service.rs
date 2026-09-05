@@ -2115,7 +2115,7 @@ impl MediaService {
 
 fn media_download_filename(result: &SearchResult) -> String {
     format!(
-        "rflush-media-{}-{}.torrent",
+        "kirara-media-{}-{}.torrent",
         result.site_id, result.torrent_id
     )
 }

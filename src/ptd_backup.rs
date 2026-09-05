@@ -246,7 +246,7 @@ fn build_ptd_archive(
     let user_info_hash = format!("{:x}", md5::compute(&user_info_bytes));
     let manifest = PtdManifest {
         time: now.timestamp_millis(),
-        version: format!("PT-Depiler (rflush {})", env!("CARGO_PKG_VERSION")),
+        version: format!("PT-Depiler (kirara {})", env!("CARGO_PKG_VERSION")),
         encryption: false,
         files: BTreeMap::from([(
             "userInfo",
@@ -714,7 +714,7 @@ mod tests {
         .unwrap();
         drop(db);
 
-        let connection = rusqlite::Connection::open(temp.path().join("rflush.db")).unwrap();
+        let connection = rusqlite::Connection::open(temp.path().join("kirara.db")).unwrap();
         connection
             .execute("DELETE FROM site_stats_history", [])
             .unwrap();

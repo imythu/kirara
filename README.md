@@ -1,11 +1,13 @@
 # 云母
 
-[![GitHub Release](https://img.shields.io/github/v/release/imythu/rflush?style=flat-square)](https://github.com/imythu/rflush/releases/latest)
-[![Docker Image](https://img.shields.io/github/v/release/imythu/rflush?style=flat-square&label=ghcr.io)](https://github.com/imythu/rflush/pkgs/container/rflush)
+[![GitHub Release](https://img.shields.io/github/v/release/imythu/kirara?style=flat-square)](https://github.com/imythu/kirara/releases)
+[![Docker Image](https://img.shields.io/github/v/release/imythu/kirara?style=flat-square&label=ghcr.io)](https://github.com/imythu/kirara/pkgs/container/kirara)
 
 云母是一套面向 PT 用户的 Web 管理工具，提供自动追剧、电影订阅、多站资源搜索、qBittorrent 下载、刷流任务和站点数据总览。
 
-仓库、二进制、Docker 镜像和数据库文件仍使用 `rflush` 名称，对外产品名为“云母”。
+云母的英文项目名为 **Kirara**，仓库、二进制、Docker 镜像和新建数据库统一使用 `kirara`。项目已从 [imythu/rflush](https://github.com/imythu/rflush) 迁移至本仓库，后续更新、问题反馈和发布均在这里进行。
+
+旧版本用户请先阅读[迁移指南](doc/migration-from-rflush.md)，保留原有数据目录即可继续使用。
 
 ## 主要功能
 
@@ -23,20 +25,20 @@
 - 导出站点账号总览图片
 - React Web 界面，适配桌面端和移动端
 
-配置、订阅、下载记录和运行状态保存在 SQLite 数据库中，默认路径为 `data/rflush.db`。
+配置、订阅、下载记录和运行状态保存在 SQLite 数据库中，默认路径为 `data/kirara.db`。
 
 ## 快速开始
 
 ### 直接运行
 
-从 [GitHub Releases](https://github.com/imythu/rflush/releases/latest) 下载对应平台的压缩包，解压后运行：
+从 [GitHub Releases](https://github.com/imythu/kirara/releases) 下载对应平台的压缩包，解压后运行：
 
 ```bash
 # Linux
-./rflush
+./kirara
 
 # Windows PowerShell
-.\rflush.exe
+.\kirara.exe
 ```
 
 默认访问地址：
@@ -56,37 +58,39 @@ http://127.0.0.1:3000
 示例：
 
 ```bash
-./rflush -H 127.0.0.1 -p 8080 -d ./runtime-data
+./kirara -H 127.0.0.1 -p 8080 -d ./runtime-data
 ```
 
-对应环境变量为 `RFLUSH_HOST`、`RFLUSH_PORT` 和 `RFLUSH_DATA_DIR`。
+对应环境变量为 `KIRARA_HOST`、`KIRARA_PORT` 和 `KIRARA_DATA_DIR`。
 
 ### Docker
 
-镜像支持 Linux `amd64` 和 `arm64`：
+使用自动构建的 Linux `amd64` 镜像：
 
 ```bash
-docker run --name rflush \
+docker run --name kirara \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/data:/data \
-  ghcr.io/imythu/rflush:latest
+  ghcr.io/imythu/kirara:latest-beta
 ```
+
+自动构建提供 `latest-beta`（Linux amd64）；正式版发布后提供 `latest`（Linux amd64 / arm64）。
 
 指定版本：
 
 ```bash
-docker run --name rflush \
+docker run --name kirara \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/data:/data \
-  ghcr.io/imythu/rflush:<version>
+  ghcr.io/imythu/kirara:<version>
 ```
 
 容器默认使用：
 
 ```text
-RFLUSH_HOST=0.0.0.0
-RFLUSH_PORT=3000
-RFLUSH_DATA_DIR=/data
+KIRARA_HOST=0.0.0.0
+KIRARA_PORT=3000
+KIRARA_DATA_DIR=/data
 ```
 
 ## 首次配置
@@ -250,13 +254,13 @@ TMDB Token、PT Cookie、API Key、Passkey 和下载器密码保存在本地 SQL
 默认目录：
 
 ```text
-./data/rflush.db
+./data/kirara.db
 ```
 
 使用 `--data-dir` 后：
 
 ```text
-<data-dir>/rflush.db
+<data-dir>/kirara.db
 ```
 
 主要数据包括：

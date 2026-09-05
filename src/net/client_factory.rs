@@ -161,7 +161,7 @@ mod tests {
 
     #[tokio::test]
     async fn site_proxy_usage_is_controlled_only_by_the_application_setting() {
-        const ORIGIN_ENV: &str = "RFLUSH_SITE_PROXY_TEST_ORIGIN";
+        const ORIGIN_ENV: &str = "KIRARA_SITE_PROXY_TEST_ORIGIN";
         if let Ok(origin) = std::env::var(ORIGIN_ENV) {
             let proxy = std::env::var("HTTP_PROXY").unwrap();
             for (setting, enabled, expected) in [

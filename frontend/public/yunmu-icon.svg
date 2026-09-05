@@ -1,44 +1,8 @@
-<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="34" y1="24" x2="222" y2="230" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFF7FF" />
-      <stop offset="0.48" stop-color="#EEE4FF" />
-      <stop offset="1" stop-color="#D9C6FF" />
-    </linearGradient>
-    <linearGradient id="cloud" x1="56" y1="74" x2="202" y2="164" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" />
-      <stop offset="1" stop-color="#F1E8FF" />
-    </linearGradient>
-    <linearGradient id="mica" x1="83" y1="88" x2="178" y2="188" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FF8AB3" />
-      <stop offset="0.48" stop-color="#8E67FF" />
-      <stop offset="1" stop-color="#3F2D83" />
-    </linearGradient>
-    <linearGradient id="micaLight" x1="102" y1="100" x2="156" y2="167" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.84" />
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.14" />
-    </linearGradient>
-    <filter id="shadow" x="24" y="24" width="208" height="208" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#5E3DBD" flood-opacity="0.22" />
-    </filter>
-  </defs>
-
-  <rect x="20" y="20" width="216" height="216" rx="58" fill="url(#bg)" />
-  <rect x="31" y="31" width="194" height="194" rx="48" stroke="#7D5CFF" stroke-opacity="0.18" stroke-width="2" />
-
-  <g filter="url(#shadow)">
-    <path d="M69.5 150.5C55.417 150.5 44 139.083 44 125C44 111.998 53.735 101.268 66.311 99.691C72.225 82.993 88.152 71 106.875 71C121.357 71 134.154 78.118 141.952 89.038C146.495 87.083 151.5 86 156.75 86C177.322 86 194 102.678 194 123.25C194 137.465 186.036 149.817 174.326 156.095C162.53 162.42 148.646 158.876 135.253 158.876H78.081C75.069 158.876 72.187 150.5 69.5 150.5Z" fill="url(#cloud)" />
-    <path d="M69.5 150.5C55.417 150.5 44 139.083 44 125C44 111.998 53.735 101.268 66.311 99.691C72.225 82.993 88.152 71 106.875 71C121.357 71 134.154 78.118 141.952 89.038C146.495 87.083 151.5 86 156.75 86C177.322 86 194 102.678 194 123.25C194 137.465 186.036 149.817 174.326 156.095C162.53 162.42 148.646 158.876 135.253 158.876H78.081C75.069 158.876 72.187 150.5 69.5 150.5Z" stroke="#7D5CFF" stroke-opacity="0.16" stroke-width="2" />
-  </g>
-
-  <path d="M128 72L177 102V160L128 190L79 160V102L128 72Z" fill="url(#mica)" />
-  <path d="M128 72L177 102L128 131L79 102L128 72Z" fill="url(#micaLight)" />
-  <path d="M79 102L128 131V190L79 160V102Z" fill="#6D4DE3" fill-opacity="0.82" />
-  <path d="M177 102L128 131V190L177 160V102Z" fill="#2D245C" fill-opacity="0.78" />
-  <path d="M98 113L128 96L158 113L128 130L98 113Z" stroke="#FFFFFF" stroke-opacity="0.72" stroke-width="5" stroke-linejoin="round" />
-  <path d="M101 151L128 167L155 151" stroke="#FFFFFF" stroke-opacity="0.42" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M128 132V189" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="5" stroke-linecap="round" />
-
-  <path d="M67 179C89 198 128 209 190 187" stroke="#7D5CFF" stroke-opacity="0.2" stroke-width="8" stroke-linecap="round" />
-  <path d="M82 181C101 193 130 199 171 188" stroke="#FF7DA8" stroke-opacity="0.36" stroke-width="6" stroke-linecap="round" />
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+<path d="M9 31 7 5Q20 7 25 16Q32 13 39 16Q45 7 57 5L55 31Q60 43 51 52Q43 60 32 60Q21 60 13 52Q4 43 9 31Z" fill="#F5E9C9"/>
+<path d="M9 28 7 5Q18 7 23 16L15 23ZM41 16Q47 7 57 5L55 28 49 23Z" fill="#292B25"/>
+<path d="m32 16 6 10-6 9-6-9Z" fill="#292B25"/>
+<path d="M15 37Q21 33 27 38Q22 46 16 43ZM37 38Q43 33 49 37L48 43Q42 46 37 38Z" fill="#B44332"/>
+<path d="M21 36v8M43 36v8" stroke="#292B25" stroke-width="3"/>
+<path d="m29 46 3 3 3-3M32 49v3m0 0q-4 3-7 0m7 0q4 3 7 0" stroke="#292B25" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

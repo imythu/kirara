@@ -2,7 +2,7 @@
 
 ## 1. 设计结论
 
-本设计在现有 rflush 架构上新增独立的媒体自动化域，不替换现有刷流、站点统计、签到或下载器流程。
+本设计在现有 kirara 架构上新增独立的媒体自动化域，不替换现有刷流、站点统计、签到或下载器流程。
 
 核心约束：
 
@@ -40,7 +40,7 @@
 - `lib/services/api/nexusphp_web_adapter.dart`：Cookie 注入、登录重定向识别、配置化网页搜索与种子中转下载。
 - `lib/services/api/mteam_adapter.dart`：`/api/torrent/search`、`/api/torrent/genDlToken` 和 M-Team 字段映射。
 
-迁移原则：复用请求和归一化思想，不复制 Flutter 状态管理、WebView 登录和前端存储实现。rflush 继续使用已有 `sites.auth_config`，不引入第二套站点配置。
+迁移原则：复用请求和归一化思想，不复制 Flutter 状态管理、WebView 登录和前端存储实现。kirara 继续使用已有 `sites.auth_config`，不引入第二套站点配置。
 
 ### 2.3 Sonarr 与 GuessIt
 
@@ -464,7 +464,7 @@ Dune Part Two 2024
 
 手动下载也进入同一 outbox。用户覆盖硬拒绝时必须显式提交 `override_reason`，并写入审计信息。
 
-删除下载记录只清理 rflush 本地的终态 outbox/自动复制历史，不调用 qB 或 OpenList。关联下载、订阅扫描或迁移仍在运行时必须拒绝删除；TV 订阅可在编辑时显式清理所选集及之后的终态历史，把对应 `submitted` target 恢复为可搜索状态。
+删除下载记录只清理 kirara 本地的终态 outbox/自动复制历史，不调用 qB 或 OpenList。关联下载、订阅扫描或迁移仍在运行时必须拒绝删除；TV 订阅可在编辑时显式清理所选集及之后的终态历史，把对应 `submitted` target 恢复为可搜索状态。
 
 ## 9. 调用流程
 

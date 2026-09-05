@@ -202,7 +202,7 @@ export function Select({
             closeDropdown({ restoreFocus: true });
           }
         }}
-        className="flex h-11 w-full items-center justify-between rounded-2xl border border-border bg-input px-4 py-2 text-sm shadow-sm transition-colors hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring/30 aria-[invalid=true]:border-destructive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-input"
+        className="flex h-11 w-full items-center justify-between rounded-lg border border-border bg-input px-4 py-2 text-sm transition-colors hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card aria-[invalid=true]:border-destructive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-input"
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
@@ -213,7 +213,7 @@ export function Select({
           ref={dropdownRef}
           data-dialog-focus-portal="true"
           style={dropdownStyle}
-          className="absolute z-[100] flex max-h-72 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card backdrop-blur-xl animate-in fade-in-0 zoom-in-95"
+          className="absolute z-[100] flex max-h-72 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-lg animate-in fade-in-0 zoom-in-95"
           onClick={(event) => event.stopPropagation()}
         >
           {searchable ? (
@@ -252,7 +252,7 @@ export function Select({
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
                   aria-controls={listboxId}
-                  className="h-10 w-full rounded-xl border border-border bg-input pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  className="h-10 w-full rounded-xl border border-border bg-input pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card"
                 />
               </div>
             </div>

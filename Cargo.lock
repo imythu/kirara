@@ -2368,7 +2368,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rflush"
+name = "kirara"
 version = "0.1.0"
 dependencies = [
  "axum",

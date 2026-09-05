@@ -77,11 +77,11 @@ jobs:
             if [[ "${{ inputs.prerelease }}" == "true" ]]; then
               PRERELEASE="true"
               CHANNEL_TAG="rc"
-              RELEASE_NAME="rflush ${VERSION} (prerelease)"
+              RELEASE_NAME="kirara ${VERSION} (prerelease)"
             else
               PRERELEASE="false"
               CHANNEL_TAG="latest"
-              RELEASE_NAME="rflush ${VERSION}"
+              RELEASE_NAME="kirara ${VERSION}"
             fi
           else
             UTC_STAMP=$(date -u +%Y%m%d.%H%M)
@@ -89,13 +89,13 @@ jobs:
             RELEASE_KIND="snapshot"
             PRERELEASE="true"
             CHANNEL_TAG="latest-beta"
-            RELEASE_NAME="rflush ${VERSION} (snapshot)"
+            RELEASE_NAME="kirara ${VERSION} (snapshot)"
           fi
 
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/$OWNER_LOWER/rflush" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$OWNER_LOWER/kirara" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "release_kind=$RELEASE_KIND" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
@@ -193,12 +193,12 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            BIN="target/${{ matrix.target }}/release/rflush.exe"
-            ARCHIVE="rflush-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip"
+            BIN="target/${{ matrix.target }}/release/kirara.exe"
+            ARCHIVE="kirara-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip"
             7z a "$ARCHIVE" "$BIN"
           else
-            BIN="target/${{ matrix.target }}/release/rflush"
-            ARCHIVE="rflush-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz"
+            BIN="target/${{ matrix.target }}/release/kirara"
+            ARCHIVE="kirara-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz"
             tar czf "$ARCHIVE" -C "$(dirname "$BIN")" "$(basename "$BIN")"
           fi
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
@@ -206,7 +206,7 @@ jobs:
       - name: Upload binary artifact
         uses: actions/upload-artifact@v7
         with:
-          name: rflush-${{ matrix.target }}
+          name: kirara-${{ matrix.target }}
           path: ${{ env.ARCHIVE }}
           retention-days: 7
 
@@ -225,15 +225,15 @@ jobs:
       - name: Download binary artifact
         uses: actions/download-artifact@v8
         with:
-          name: rflush-${{ matrix.target }}
+          name: kirara-${{ matrix.target }}
           path: docker/linux
 
       - name: Extract binary artifact
         shell: bash
         run: |
           cd docker/linux
-          tar xzf rflush-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz
-          chmod +x rflush
+          tar xzf kirara-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz
+          chmod +x kirara
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -329,7 +329,7 @@ jobs:
       - name: Download all binary artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: rflush-*
+          pattern: kirara-*
           path: artifacts
           merge-multiple: true
 

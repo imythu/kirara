@@ -3,14 +3,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex h-10 items-center justify-center whitespace-nowrap rounded-full px-5 py-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 shadow-sm",
+  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-5 py-2 text-sm font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-gradient-to-r from-primary to-[#9a7bff] text-primary-foreground shadow-glow hover:brightness-105 hover:shadow-card",
-        secondary: "border border-primary/10 bg-secondary text-secondary-foreground hover:bg-[#e6d9ff]",
+        default: "bg-primary text-primary-foreground hover:bg-[#963727] active:bg-[#7f2f23]",
+        secondary: "border border-primary/10 bg-secondary text-secondary-foreground hover:bg-accent",
         destructive: "bg-destructive text-white hover:brightness-105",
-        outline: "border border-border bg-card/80 text-foreground backdrop-blur hover:border-primary/35 hover:bg-accent"
+        outline: "border border-border bg-card text-foreground hover:border-primary/35 hover:bg-accent"
       },
     },
     defaultVariants: {

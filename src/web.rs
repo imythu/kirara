@@ -161,7 +161,7 @@ pub async fn serve(
     let app = app_router(state, relocation_scheduler);
     if !addr.ip().is_loopback() {
         warn!(
-            "web server is listening on a non-loopback address; place rflush behind an authenticated reverse proxy and restrict network access"
+            "web server is listening on a non-loopback address; place kirara behind an authenticated reverse proxy and restrict network access"
         );
     }
     info!("web server listening on http://{}", addr);
@@ -5635,7 +5635,7 @@ mod media_api_tests {
         config.api_key = "test-key".to_string();
         db.update_openlist_config(&config).await.unwrap();
 
-        let conn = rusqlite::Connection::open(temp.path().join("rflush.db")).unwrap();
+        let conn = rusqlite::Connection::open(temp.path().join("kirara.db")).unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         let checkpoint = r#"{"path":"episode.mkv","size":10,"operation":"copy_file","phase":"uncertain","submitted_at":"2026-01-01T00:00:00Z"}"#;
         conn.execute(
@@ -5701,7 +5701,7 @@ mod media_api_tests {
     #[tokio::test]
     async fn automatic_openlist_jobs_handler_reaches_records_past_legacy_200_limit() {
         let (temp, state) = test_media_state().await;
-        let conn = rusqlite::Connection::open(temp.path().join("rflush.db")).unwrap();
+        let conn = rusqlite::Connection::open(temp.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         let mut oldest_review_id = 0;

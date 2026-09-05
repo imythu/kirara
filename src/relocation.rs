@@ -529,7 +529,7 @@ mod tests {
             let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
             let directory = tempfile::tempdir().unwrap();
-            let db_path = directory.path().join("rflush.db");
+            let db_path = directory.path().join("kirara.db");
             let db = Database::open(directory.path()).await.unwrap();
             let downloader_id = db
                 .create_downloader(

@@ -239,8 +239,8 @@ mod tests {
         assert!(simple.contains("selectors=info"));
         assert!(simple.contains("html5ever=info"));
 
-        let custom = normalize_log_filter("debug,rflush=trace");
-        assert!(custom.contains("rflush=trace"));
+        let custom = normalize_log_filter("debug,kirara=trace");
+        assert!(custom.contains("kirara=trace"));
         assert!(custom.contains("selectors=info"));
         assert!(custom.contains("html5ever=info"));
     }

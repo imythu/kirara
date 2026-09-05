@@ -1,0 +1,500 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-05T12:58:37.283327+00:00",
+  "title": "Design System: 云母",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Background",
+        "tonalRamp": [
+          "oklch(15% 0.0111 89.72)",
+          "oklch(26% 0.0111 89.72)",
+          "oklch(38% 0.0111 89.72)",
+          "oklch(49% 0.0111 89.72)",
+          "oklch(61% 0.0111 89.72)",
+          "oklch(72% 0.0111 89.72)",
+          "oklch(84% 0.0111 89.72)",
+          "oklch(95% 0.0111 89.72)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0108 99.29)",
+          "oklch(26% 0.0108 99.29)",
+          "oklch(38% 0.0108 99.29)",
+          "oklch(49% 0.0108 99.29)",
+          "oklch(61% 0.0108 99.29)",
+          "oklch(72% 0.0108 99.29)",
+          "oklch(84% 0.0108 99.29)",
+          "oklch(95% 0.0108 99.29)"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Card",
+        "tonalRamp": [
+          "oklch(15% 0.0069 88.64)",
+          "oklch(26% 0.0069 88.64)",
+          "oklch(38% 0.0069 88.64)",
+          "oklch(49% 0.0069 88.64)",
+          "oklch(61% 0.0069 88.64)",
+          "oklch(72% 0.0069 88.64)",
+          "oklch(84% 0.0069 88.64)",
+          "oklch(95% 0.0069 88.64)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "tonalRamp": [
+          "oklch(15% 0.0184 89.37)",
+          "oklch(26% 0.0184 89.37)",
+          "oklch(38% 0.0184 89.37)",
+          "oklch(49% 0.0184 89.37)",
+          "oklch(61% 0.0184 89.37)",
+          "oklch(72% 0.0184 89.37)",
+          "oklch(84% 0.0184 89.37)",
+          "oklch(95% 0.0184 89.37)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Primary",
+        "tonalRamp": [
+          "oklch(15% 0.1504 31.07)",
+          "oklch(26% 0.1504 31.07)",
+          "oklch(38% 0.1504 31.07)",
+          "oklch(49% 0.1504 31.07)",
+          "oklch(61% 0.1504 31.07)",
+          "oklch(72% 0.1504 31.07)",
+          "oklch(84% 0.1504 31.07)",
+          "oklch(95% 0.1504 31.07)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "primary",
+        "displayName": "Primary Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "primary-hover": {
+        "role": "primary",
+        "displayName": "Primary Hover",
+        "tonalRamp": [
+          "oklch(15% 0.1312 31.84)",
+          "oklch(26% 0.1312 31.84)",
+          "oklch(38% 0.1312 31.84)",
+          "oklch(49% 0.1312 31.84)",
+          "oklch(61% 0.1312 31.84)",
+          "oklch(72% 0.1312 31.84)",
+          "oklch(84% 0.1312 31.84)",
+          "oklch(95% 0.1312 31.84)"
+        ]
+      },
+      "primary-active": {
+        "role": "primary",
+        "displayName": "Primary Active",
+        "tonalRamp": [
+          "oklch(15% 0.1137 30.93)",
+          "oklch(26% 0.1137 30.93)",
+          "oklch(38% 0.1137 30.93)",
+          "oklch(49% 0.1137 30.93)",
+          "oklch(61% 0.1137 30.93)",
+          "oklch(72% 0.1137 30.93)",
+          "oklch(84% 0.1137 30.93)",
+          "oklch(95% 0.1137 30.93)"
+        ]
+      },
+      "secondary": {
+        "role": "secondary",
+        "displayName": "Secondary",
+        "tonalRamp": [
+          "oklch(15% 0.0189 83.06)",
+          "oklch(26% 0.0189 83.06)",
+          "oklch(38% 0.0189 83.06)",
+          "oklch(49% 0.0189 83.06)",
+          "oklch(61% 0.0189 83.06)",
+          "oklch(72% 0.0189 83.06)",
+          "oklch(84% 0.0189 83.06)",
+          "oklch(95% 0.0189 83.06)"
+        ]
+      },
+      "secondary-foreground": {
+        "role": "secondary",
+        "displayName": "Secondary Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0366 55.16)",
+          "oklch(26% 0.0366 55.16)",
+          "oklch(38% 0.0366 55.16)",
+          "oklch(49% 0.0366 55.16)",
+          "oklch(61% 0.0366 55.16)",
+          "oklch(72% 0.0366 55.16)",
+          "oklch(84% 0.0366 55.16)",
+          "oklch(95% 0.0366 55.16)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "tonalRamp": [
+          "oklch(15% 0.0215 83.03)",
+          "oklch(26% 0.0215 83.03)",
+          "oklch(38% 0.0215 83.03)",
+          "oklch(49% 0.0215 83.03)",
+          "oklch(61% 0.0215 83.03)",
+          "oklch(72% 0.0215 83.03)",
+          "oklch(84% 0.0215 83.03)",
+          "oklch(95% 0.0215 83.03)"
+        ]
+      },
+      "accent": {
+        "role": "neutral",
+        "displayName": "Accent",
+        "tonalRamp": [
+          "oklch(15% 0.0181 89.36)",
+          "oklch(26% 0.0181 89.36)",
+          "oklch(38% 0.0181 89.36)",
+          "oklch(49% 0.0181 89.36)",
+          "oklch(61% 0.0181 89.36)",
+          "oklch(72% 0.0181 89.36)",
+          "oklch(84% 0.0181 89.36)",
+          "oklch(95% 0.0181 89.36)"
+        ]
+      },
+      "destructive": {
+        "role": "neutral",
+        "displayName": "Destructive",
+        "tonalRamp": [
+          "oklch(15% 0.1690 25.28)",
+          "oklch(26% 0.1690 25.28)",
+          "oklch(38% 0.1690 25.28)",
+          "oklch(49% 0.1690 25.28)",
+          "oklch(61% 0.1690 25.28)",
+          "oklch(72% 0.1690 25.28)",
+          "oklch(84% 0.1690 25.28)",
+          "oklch(95% 0.1690 25.28)"
+        ]
+      },
+      "surface-container": {
+        "role": "neutral",
+        "displayName": "Surface Container",
+        "tonalRamp": [
+          "oklch(15% 0.0140 88.69)",
+          "oklch(26% 0.0140 88.69)",
+          "oklch(38% 0.0140 88.69)",
+          "oklch(49% 0.0140 88.69)",
+          "oklch(61% 0.0140 88.69)",
+          "oklch(72% 0.0140 88.69)",
+          "oklch(84% 0.0140 88.69)",
+          "oklch(95% 0.0140 88.69)"
+        ]
+      },
+      "night": {
+        "role": "neutral",
+        "displayName": "Night",
+        "tonalRamp": [
+          "oklch(15% 0.0109 114.83)",
+          "oklch(26% 0.0109 114.83)",
+          "oklch(38% 0.0109 114.83)",
+          "oklch(49% 0.0109 114.83)",
+          "oklch(61% 0.0109 114.83)",
+          "oklch(72% 0.0109 114.83)",
+          "oklch(84% 0.0109 114.83)",
+          "oklch(95% 0.0109 114.83)"
+        ]
+      },
+      "jade": {
+        "role": "neutral",
+        "displayName": "Jade",
+        "tonalRamp": [
+          "oklch(15% 0.0577 168.62)",
+          "oklch(26% 0.0577 168.62)",
+          "oklch(38% 0.0577 168.62)",
+          "oklch(49% 0.0577 168.62)",
+          "oklch(61% 0.0577 168.62)",
+          "oklch(72% 0.0577 168.62)",
+          "oklch(84% 0.0577 168.62)",
+          "oklch(95% 0.0577 168.62)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar",
+        "tonalRamp": [
+          "oklch(15% 0.0111 122.12)",
+          "oklch(26% 0.0111 122.12)",
+          "oklch(38% 0.0111 122.12)",
+          "oklch(49% 0.0111 122.12)",
+          "oklch(61% 0.0111 122.12)",
+          "oklch(72% 0.0111 122.12)",
+          "oklch(84% 0.0111 122.12)",
+          "oklch(95% 0.0111 122.12)"
+        ]
+      },
+      "sidebar-foreground": {
+        "role": "neutral",
+        "displayName": "Sidebar Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0208 88.72)",
+          "oklch(26% 0.0208 88.72)",
+          "oklch(38% 0.0208 88.72)",
+          "oklch(49% 0.0208 88.72)",
+          "oklch(61% 0.0208 88.72)",
+          "oklch(72% 0.0208 88.72)",
+          "oklch(84% 0.0208 88.72)",
+          "oklch(95% 0.0208 88.72)"
+        ]
+      },
+      "sidebar-muted": {
+        "role": "neutral",
+        "displayName": "Sidebar Muted",
+        "tonalRamp": [
+          "oklch(15% 0.0186 92.72)",
+          "oklch(26% 0.0186 92.72)",
+          "oklch(38% 0.0186 92.72)",
+          "oklch(49% 0.0186 92.72)",
+          "oklch(61% 0.0186 92.72)",
+          "oklch(72% 0.0186 92.72)",
+          "oklch(84% 0.0186 92.72)",
+          "oklch(95% 0.0186 92.72)"
+        ]
+      },
+      "sidebar-active": {
+        "role": "neutral",
+        "displayName": "Sidebar Active",
+        "tonalRamp": [
+          "oklch(15% 0.0267 87.86)",
+          "oklch(26% 0.0267 87.86)",
+          "oklch(38% 0.0267 87.86)",
+          "oklch(49% 0.0267 87.86)",
+          "oklch(61% 0.0267 87.86)",
+          "oklch(72% 0.0267 87.86)",
+          "oklch(84% 0.0267 87.86)",
+          "oklch(95% 0.0267 87.86)"
+        ]
+      },
+      "sidebar-active-foreground": {
+        "role": "neutral",
+        "displayName": "Sidebar Active Foreground",
+        "tonalRamp": [
+          "oklch(15% 0.0123 100.41)",
+          "oklch(26% 0.0123 100.41)",
+          "oklch(38% 0.0123 100.41)",
+          "oklch(49% 0.0123 100.41)",
+          "oklch(61% 0.0123 100.41)",
+          "oklch(72% 0.0123 100.41)",
+          "oklch(84% 0.0123 100.41)",
+          "oklch(95% 0.0123 100.41)"
+        ]
+      },
+      "sidebar-hover": {
+        "role": "neutral",
+        "displayName": "Sidebar Hover",
+        "tonalRamp": [
+          "oklch(15% 0.0138 118.54)",
+          "oklch(26% 0.0138 118.54)",
+          "oklch(38% 0.0138 118.54)",
+          "oklch(49% 0.0138 118.54)",
+          "oklch(61% 0.0138 118.54)",
+          "oklch(72% 0.0138 118.54)",
+          "oklch(84% 0.0138 118.54)",
+          "oklch(95% 0.0138 118.54)"
+        ]
+      },
+      "sidebar-focus": {
+        "role": "neutral",
+        "displayName": "Sidebar Focus",
+        "tonalRamp": [
+          "oklch(15% 0.0852 60.43)",
+          "oklch(26% 0.0852 60.43)",
+          "oklch(38% 0.0852 60.43)",
+          "oklch(49% 0.0852 60.43)",
+          "oklch(61% 0.0852 60.43)",
+          "oklch(72% 0.0852 60.43)",
+          "oklch(84% 0.0852 60.43)",
+          "oklch(95% 0.0852 60.43)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Page heading",
+        "purpose": "24px page headings from 640px; compact 18px below."
+      },
+      "title": {
+        "displayName": "Card title",
+        "purpose": "Compact bold section titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Chinese UI content and control text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Navigation groups and supporting metadata."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-and-glow",
+        "value": "none",
+        "purpose": "Default card and legacy glow aliases."
+      },
+      {
+        "name": "sm",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Selected tabs and existing local panels."
+      },
+      {
+        "name": "lg",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "Dock and select popover."
+      },
+      {
+        "name": "xl",
+        "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "purpose": "Dialog panel."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-color",
+        "value": "150ms",
+        "purpose": "Shared button color states."
+      },
+      {
+        "name": "brand-turn",
+        "value": "transform 180ms ease-out",
+        "purpose": "Brand artwork rotates -6deg on hover/focus."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "CSS transition/animation duration override; CSS smooth scrolling disabled."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Shared primary action.",
+      "html": "<button class=\"ds-button-primary\">保存设置</button>",
+      "css": ".ds-button-primary{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:8px 20px;border:1px solid transparent;border-radius:8px;background:#b44332;color:#ffffff;font-weight:600;cursor:pointer;transition:color 150ms,background-color 150ms,border-color 150ms;}.ds-button-primary:hover{background:#963727;}.ds-button-primary:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card, #fffdf8),0 0 0 4px #b44332;}.ds-button-primary:disabled{opacity:.5;pointer-events:none;}.ds-button-primary:active{background:#7f2f23;}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition-duration:.01ms;}}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Shared secondary action.",
+      "html": "<button class=\"ds-button-secondary\">保存设置</button>",
+      "css": ".ds-button-secondary{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:8px 20px;border:1px solid rgb(180 67 50 / .1);border-radius:8px;background:#efe8db;color:#5b4638;font-weight:600;cursor:pointer;transition:color 150ms,background-color 150ms,border-color 150ms;}.ds-button-secondary:hover{background:#efeadd;}.ds-button-secondary:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card, #fffdf8),0 0 0 4px #b44332;}.ds-button-secondary:disabled{opacity:.5;pointer-events:none;}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition-duration:.01ms;}}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Shared outline action.",
+      "html": "<button class=\"ds-button-outline\">保存设置</button>",
+      "css": ".ds-button-outline{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:8px 20px;border:1px solid #ded9cc;border-radius:8px;background:#fffdf8;color:#292822;font-weight:600;cursor:pointer;transition:color 150ms,background-color 150ms,border-color 150ms;}.ds-button-outline:hover{background:#efeadd;border-color:rgb(180 67 50 / .35);}.ds-button-outline:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card, #fffdf8),0 0 0 4px #b44332;}.ds-button-outline:disabled{opacity:.5;pointer-events:none;}@media(prefers-reduced-motion:reduce){.ds-button-outline{transition-duration:.01ms;}}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Shared destructive action.",
+      "html": "<button class=\"ds-button-destructive\">保存设置</button>",
+      "css": ".ds-button-destructive{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:8px 20px;border:1px solid transparent;border-radius:8px;background:#b63232;color:#ffffff;font-weight:600;cursor:pointer;transition:color 150ms,background-color 150ms,border-color 150ms;}.ds-button-destructive:hover{filter:brightness(1.05);}.ds-button-destructive:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card, #fffdf8),0 0 0 4px #b44332;}.ds-button-destructive:disabled{opacity:.5;pointer-events:none;}@media(prefers-reduced-motion:reduce){.ds-button-destructive{transition-duration:.01ms;}}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Shared text field with opaque focus ring.",
+      "html": "<input class=\"ds-input\" aria-label=\"TMDB 密钥\" placeholder=\"输入 TMDB 密钥\">",
+      "css": ".ds-input{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;height:44px;width:100%;padding:8px 16px;border:1px solid var(--border, #ded9cc);border-radius:8px;background:var(--card, #fffdf8);color:#292822;caret-color:#b44332;transition:border-color 150ms;}.ds-input::placeholder{color:var(--muted, #746d60);}.ds-input:hover{border-color:var(--border, #ded9cc);}.ds-input:focus-visible{border-color:#b44332;outline:none;box-shadow:0 0 0 2px var(--card, #fffdf8),0 0 0 4px #b44332;}.ds-input:disabled{opacity:.5;cursor:not-allowed;}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat bordered container with divided header.",
+      "html": "<section class=\"ds-card\"><header class=\"ds-card-header\"><h3>追剧订阅</h3><p>已添加的影视与追更状态</p></header><div class=\"ds-card-content\">暂无订阅</div></section>",
+      "css": ".ds-card{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;overflow:hidden;border:1px solid var(--border, #ded9cc);border-radius:16px;background:var(--card, #fffdf8);color:#292822;}.ds-card-header{padding:24px;border-bottom:1px solid rgb(222 217 204 / .7);}.ds-card-header h3{margin:0;font-size:18px;line-height:28px;font-weight:700;letter-spacing:-.025em;}.ds-card-header p{margin:6px 0 0;color:var(--muted, #746d60);line-height:24px;}.ds-card-content{padding:24px;}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "description": "Current destination on the charcoal rail.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"资源与订阅\"><button class=\"ds-nav-item\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><rect x=\"2\" y=\"7\" width=\"20\" height=\"15\" rx=\"2\"/><path d=\"m17 2-5 5-5-5\"/></svg>自动追剧</button></nav>",
+      "css": ".ds-nav{padding:12px;background:#292b25;}.ds-nav-item{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;display:flex;align-items:center;gap:12px;min-height:44px;width:100%;padding:8px 12px;border:0;border-radius:8px;color:#f7f1e2;background:transparent;font-weight:500;cursor:pointer;transition:background-color 150ms;}.ds-nav-item:hover{background:#383a32;}.ds-nav-item[aria-current=\"page\"]{background:#eee6d3;color:#302f28;}.ds-nav-item[aria-current=\"page\"]::after{content:\"\";width:6px;height:6px;margin-left:auto;background:#b44332;transform:rotate(45deg);}.ds-nav-item:focus-visible{outline:none;box-shadow:0 0 0 2px white,0 0 0 4px #f2bc90;}"
+    },
+    {
+      "name": "Neutral Status Pill",
+      "kind": "chip",
+      "description": "Textual status in a compact capsule.",
+      "html": "<span class=\"ds-pill\">已暂停</span>",
+      "css": ".ds-pill{font-family:\"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", ui-sans-serif, system-ui, sans-serif;font-size:14px;line-height:20px;display:inline-flex;align-items:center;border:1px solid var(--border, #ded9cc);border-radius:9999px;background:#f0ece2;color:var(--muted, #746d60);padding:4px 10px;font-size:12px;line-height:16px;font-weight:600;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A companion’s collection desk",
+    "overview": "A companion’s collection desk: cream surfaces, charcoal navigation and restrained vermilion actions make a dense Chinese PT workspace feel calm and familiar. The flat cat emblem and resting two-tail illustration supply the character; borders, clear text and compact controls carry the work.\n\nThis is a record of the implemented light interface, grounded in the application shell, shared controls and operational pages. The existing Chinese system-font stack is a practical implementation fact; there is no bespoke display face or bundled font.",
+    "keyCharacteristics": [
+      "Warm paper-like surfaces with a dark navigation rail.",
+      "Flat bordered containers, compact controls and visible task states.",
+      "A small cat identity and a dedicated subscription empty-state illustration."
+    ],
+    "rules": [
+      {
+        "name": "The Task Accent Rule",
+        "body": "Use vermilion to identify actions and selected states; retain neutral surfaces for sustained reading.",
+        "section": "colors"
+      },
+      {
+        "name": "The Bordered Surface Rule",
+        "body": "Standard cards have no shadow; light surface changes and thin warm borders separate content.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do reuse the semantic palette and shared controls for new work.",
+      "Do keep active navigation identifiable through the cream fill and diamond as well as color.",
+      "Do preserve readable Chinese labels, numeric alignment and keyboard focus.",
+      "Do reserve bottom clearance throughout the mobile and tablet layout.",
+      "Do keep asset provenance with the authored SVG files."
+    ],
+    "donts": [
+      "Don’t turn the cream workspace into a glass or gradient surface.",
+      "Don’t spread the empty-state mascot into every operational panel.",
+      "Don’t use color alone to replace status labels or destructive-action explanations.",
+      "Don’t assume all local focus treatments or legacy utility names are established system rules."
+    ]
+  }
+}

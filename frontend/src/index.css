@@ -8,53 +8,11 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
   min-height: 100dvh;
-  background:
-    radial-gradient(circle at 8% 4%, rgba(255, 125, 168, 0.18), transparent 26%),
-    radial-gradient(circle at 78% 0%, rgba(125, 92, 255, 0.16), transparent 28%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.86) 0%, rgba(249, 243, 255, 0.92) 42%, rgba(239, 231, 255, 0.86) 100%);
-  color: #20173d;
-  font-family:
-    Inter,
-    "Noto Sans SC",
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-}
-
-body::before {
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  content: "";
-  background:
-    linear-gradient(90deg, rgba(126, 96, 194, 0.08) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(126, 96, 194, 0.06) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.42), transparent 78%);
-}
-
-body::after {
-  position: fixed;
-  top: -120px;
-  right: -80px;
-  z-index: -1;
-  width: 520px;
-  height: 520px;
-  pointer-events: none;
-  content: "";
-  background:
-    radial-gradient(circle at 42% 46%, rgba(255, 125, 168, 0.26) 0 3px, transparent 4px),
-    radial-gradient(circle at 54% 38%, rgba(125, 92, 255, 0.18) 0 2px, transparent 3px),
-    radial-gradient(circle at 64% 54%, rgba(255, 125, 168, 0.18) 0 2px, transparent 4px),
-    linear-gradient(140deg, transparent 34%, rgba(126, 96, 194, 0.20) 35%, rgba(126, 96, 194, 0.20) 36%, transparent 37%);
-  opacity: 0.7;
-  transform: rotate(-8deg);
+  background: #f6f3eb;
+  color: #292822;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -80,7 +38,7 @@ button:disabled,
 
 ::selection {
   color: #ffffff;
-  background: #7d5cff;
+  background: #b44332;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -99,8 +57,8 @@ button:disabled,
 
 @media (min-width: 1024px) {
   .app-shell-grid {
-    height: calc(100vh - 48px);
-    height: calc(100dvh - 48px);
+    height: 100vh;
+    height: 100dvh;
     grid-template-rows: minmax(0, 1fr);
   }
 }
@@ -120,7 +78,7 @@ button:disabled,
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  scrollbar-color: rgba(125, 92, 255, 0.36) transparent;
+  scrollbar-color: rgba(224, 215, 191, 0.4) transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   touch-action: pan-y;
@@ -132,7 +90,7 @@ button:disabled,
 
 .sidebar-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(125, 92, 255, 0.28);
+  background: rgba(224, 215, 191, 0.3);
 }
 
 .sidebar-scroll::-webkit-scrollbar-track {
@@ -141,4 +99,48 @@ button:disabled,
 
 html {
   scroll-behavior: smooth;
+}
+
+:root {
+  --border: #ded9cc;
+  --card: #fffdf8;
+  --muted: #746d60;
+  --app-shell: 41 40 34;
+  --app-shell-foreground: 250 245 231;
+}
+
+input, textarea { caret-color: #b44332; }
+a { text-underline-offset: 4px; }
+button, input, select, textarea, a { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid #b44332; outline-offset: 3px; }
+h1, h2, h3 { text-wrap: balance; }
+table, time, .tabular-nums { font-variant-numeric: tabular-nums; }
+
+.kirara-sidebar { background: #292b25; color: #f7f1e2; }
+.kirara-sidebar .text-muted { color: #bfbbae; }
+.kirara-sidebar .text-primary { color: #f2bc90; }
+.kirara-sidebar .hover\:bg-accent:hover { background: #383a32; }
+.kirara-sidebar .focus-visible\:ring-primary:focus-visible { --tw-ring-color: #f2bc90; }
+.kirara-nav-item { position: relative; }
+.kirara-nav-item[aria-current="page"] { background: #eee6d3; color: #302f28; }
+.kirara-nav-item[aria-current="page"]::after {
+  content: ""; width: 6px; height: 6px; margin-left: auto;
+  background: #b44332; transform: rotate(45deg); flex-shrink: 0;
+}
+.kirara-nav-item:not([aria-current]):hover { background: #383a32; }
+.kirara-brand img { transition: transform 180ms ease-out; }
+.kirara-brand:hover img, .kirara-brand:focus-visible img { transform: rotate(-6deg); }
+.kirara-page-header { border-bottom: 1px solid #ded9cc; }
+.kirara-content { scrollbar-width: thin; scrollbar-color: #c8c1b0 transparent; }
+.kirara-empty-art { width: 156px; height: 114px; object-fit: contain; }
+@media (max-width: 639px) {
+  .kirara-content { padding: 16px 12px; }
+  .kirara-page-header { padding-bottom: 16px; }
+}
+@media (max-width: 1023px) {
+  .app-shell-grid > .kirara-content { padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

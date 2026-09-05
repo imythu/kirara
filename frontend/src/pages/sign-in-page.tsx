@@ -520,7 +520,7 @@ export function SignInPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div
-            className="grid grid-cols-2 gap-2 rounded-[20px] bg-surface-container/70 p-1.5"
+            className="grid grid-cols-2 gap-2 rounded-xl bg-surface-container/70 p-1.5"
             role="tablist"
             aria-label="自动签到内容"
           >
@@ -628,7 +628,7 @@ export function SignInPage() {
               ) : (
                 <div className="grid gap-3">
                   {filteredTasks.map((task) => (
-                    <div key={task.id} className="rounded-[20px] border border-border bg-surface-container/70 p-3.5 shadow-sm">
+                    <div key={task.id} className="rounded-xl border border-border bg-surface-container/70 p-3.5 shadow-sm">
                       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">

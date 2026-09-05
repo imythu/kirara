@@ -1530,7 +1530,7 @@ mod tests {
         let db = Database::open(dir.path()).await.unwrap();
         assert!(db.list_media_relocation_jobs(10).await.unwrap().is_empty());
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         let mut statement = conn
             .prepare("PRAGMA table_info(media_relocation_jobs)")
             .unwrap();
@@ -1646,7 +1646,7 @@ mod tests {
     async fn batch_clear_stops_automatic_jobs_without_touching_manual_transfers() {
         let dir = tempfile::tempdir().unwrap();
         let db = Database::open(dir.path()).await.unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
@@ -1704,7 +1704,7 @@ mod tests {
         assert!(!cleared.copy_lock_acquired);
         assert!(!db.has_in_flight_openlist_operations().await.unwrap());
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         let cleared_at: Option<String> = conn
             .query_row(
                 "SELECT cleared_at FROM media_relocation_jobs WHERE id=1",
@@ -1719,7 +1719,7 @@ mod tests {
     async fn automatic_relocation_pagination_reaches_old_priority_jobs_beyond_200() {
         let dir = tempfile::tempdir().unwrap();
         let db = Database::open(dir.path()).await.unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         let insert = |media_download_id: i64, stage: &str| {
@@ -1796,7 +1796,7 @@ mod tests {
     async fn relocation_claim_heartbeat_checkpoint_and_target_lock_are_durable() {
         let dir = tempfile::tempdir().unwrap();
         let db = Database::open(dir.path()).await.unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         for (media_download_id, target) in
@@ -1913,7 +1913,7 @@ mod tests {
         assert!(stored.copy_lock_acquired);
         assert_eq!(stored.last_error.as_deref(), Some("ambiguous response"));
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='copy_manual_review', copy_checkpoint_json=NULL,
@@ -1968,7 +1968,7 @@ mod tests {
         );
         let retried = before_force_retry;
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='copying', copy_checkpoint_json=NULL,
@@ -1989,7 +1989,7 @@ mod tests {
             .unwrap();
         assert_eq!(legacy_recheck.stage, "copy_legacy_reconcile");
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='copy_manual_review', copy_checkpoint_json=?, copy_lock_acquired=1
@@ -2011,7 +2011,7 @@ mod tests {
         assert_eq!(rechecking.stage, "copy_submitting");
         assert_eq!(rechecking.copy_checkpoint_json.as_deref(), Some(checkpoint));
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs SET stage='copy_manual_review' WHERE id=?",
             [first.id],
@@ -2036,7 +2036,7 @@ mod tests {
         assert_eq!(cancelled.stage, "cancelled");
         assert!(!cancelled.copy_lock_acquired);
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='auto_copy_paused', copy_checkpoint_json=NULL,
@@ -2090,7 +2090,7 @@ mod tests {
         let job = jobs.into_iter().next().unwrap();
         let checkpoint = r#"{"path":"episode.mkv","size":10,"operation":"remove_file","phase":"uncertain","submitted_at":"2026-01-01T00:00:00Z"}"#;
         let future_lease = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='manifest_required', source_manifest_json='[]',
@@ -2109,7 +2109,7 @@ mod tests {
             "an unexpired worker lease must block manual recovery"
         );
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs SET lease_owner=NULL, lease_until=NULL WHERE id=?",
             [job.id],
@@ -2141,7 +2141,7 @@ mod tests {
             "only manifest_required may enter the recovery stage"
         );
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
@@ -2304,7 +2304,7 @@ mod tests {
             .unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         let lease_until = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "INSERT INTO media_downloads
              (target_key, dedupe_key, downloader_id, source_site, downloader_name,
@@ -2336,7 +2336,7 @@ mod tests {
             0
         );
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_downloads
              SET status='cancelled', lease_owner=NULL, lease_until=NULL WHERE id=?",
@@ -2481,7 +2481,7 @@ mod tests {
         let source = db.get_downloader(source_id).await.unwrap().unwrap();
         let target = db.get_downloader(target_id).await.unwrap().unwrap();
         let config = db.get_openlist_config().await.unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE downloaders SET url=?, updated_at=? WHERE id=?",
             rusqlite::params![
@@ -2534,7 +2534,7 @@ mod tests {
         let source = db.get_downloader(source_id).await.unwrap().unwrap();
         let target = db.get_downloader(target_id).await.unwrap().unwrap();
         let config = db.get_openlist_config().await.unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE downloaders SET downloader_type='other', updated_at=? WHERE id=?",
             rusqlite::params!["concurrent-target-type-update", target_id],
@@ -2744,7 +2744,7 @@ mod tests {
             .create_downloader("qb", "qbittorrent", "http://127.0.0.1:8080", "", "")
             .await
             .unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
             "INSERT INTO media_downloads
@@ -2800,7 +2800,7 @@ mod tests {
             .unwrap(),
             (1, 0)
         );
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs SET stage='cancelled' WHERE media_download_id IS NULL",
             [],
@@ -2857,7 +2857,7 @@ mod tests {
             .unwrap();
         let hash = "0123456789abcdef0123456789abcdef01234567";
         let now = chrono::Utc::now().to_rfc3339();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "INSERT INTO media_relocation_jobs
              (media_download_id, downloader_id, infohash, source_qb_path,
@@ -2897,7 +2897,7 @@ mod tests {
             .create_downloader("qb", "qbittorrent", "http://127.0.0.1:8080", "", "")
             .await
             .unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         let insert_job = |infohash: &str,
                           source_openlist_path: &str,
@@ -3067,7 +3067,7 @@ mod tests {
         .unwrap();
         let (jobs, _) = db.list_manual_media_relocation_jobs(1, 10).await.unwrap();
         let id = jobs[0].id;
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
             "UPDATE media_relocation_jobs
@@ -3113,7 +3113,7 @@ mod tests {
         assert!(!resumed.copy_lock_acquired);
         assert_eq!(resumed.last_error, None);
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='source_remove_manual_review', next_attempt_at=NULL WHERE id=?",
@@ -3211,7 +3211,7 @@ mod tests {
             .await
             .unwrap();
         let hash = "483dcc0e0b7fd8ff3b136f496fd1ae580b421fe0";
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
@@ -3255,7 +3255,7 @@ mod tests {
             .create_downloader("qb", "qbittorrent", "http://127.0.0.1:8080", "", "")
             .await
             .unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
@@ -3323,7 +3323,7 @@ mod tests {
         assert_eq!(waiting.attempts, 0);
         assert_eq!(waiting.last_error, None);
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='planning_manual_review', next_attempt_at=NULL WHERE id=?",
@@ -3344,7 +3344,7 @@ mod tests {
             .unwrap();
         assert_eq!(cancelled.stage, "cancelled");
 
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs
              SET stage='planning_manual_review',
@@ -3483,7 +3483,7 @@ mod tests {
         );
 
         let (jobs, _) = db.list_manual_media_relocation_jobs(1, 10).await.unwrap();
-        let conn = super::open_connection(&dir.path().join("rflush.db")).unwrap();
+        let conn = super::open_connection(&dir.path().join("kirara.db")).unwrap();
         conn.execute(
             "UPDATE media_relocation_jobs SET stage='cancelled' WHERE id=?",
             [jobs[0].id],

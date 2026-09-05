@@ -307,7 +307,7 @@ const REFRESH_OPTIONS = [
 const COLORS = {
   upload: "#10b981",
   download: "#0ea5e9",
-  torrent: "#8b5cf6",
+  torrent: "#aa7143",
   grid: "#e5e7eb",
 } as const;
 
@@ -881,7 +881,7 @@ export function StatsPage() {
   return (
     <div className="space-y-6">
       {/* ===== Overview Section ===== */}
-      <Card className="rounded-[20px] border-border bg-surface-container/30 shadow-sm overflow-hidden">
+      <Card className="rounded-xl border-border bg-surface-container/30 shadow-sm overflow-hidden">
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -922,7 +922,7 @@ export function StatsPage() {
       {/* ===== Global Controls for Trends ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upload/Download Trend */}
-        <Card className="rounded-[20px] border-border bg-surface-container/30 shadow-sm overflow-hidden">
+        <Card className="rounded-xl border-border bg-surface-container/30 shadow-sm overflow-hidden">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -987,13 +987,13 @@ export function StatsPage() {
                       scale="time"
                       domain={[currentTransferWindow.start, currentTransferWindow.end]}
                       ticks={transferTicks}
-                      tick={{ fontSize: 9, fill: "#94a3b8" }}
+                      tick={{ fontSize: 9, fill: "#746d60" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value: number) => formatAxisTime(value, transferTrendHours)}
                     />
                     <YAxis
-                      tick={{ fontSize: 9, fill: "#94a3b8" }}
+                      tick={{ fontSize: 9, fill: "#746d60" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(v: number) => formatBytes(v)}
@@ -1040,7 +1040,7 @@ export function StatsPage() {
         </Card>
 
         {/* Torrent Count Trend */}
-        <Card className="rounded-[20px] border-border bg-surface-container/30 shadow-sm overflow-hidden">
+        <Card className="rounded-xl border-border bg-surface-container/30 shadow-sm overflow-hidden">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -1102,13 +1102,13 @@ export function StatsPage() {
                       scale="time"
                       domain={[currentTorrentWindow.start, currentTorrentWindow.end]}
                       ticks={torrentTicks}
-                      tick={{ fontSize: 9, fill: "#94a3b8" }}
+                      tick={{ fontSize: 9, fill: "#746d60" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value: number) => formatAxisTime(value, torrentTrendHours)}
                     />
                     <YAxis
-                      tick={{ fontSize: 9, fill: "#94a3b8" }}
+                      tick={{ fontSize: 9, fill: "#746d60" }}
                       tickLine={false}
                       axisLine={false}
                       width={30}
@@ -1142,7 +1142,7 @@ export function StatsPage() {
       </div>
 
       {/* ===== Downloader Speed Trend ===== */}
-      <Card className="rounded-[20px] border-border bg-surface-container/30 shadow-sm overflow-hidden">
+      <Card className="rounded-xl border-border bg-surface-container/30 shadow-sm overflow-hidden">
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -1207,13 +1207,13 @@ export function StatsPage() {
                     scale="time"
                     domain={[currentDownloaderWindow.start, currentDownloaderWindow.end]}
                     ticks={downloaderTicks}
-                    tick={{ fontSize: 9, fill: "#94a3b8" }}
+                    tick={{ fontSize: 9, fill: "#746d60" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: number) => formatAxisTime(value, downloaderTrendHours)}
                   />
                   <YAxis
-                    tick={{ fontSize: 9, fill: "#94a3b8" }}
+                    tick={{ fontSize: 9, fill: "#746d60" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: number) => formatSpeed(v)}
@@ -1260,7 +1260,7 @@ export function StatsPage() {
       </Card>
 
       {/* ===== Daily Transfer Chart ===== */}
-      <Card className="rounded-[20px] border-border bg-surface-container/30 shadow-sm overflow-hidden">
+      <Card className="rounded-xl border-border bg-surface-container/30 shadow-sm overflow-hidden">
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -1377,7 +1377,7 @@ export function StatsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 9, fill: "#94a3b8" }}
+                    tick={{ fontSize: 9, fill: "#746d60" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: string) => {
@@ -1386,7 +1386,7 @@ export function StatsPage() {
                     }}
                   />
                   <YAxis
-                    tick={{ fontSize: 9, fill: "#94a3b8" }}
+                    tick={{ fontSize: 9, fill: "#746d60" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: number) => formatBytes(v)}

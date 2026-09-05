@@ -107,7 +107,7 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-night/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-night/45 p-0-sm sm:items-center sm:p-4" onClick={onClose}>
       <div
         ref={panelRef}
         role="dialog"
@@ -116,7 +116,7 @@ export function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          "flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[30px] border border-border bg-card shadow-card backdrop-blur-xl sm:rounded-[30px]",
+          "flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-xl sm:rounded-2xl",
           panelClassName,
         )}
         onClick={(event) => event.stopPropagation()}

@@ -435,39 +435,37 @@ export default function App() {
 
   const sidebar = (
     <aside className={cn(
-      "relative flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden rounded-[30px] border border-border bg-card/90 p-3 shadow-card backdrop-blur-xl lg:p-4",
+      "kirara-sidebar relative flex h-full min-h-0 w-full flex-col gap-5 overflow-hidden rounded-2xl p-4 lg:rounded-none lg:px-5 lg:py-7",
     )}>
-      <div className="pointer-events-none absolute -left-12 -top-16 h-40 w-40 rounded-full bg-blossom/15 blur-3xl" />
-      <div className="pointer-events-none absolute right-4 top-4 h-20 w-20 rounded-full border border-primary/10" />
 
-      <div className="relative shrink-0 overflow-hidden rounded-[22px] border border-border bg-surface/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] lg:p-2.5">
+      <div className="relative shrink-0 border-b border-white/15 pb-6">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate("system-overview")}
-            className="flex items-center gap-3 min-w-0 text-left transition-opacity hover:opacity-80"
+            className="kirara-brand flex items-center gap-3 min-w-0 rounded-lg text-left"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-[#9a7bff] to-blossom p-1.5 shadow-glow">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center">
               <img src="/yunmu-icon.svg" alt="云母" className="h-full w-full rounded-lg" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">YUNMU</p>
-              <h1 className="mt-0.5 truncate text-xl font-black tracking-tight text-foreground">云母</h1>
+              <h1 className="truncate text-2xl font-semibold tracking-[0.12em]">云母</h1>
+              <p className="mt-0.5 text-xs text-muted">Kirara</p>
             </div>
           </button>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             <a
-              href="https://github.com/imythu/rflush"
+              href="https://github.com/imythu/kirara"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-border bg-card/80 p-2 text-muted transition hover:border-primary/30 hover:text-primary"
+              className="rounded-lg p-2 text-muted transition hover:bg-white/10 hover:text-white"
               aria-label="GitHub 源码"
             >
               <GithubIcon className="h-4 w-4" />
             </a>
             <button
               type="button"
-              className="rounded-full border border-border bg-card/80 p-2 text-muted transition hover:border-primary/30 hover:text-primary lg:hidden"
+              className="rounded-lg p-2 text-muted transition hover:bg-white/10 hover:text-white lg:hidden"
               onClick={() => setMenuOpen(false)}
               aria-label="关闭菜单"
             >
@@ -489,14 +487,15 @@ export default function App() {
           ))}
         </div>
       </div>
+      <div className="flex shrink-0 items-center justify-between border-t border-white/15 pt-4 text-xs text-muted"><span>云母 · 影视与 PT 管理</span><span className="tabular-nums">{APP_VERSION}</span></div>
     </aside>
   );
 
   return (
-    <main inert={menuOpen} className="min-h-[100dvh] bg-background pb-24 text-foreground sm:px-4 sm:py-4 lg:px-6 lg:py-6 lg:pb-0">
+    <main inert={menuOpen} className="min-h-[100dvh] bg-background text-foreground">
       {/* Mobile Floating Dock */}
       <div className="mobile-dock fixed left-1/2 z-50 w-[92%] max-w-[440px] -translate-x-1/2 lg:hidden">
-        <div className="rounded-[26px] border border-white/20 bg-card/80 p-2 shadow-2xl backdrop-blur-2xl flex items-center justify-between">
+        <div className="rounded-2xl border border-border bg-card p-1.5 shadow-lg flex items-center justify-between">
           <DockItem icon={Tv} active={page === "media"} onClick={() => navigate("media")} label="追剧" />
           <DockItem icon={BarChart3} active={page === "stats"} onClick={() => navigate("stats")} label="统计" />
           <DockItem icon={Download} active={page === "brush-tasks"} onClick={() => navigate("brush-tasks")} label="刷流" />
@@ -514,7 +513,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="app-shell-grid mx-auto grid max-w-[1720px] gap-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-6">
+      <div className="app-shell-grid mx-auto grid lg:grid-cols-[248px_minmax(0,1fr)]">
         <div className="hidden h-full min-h-0 lg:block">
           {sidebar}
         </div>
@@ -541,10 +540,8 @@ export default function App() {
           </div>, document.body
         ) : null}
 
-        <section className="min-h-0 min-w-0 overflow-y-auto no-scrollbar">
-          <header className="relative overflow-hidden rounded-[22px] border border-border bg-card/88 px-3 py-3 shadow-card backdrop-blur-xl sm:px-4 lg:rounded-[30px] lg:px-6 lg:py-5">
-            <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-64 bg-[radial-gradient(circle_at_top_right,rgba(255,125,168,0.18),transparent_56%),linear-gradient(135deg,transparent_40%,rgba(125,92,255,0.08))] lg:block" />
-            <div className="pointer-events-none absolute bottom-4 right-8 hidden h-px w-40 bg-gradient-to-r from-transparent via-primary/30 to-transparent lg:block" />
+        <section className="kirara-content min-h-0 min-w-0 overflow-y-auto sm:p-6 lg:px-8 lg:py-7 xl:px-10">
+          <header className="kirara-page-header relative pb-6">
             <div className="relative flex items-center justify-between gap-3 lg:items-start">
               <div className="flex min-w-0 items-center gap-2 lg:items-start lg:gap-3">
                 <Button
@@ -558,14 +555,14 @@ export default function App() {
                   <Menu className="h-4 w-4" />
                 </Button>
                 <div className="min-w-0">
-                  <h2 className="text-base font-bold leading-snug sm:text-xl">{currentNav.label}</h2>
+                  <h2 className="text-lg font-semibold leading-snug sm:text-2xl">{currentNav.label}</h2>
                   <p className="mt-1 hidden text-sm leading-6 text-muted lg:block">{currentNav.description}</p>
                 </div>
               </div>
 
               <div className="flex shrink-0 items-center justify-end gap-2">
-                <div className="hidden rounded-full border border-border bg-surface-container/80 px-3 py-2 text-sm font-medium text-muted lg:block">
-                  {currentTime.toLocaleString()}
+                <div className="hidden px-3 py-2 text-xs text-muted xl:block">
+                  {currentTime.toLocaleString("zh-CN", { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
                 </div>
                 <Button variant="outline" className="h-9 px-3 lg:h-10 lg:px-5" onClick={() => setLogsOpen(true)} aria-label="实时日志">
                   <FileText className="h-4 w-4 lg:mr-2" />
@@ -576,12 +573,13 @@ export default function App() {
           </header>
 
           {message ? (
-            <div className="mt-4 rounded-[22px] border border-border bg-card/90 px-4 py-3 text-sm shadow-card backdrop-blur">
+            <div className="mt-4 rounded-xl border border-border bg-card px-4 py-3 text-sm">
               <div className="flex items-start justify-between gap-3">
                 <span>{message}</span>
                 <button
                   type="button"
-                  className="rounded-full p-1 text-muted transition hover:bg-accent hover:text-foreground"
+                  className="rounded-lg p-1 text-muted transition hover:bg-accent hover:text-foreground"
+                  aria-label="关闭提示"
                   onClick={() => setMessage("")}
                 >
                   <X className="h-4 w-4" />
@@ -693,7 +691,7 @@ function NavSection({ title, open, onToggle, items, page, navigate }: {
   return (
     <div>
       <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={id}
-        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-sm font-medium text-muted hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-xs font-medium text-muted hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
         <span>{title}{!open && current ? <span className="mt-1 block text-primary">当前：{current.label}</span> : null}</span>
         <ChevronDown aria-hidden="true" className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
@@ -703,8 +701,7 @@ function NavSection({ title, open, onToggle, items, page, navigate }: {
           const active = item.key === page;
           return <button key={item.key} type="button" onClick={() => navigate(item.key)}
             aria-current={active ? "page" : undefined} title={item.description}
-            className={cn("flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-              active ? "bg-primary text-primary-foreground" : "hover:bg-accent")}>
+            className={cn("kirara-nav-item flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2")}>
             <Icon aria-hidden="true" className="h-5 w-5 shrink-0" /><span>{item.label}</span>
           </button>;
         })}
