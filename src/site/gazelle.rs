@@ -8,9 +8,7 @@ use reqwest::{Client, Url};
 use scraper::{Html, Selector};
 use serde_json::Value;
 
-use super::{
-    SiteAdapter, SiteAuth, SiteTestResult, TorrentAttributes, UserStats, UserStatsDetails,
-};
+use super::{SiteAdapter, SiteAuth, TorrentAttributes, UserStats, UserStatsDetails};
 
 /// Gazelle JSON API user statistics, including GPW's profile-only true download total.
 pub struct GazelleAdapter {
@@ -199,18 +197,6 @@ fn parse_true_downloaded(html: &str) -> Option<u64> {
 }
 
 impl SiteAdapter for GazelleAdapter {
-    fn test_connection(
-        &self,
-    ) -> Pin<Box<dyn Future<Output = Result<SiteTestResult, String>> + Send + '_>> {
-        Box::pin(async move {
-            let stats = self.fetch_stats().await?;
-            Ok(SiteTestResult {
-                success: true,
-                message: "连接成功".to_string(),
-                user_stats: Some(stats),
-            })
-        })
-    }
     fn get_user_stats(
         &self,
     ) -> Pin<Box<dyn Future<Output = Result<UserStats, String>> + Send + '_>> {

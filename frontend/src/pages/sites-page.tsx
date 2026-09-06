@@ -65,7 +65,7 @@ import type {
   SiteStatsRefreshStartResponse,
   SiteStatsRefreshStatusResponse,
   SiteStatsRecord,
-  SiteTestResult,
+  SiteSyncResult,
 } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -745,12 +745,12 @@ export function SitesPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  // test connection
-  const [testResult, setTestResult] = useState<SiteTestResult | null>(null);
-  const [testOpen, setTestOpen] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testTarget, setTestTarget] = useState<SiteRecord | null>(null);
-  const testRequestRef = useRef(0);
+  // manual site sync
+  const [syncResult, setSyncResult] = useState<SiteSyncResult | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncTarget, setSyncTarget] = useState<SiteRecord | null>(null);
+  const syncRequestRef = useRef(0);
 
   // overview
   const [overviewRows, setOverviewRows] = useState<SiteOverviewRow[]>([]);
@@ -1227,7 +1227,7 @@ export function SitesPage() {
         requestHeadersLoadRef.current += 1;
         setFormOpen(false);
         setVisibleAuthFields(new Set());
-        setMessage(editingId != null ? "站点已更新，可测试连接或刷新账户数据" : "站点已创建，可测试连接或刷新账户数据");
+        setMessage(editingId != null ? "站点已更新，可手动同步账户数据" : "站点已创建，可手动同步账户数据");
         loadSites();
         loadPtdConfig();
       })
@@ -1252,22 +1252,26 @@ export function SitesPage() {
       .finally(() => setDeleting(false));
   }
 
-  /* ---- test connection ---- */
+  /* ---- manual site sync ---- */
 
-  function handleTest(site: SiteRecord) {
-    const requestId = ++testRequestRef.current;
-    setTestTarget(site);
-    setTesting(true);
-    setTestResult(null);
-    setTestOpen(true);
-    api<SiteTestResult>(`/api/sites/${site.id}/test`, { method: "POST" })
-      .then((result) => { if (testRequestRef.current === requestId) setTestResult(result); })
+  function handleSync(site: SiteRecord) {
+    if (syncing) return;
+    const requestId = ++syncRequestRef.current;
+    setSyncTarget(site);
+    setSyncing(true);
+    setSyncResult(null);
+    setSyncOpen(true);
+    api<SiteSyncResult>(`/api/sites/${site.id}/sync`, { method: "POST" })
+      .then((result) => {
+        if (syncRequestRef.current === requestId) setSyncResult(result);
+        loadSites();
+      })
       .catch((error: Error) => {
-        if (testRequestRef.current === requestId) {
-          setTestResult({ success: false, message: error.message || "连接测试失败，请重试", user_stats: null });
+        if (syncRequestRef.current === requestId) {
+          setSyncResult({ success: false, message: error.message || "站点同步失败，请重试", user_stats: null });
         }
       })
-      .finally(() => { if (testRequestRef.current === requestId) setTesting(false); });
+      .finally(() => { if (syncRequestRef.current === requestId) setSyncing(false); });
   }
 
   function handleOverview() {
@@ -1535,7 +1539,7 @@ export function SitesPage() {
   function renderSiteActions(site: SiteRecord) {
     return (
       <div className="flex flex-wrap justify-end gap-1.5">
-        <Button variant="outline" className="h-11 px-3 shadow-none" onClick={() => handleTest(site)} aria-label={`测试${site.name}连接`}>测试</Button>
+        <Button variant="outline" className="h-11 px-3 shadow-none" onClick={() => handleSync(site)} disabled={syncing} aria-label={`同步${site.name}账户数据`}>{syncing && syncTarget?.id === site.id ? "同步中…" : "同步"}</Button>
         <Button variant="secondary" className="h-11 px-3 shadow-none" onClick={() => openEdit(site)} aria-label={`编辑${site.name}`}>编辑</Button>
         <Button variant="outline" className="h-11 px-3 shadow-none" onClick={() => setActionsTarget(site)} aria-label={`${site.name}的更多操作`}><MoreHorizontal className="size-4" /><span className="sr-only">更多</span></Button>
       </div>
@@ -1691,7 +1695,7 @@ export function SitesPage() {
             <div className="rounded-2xl border border-dashed border-border py-14 text-center">
               <Globe className="mx-auto size-8 text-muted" />
               <p className="mt-3 font-semibold">还没有配置 PT 站点</p>
-              <p className="mt-1 text-sm text-muted">添加首个站点后即可测试连接并刷新账户数据。</p>
+              <p className="mt-1 text-sm text-muted">添加首个站点后即可手动同步账户数据。</p>
               <Button className={`mt-4 ${sitePrimaryButtonClassName}`} onClick={openAdd}><Plus className="mr-2 size-4" />添加站点</Button>
             </div>
           ) : siteSearch.total === 0 ? (
@@ -2080,7 +2084,7 @@ export function SitesPage() {
               />
             </div>
 
-            {form.site_type === "gazelle" ? <p className="text-xs leading-5 text-muted">支持 GPW 等 Gazelle JSON API 站点的连接测试和账户统计；使用 Cookie 登录，暂不支持种子搜索。</p> : null}
+            {form.site_type === "gazelle" ? <p className="text-xs leading-5 text-muted">支持 GPW 等 Gazelle JSON API 站点的账户数据同步；使用 Cookie 登录，暂不支持种子搜索。</p> : null}
 
             <div className="space-y-2">
               <Label htmlFor="site-base-url">基础 URL</Label>
@@ -2172,62 +2176,62 @@ export function SitesPage() {
         </div>
       </Dialog>
 
-      {/* ---- test result dialog ---- */}
+      {/* ---- sync result dialog ---- */}
       <Dialog
-        open={testOpen}
-        onClose={() => setTestOpen(false)}
-        title="测试连接"
-        description={testTarget ? `${testTarget.name} · 连接测试结果` : "站点连接测试结果"}
+        open={syncOpen}
+        onClose={() => setSyncOpen(false)}
+        title="同步站点"
+        description={syncTarget ? `${syncTarget.name} · 账户数据同步结果` : "站点账户数据同步结果"}
       >
-        {testing ? (
+        {syncing ? (
           <div className="flex items-center justify-center py-8 text-muted">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            测试中…
+            同步中…
           </div>
-        ) : testResult ? (
+        ) : syncResult ? (
           <div className="space-y-4 p-4 sm:p-6">
             <div className="flex items-center gap-2">
               <span
-                className={`inline-block h-3 w-3 rounded-full ${testResult.success ? "bg-emerald-500" : "bg-red-500"}`}
+                className={`inline-block h-3 w-3 rounded-full ${syncResult.success ? "bg-emerald-500" : "bg-red-500"}`}
               />
               <span className="font-medium">
-                {testResult.success ? "连接成功" : "连接失败"}
+                {syncResult.success ? "同步成功" : "同步失败"}
               </span>
             </div>
-            <p className="break-words text-sm text-muted" role="status">{testResult.message}</p>
-            {!testResult.success && testTarget ? (
+            <p className="break-words text-sm text-muted" role="status">{syncResult.message}</p>
+            {!syncResult.success && syncTarget ? (
               <div className="flex flex-wrap gap-2">
-                <Button className={sitePrimaryButtonClassName} onClick={() => handleTest(testTarget)}>重试测试</Button>
-                <Button variant="outline" className="h-11" onClick={() => { setTestOpen(false); openEdit(testTarget); }}>编辑连接配置</Button>
+                <Button className={sitePrimaryButtonClassName} onClick={() => handleSync(syncTarget)}>重新同步</Button>
+                <Button variant="outline" className="h-11" onClick={() => { setSyncOpen(false); openEdit(syncTarget); }}>编辑连接配置</Button>
               </div>
             ) : null}
 
-            {testResult.user_stats && (
+            {syncResult.user_stats && (
               <div className="rounded-2xl border border-border bg-surface-container/70 p-4">
                 <p className="mb-3 text-sm font-medium">用户信息</p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-muted">用户名</span>
                     <p className="font-medium">
-                      {testResult.user_stats.username}
+                      {syncResult.user_stats.username}
                     </p>
                   </div>
                   <div>
                     <span className="text-muted">上传量</span>
                     <p className="font-medium">
-                      {formatBytes(testResult.user_stats.uploaded)}
+                      {formatBytes(syncResult.user_stats.uploaded)}
                     </p>
                   </div>
                   <div>
                     <span className="text-muted">下载量</span>
                     <p className="font-medium">
-                      {formatBytes(testResult.user_stats.downloaded)}
+                      {formatBytes(syncResult.user_stats.downloaded)}
                     </p>
                   </div>
                   <div>
                     <span className="text-muted">分享率</span>
                     <p className="font-medium">
-                      {testResult.user_stats.ratio?.toFixed(3) ?? "-"}
+                      {syncResult.user_stats.ratio?.toFixed(3) ?? "-"}
                     </p>
                   </div>
                 </div>
@@ -2235,7 +2239,7 @@ export function SitesPage() {
             )}
 
             <div className="flex justify-end">
-              <Button variant="secondary" onClick={() => setTestOpen(false)}>
+              <Button variant="secondary" onClick={() => setSyncOpen(false)}>
                 关闭
               </Button>
             </div>

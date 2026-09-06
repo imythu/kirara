@@ -107,7 +107,7 @@ export type SiteStatsRecord = UserStatsDetails & {
   last_error: string | null;
 };
 
-export type SiteTestResult = {
+export type SiteSyncResult = {
   success: boolean;
   message: string;
   user_stats: UserStats | null;

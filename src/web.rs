@@ -227,7 +227,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
             "/api/sites/{id}/request-headers",
             get(get_site_request_headers),
         )
-        .route("/api/sites/{id}/test", post(test_site))
+        .route("/api/sites/{id}/sync", post(sync_site))
         .route("/api/sites/{id}/stats", get(get_site_stats))
         .route("/api/proxy/test", post(test_proxy))
         // 自动签到
@@ -3092,26 +3092,52 @@ async fn delete_site(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-async fn test_site(
+async fn sync_site(
     State(state): State<AppState>,
     Path(id): Path<i64>,
-) -> Result<Json<crate::site::SiteTestResult>, ApiError> {
-    let site_with_stats = state
+) -> Result<Json<crate::site::SiteSyncResult>, ApiError> {
+    let checked_at = chrono::Utc::now().to_rfc3339();
+    let site = state
         .db
         .get_site_with_stats(id)
         .await?
         .ok_or_else(|| ApiError::not_found("站点不存在"))?;
-    let cached_user_id = site_with_stats.reusable_user_id();
-    let site = site_with_stats.site_record();
     let settings = state.db.get_settings().await?;
-    let client = client_factory::resolve_site_client(settings.proxy.as_deref(), site.use_proxy)
-        .map_err(|e| ApiError::internal(format!("创建 HTTP 客户端失败: {}", e)))?;
-    let adapter = site_factory::create_adapter_with_cached_user_id(&site, client, cached_user_id)
-        .map_err(ApiError::bad_request)?;
-    let result = adapter
-        .test_connection()
-        .await
-        .map_err(|e| ApiError::internal(e))?;
+    let result = async {
+        let client = client_factory::resolve_site_client(settings.proxy.as_deref(), site.use_proxy)
+            .map_err(|error| format!("创建 HTTP 客户端失败: {}", error))?;
+        let adapter = site_factory::create_adapter_with_cached_user_id(
+            &site.site_record(),
+            client,
+            site.reusable_user_id(),
+        )?;
+        adapter.get_user_stats().await
+    }
+    .await;
+    let result = match result {
+        Ok(stats) => {
+            state
+                .db
+                .upsert_site_stats_success(id, &stats, &checked_at)
+                .await?;
+            crate::site::SiteSyncResult {
+                success: true,
+                message: "站点账户数据已同步".into(),
+                user_stats: Some(stats),
+            }
+        }
+        Err(error) => {
+            state
+                .db
+                .upsert_site_stats_error(id, &error, &checked_at)
+                .await?;
+            crate::site::SiteSyncResult {
+                success: false,
+                message: error,
+                user_stats: None,
+            }
+        }
+    };
     Ok(Json(result))
 }
 

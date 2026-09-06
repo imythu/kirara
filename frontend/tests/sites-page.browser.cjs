@@ -18,6 +18,7 @@ const sites = [
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     page.setDefaultTimeout(7000);
     const pageErrors = [], writes = [];
+    let siteListReads = 0;
     let listFailure = true, overviewFailure = true, headersFailure = false, saveFailure = false, deleteFailure = true, empty = false;
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.route('**/api/**', async route => {
@@ -26,13 +27,19 @@ const sites = [
       if (request.method() !== 'GET') writes.push({ path, method: request.method(), body: request.postData() ? request.postDataJSON() : null });
       if (path === '/api/sites') {
         if (request.method() === 'POST') { body = saveFailure ? { error: '保存失败，请稍后重试' } : { id: 4 }; status = saveFailure ? 500 : 200; }
-        else { body = listFailure ? { error: '测试服务暂时不可用' } : empty ? [] : sites; status = listFailure ? 500 : 200; }
+        else { siteListReads++; body = listFailure ? { error: '测试服务暂时不可用' } : empty ? [] : sites; status = listFailure ? 500 : 200; }
+      } else if (path === '/api/sites/search') {
+        const query = new URL(request.url()).searchParams.get('q') || '';
+        const records = empty ? [] : sites.filter(site => site.name.includes(query));
+        body = { items: records.map(record => ({ record, matched_by: [] })), total: records.length, page: 1, page_size: 20, parsed_filters: [], semantic_status: 'not_used' };
       } else if (path === '/api/sites/stats-overview') { body = overviewFailure ? { error: '总览服务暂时不可用' } : sites; status = overviewFailure ? 500 : 200; }
       else if (path === '/api/sites/catalog') body = [{ ptd_id: 'demo', name: '预设测试站', base_url: 'https://preset.example.test', aliases: ['演示'], site_type: 'nexusphp' }];
       else if (path === '/api/sites/ptd-backup') body = { configured: false, enabled: false, password_configured: false, webdav_url: '', username: '', backup_interval_hours: 24, site_identifiers: { '1': 'demo' }, last_error: null };
       else if (path.endsWith('/request-headers')) { body = headersFailure ? { error: '请求头服务暂时不可用' } : [{ name: 'X-Saved', value: 'preserve-me' }]; status = headersFailure ? 500 : 200; }
       else if (path.endsWith('/credentials')) { body = { error: '凭据暂时无法读取' }; status = 500; }
-      else if (path.endsWith('/test')) body = { success: false, message: '测试认证失败，请更新凭据', user_stats: null };
+      else if (path.endsWith('/sync')) body = path === '/api/sites/1/sync'
+        ? { success: true, message: '站点账户数据已同步', user_stats: stats }
+        : { success: false, message: '测试认证失败，请更新凭据', user_stats: null };
       else if (request.method() === 'DELETE') { body = deleteFailure ? { error: '删除失败，请重试' } : { ok: true }; status = deleteFailure ? 500 : 200; }
       else if (request.method() === 'PUT') body = { ok: true };
       else if (path === '/api/sites/refresh-all') body = { refreshing: false };
@@ -68,10 +75,18 @@ const sites = [
     await page.getByLabel('搜索站点', { exact: true }).fill('不存在');
     await visibleButton('清除筛选').click();
     assert.equal(await page.getByLabel('搜索站点', { exact: true }).inputValue(), '');
-    await visibleButton('测试连接失败测试站连接').click();
-    await dialog('测试连接').getByText('测试认证失败，请更新凭据', { exact: true }).waitFor();
-    await dialog('测试连接').getByRole('button', { name: '重试测试' }).click();
-    await dialog('测试连接').getByRole('button', { name: '编辑连接配置' }).click();
+    const readsBeforeSync = siteListReads;
+    await visibleButton('同步云海测试站账户数据').click();
+    await dialog('同步站点').getByText('站点账户数据已同步', { exact: true }).waitFor();
+    await close('同步站点');
+    await visibleButton('同步云海测试站账户数据').waitFor();
+    assert.ok(siteListReads > readsBeforeSync, 'sync reloads persisted site statistics');
+    assert.ok(writes.some(write => write.path === '/api/sites/1/sync' && write.method === 'POST'));
+    assert.ok(!writes.some(write => /^\/api\/sites\/\d+\/test$/.test(write.path)));
+    await visibleButton('同步连接失败测试站账户数据').click();
+    await dialog('同步站点').getByText('测试认证失败，请更新凭据', { exact: true }).waitFor();
+    await dialog('同步站点').getByRole('button', { name: '重新同步' }).click();
+    await dialog('同步站点').getByRole('button', { name: '编辑连接配置' }).click();
     await dialog('编辑站点').getByLabel('API Key', { exact: true }).waitFor();
     await close('编辑站点');
     await visibleButton('添加站点').click();
@@ -167,6 +182,7 @@ const sites = [
       await page.setViewportSize({ width, height: 844 });
       await noOverflow(width);
       const failedCard = page.getByRole('article', { name: '连接失败测试站', exact: true });
+      if ((await failedCard.locator('details').getAttribute('open')) === null) await failedCard.locator('summary').click();
       await failedCard.getByText('认证已失效，请更新凭据后重新测试连接。', { exact: true }).waitFor();
       assert.equal(await failedCard.getByRole('button', { name: '编辑连接失败测试站', exact: true }).evaluate(el => el.getBoundingClientRect().height >= 44), true);
       if (width === 390) await capture('mobile');

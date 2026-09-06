@@ -315,11 +315,12 @@ paths:
                 items: {$ref: '#/components/schemas/SiteRequestHeader'}
         default: {$ref: '#/components/responses/Error'}
 
-  /api/sites/{id}/test:
+  /api/sites/{id}/sync:
     post:
+      description: Manually fetch and persist account statistics for one site. Failed syncs preserve previous statistics and record the error.
       parameters: [{$ref: '#/components/parameters/IdPath'}]
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/SiteTestResult'}}}}
+        '200': {description: Sync result, content: {application/json: {schema: {$ref: '#/components/schemas/SiteSyncResult'}}}}
         default: {$ref: '#/components/responses/Error'}
 
   /api/sites/{id}/stats:
@@ -1289,7 +1290,7 @@ components:
         hnr_unsatisfied: {type: integer, format: int64, nullable: true}
         hnr_pre_warning: {type: integer, format: int64, nullable: true}
 
-    SiteTestResult:
+    SiteSyncResult:
       type: object
       properties:
         success: {type: boolean}

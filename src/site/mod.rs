@@ -425,7 +425,7 @@ pub struct TorrentAttributes {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct SiteTestResult {
+pub struct SiteSyncResult {
     pub success: bool,
     pub message: String,
     pub user_stats: Option<UserStats>,
@@ -433,10 +433,6 @@ pub struct SiteTestResult {
 
 /// 站点适配器 trait
 pub trait SiteAdapter: Send + Sync {
-    fn test_connection(
-        &self,
-    ) -> Pin<Box<dyn Future<Output = Result<SiteTestResult, String>> + Send + '_>>;
-
     fn get_user_stats(
         &self,
     ) -> Pin<Box<dyn Future<Output = Result<UserStats, String>> + Send + '_>>;

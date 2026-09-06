@@ -8,9 +8,7 @@ use scraper::{Element, Html, Selector};
 use serde_json::Value;
 use tracing::{debug, warn};
 
-use super::{
-    SiteAdapter, SiteAuth, SiteTestResult, TorrentAttributes, UserStats, UserStatsDetails,
-};
+use super::{SiteAdapter, SiteAuth, TorrentAttributes, UserStats, UserStatsDetails};
 use std::error::Error as _;
 use std::future::Future;
 use std::pin::Pin;
@@ -621,25 +619,6 @@ impl NexusPhpAdapter {
 }
 
 impl SiteAdapter for NexusPhpAdapter {
-    fn test_connection(
-        &self,
-    ) -> Pin<Box<dyn Future<Output = Result<SiteTestResult, String>> + Send + '_>> {
-        Box::pin(async move {
-            match self.get_user_stats().await {
-                Ok(stats) => Ok(SiteTestResult {
-                    success: true,
-                    message: format!("连接成功，用户: {}", stats.username),
-                    user_stats: Some(stats),
-                }),
-                Err(e) => Ok(SiteTestResult {
-                    success: false,
-                    message: e,
-                    user_stats: None,
-                }),
-            }
-        })
-    }
-
     fn get_user_stats(
         &self,
     ) -> Pin<Box<dyn Future<Output = Result<UserStats, String>> + Send + '_>> {
