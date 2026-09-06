@@ -396,20 +396,26 @@ mutation CheckIn($cookies: [CookieInput!]! $url: String! {submit_variables}
  beforeClick: html {{ html }}
  pending: ifnot(selector: "html[data-rflush-stop]") {{
   {solve}
-  checkAfter: evaluate(content: $guard) {{ value }}
-  afterSolve: html {{ html }}
-  pending: ifnot(selector: "html[data-rflush-stop]") {{
-   submit: if(selector: $submitCondition) {{
-    {submit_action}
-   }}
-   waitAfter: waitForTimeout(time: $postClickWaitMs) {{ time }}
-  }}
  }}
+ checkAfter: evaluate(content: $guard) {{ value }}
+ afterSolve: html {{ html }}
+ submit: if(selector: $submitCondition) {{
+  {submit_action}
+ }}
+ waitAfter: waitForTimeout(time: $postClickWaitMs) {{ time }}
  html {{ html }}
  result: evaluate(content: $resultScript) {{ value }}
 }}
 "#
     )
+}
+
+fn browserless_submit_condition(selector: &str, image_captcha: bool) -> String {
+    if image_captcha {
+        "html:not([data-rflush-stop])[data-rflush-image-ready]".to_string()
+    } else {
+        format!("html:not([data-rflush-stop]) :is({selector})")
+    }
 }
 
 fn form_submit_script(selector: &str, method: &str, timeout: u64) -> String {
@@ -637,6 +643,11 @@ async fn run_browserless_sign_in(
         .saturating_add(timings.action_timeout.saturating_mul(2))
         .saturating_add(timings.post_click_wait_ms)
         .saturating_add(30_000);
+    // Only top-level BQL mutations are ordered. In a nested conditional,
+    // a sibling wait can finish before the conditional's click executes.
+    // Keep submit and its wait at the top level, and include both guards in
+    // the selector so stopped tasks and unsolved image captchas cannot submit.
+    let submit_condition = browserless_submit_condition(selector, image_captcha);
     let result = post_browserless_bql(
         service_config,
         &browserless_sign_in_query(image_captcha, script_submit),
@@ -646,7 +657,7 @@ async fn run_browserless_sign_in(
             "guard": result_rule_script(&task_config, true, image_captcha.then_some(task_config.captcha_input_selector.as_str())),
             "submitScript": form_submit_script(selector, &task_config.submit_method, timings.action_timeout),
             "resultScript": result_rule_script(&task_config, false, None),
-            "submitCondition": if image_captcha { "html[data-rflush-image-ready]" } else { selector },
+            "submitCondition": submit_condition,
             "captchaSelector": task_config.captcha_selector,
             "captchaInputSelector": task_config.captcha_input_selector,
             "url": target_url.as_str(),
@@ -879,6 +890,7 @@ fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
 fn summarize_configured_result(result: &Value, configured: bool) -> Result<SignInOutput, String> {
     for path in [
         "/data/result/value",
+        "/data/checkAfter/value",
         "/data/pending/checkAfter/value",
         "/data/checkBefore/value",
     ] {
@@ -913,6 +925,7 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
     // after a selector timeout. Inspect visible outcome text before action errors.
     for path in [
         "/data/html/html",
+        "/data/afterSolve/html",
         "/data/pending/afterSolve/html",
         "/data/beforeClick/html",
     ] {
@@ -943,6 +956,9 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
     }
     if data.get("click").is_none_or(Value::is_null)
         && data.pointer("/submit/click").is_none_or(Value::is_null)
+        && data
+            .pointer("/submit/submitForm/value")
+            .is_none_or(Value::is_null)
         && data
             .pointer("/pending/pending/submit/click")
             .is_none_or(Value::is_null)
@@ -1999,6 +2015,120 @@ pub fn normalize_sign_in_method(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// Optional live regression: the fixture stays in about:blank and never
+    /// sends site cookies or submits to a real tracker. The JSON file contains
+    /// {"browserless":{"address":"...","token":"..."}}.
+    #[tokio::test]
+    #[ignore = "requires BROWSERLESS_TEST_CONFIG pointing to a private JSON file"]
+    async fn browserless_live_waits_after_conditional_submit() {
+        let path = std::env::var("BROWSERLESS_TEST_CONFIG").expect("BROWSERLESS_TEST_CONFIG");
+        let config: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let service: BrowserlessConfig =
+            serde_json::from_value(config["browserless"].clone()).unwrap();
+        // Keep the production query's control flow. Replace navigation and
+        // CAPTCHA solving with a local fixture and a deterministic short wait.
+        let query = browserless_sign_in_query(false, false)
+            .replace(
+                "goto(url: $url, waitUntil: networkIdle) { status }",
+                "goto: evaluate(content: $url) { value }",
+            )
+            .replace(
+                "solve(type: cloudflare, timeout: $solveTimeout) { found solved time }",
+                "solve: waitForTimeout(time: $solveTimeout) { time }",
+            );
+        for (already, image_input) in [(false, None), (true, None), (false, Some("#answer"))] {
+            let task = BrowserlessTaskConfig {
+                already_keywords: "今日已经签到".into(),
+                ..Default::default()
+            };
+            let setup = format!(
+                r#"(() => {{
+ document.documentElement.removeAttribute('data-rflush-stop');
+ document.documentElement.removeAttribute('data-rflush-outcome');
+ window.testClicks = 0;
+ document.body.innerHTML = '<input type="submit" value="立即签到"><input id="answer" name="imagestring"><p id="outcome">{}</p>';
+ document.querySelector('input').onclick = () => {{
+  window.testClicks++;
+  setTimeout(() => {{ document.querySelector('#outcome').textContent = '签到成功'; }}, 800);
+ }};
+ return 'ready';
+}})()"#,
+                if already {
+                    "今日已经签到"
+                } else {
+                    "待签到"
+                }
+            );
+            let result = post_browserless_bql(
+                &service,
+                &query.replace(
+                    "result: evaluate(content: $resultScript) { value }",
+                    "result: evaluate(content: $resultScript) { value }\n clicks: evaluate(content: \"String(window.testClicks)\") { value }",
+                ),
+                "CheckIn",
+                json!({
+                    "cookies": [], "url": setup,
+                    "guard": result_rule_script(&task, true, image_input),
+                    "resultScript": result_rule_script(&task, false, None),
+                    "selector": task.selector,
+                    "submitCondition": browserless_submit_condition(&task.selector, image_input.is_some()),
+                    "waitMs": 1, "solveTimeout": 50,
+                    "actionTimeout": 3000, "postClickWaitMs": 1500,
+                }),
+                Duration::from_secs(30),
+            ).await.unwrap();
+            assert!(
+                result.get("errors").is_none(),
+                "BQL fixture returned errors"
+            );
+            if image_input.is_none() {
+                let output = summarize_configured_result(&result, false).unwrap();
+                assert_eq!(output.status, if already { "already" } else { "success" });
+            } else {
+                assert!(result.pointer("/data/submit").unwrap().is_null());
+            }
+            assert_eq!(
+                result.pointer("/data/clicks/value").and_then(Value::as_str),
+                Some(if already || image_input.is_some() {
+                    "0"
+                } else {
+                    "1"
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn browserless_flat_results_preserve_guards_and_submission_errors() {
+        let guarded = json!({"data": {
+            "checkAfter": {"value": r#"{"status":"already","message":"guard"}"#},
+            "submit": null
+        }});
+        assert_eq!(
+            summarize_configured_result(&guarded, true).unwrap().status,
+            "already"
+        );
+        let solved_page = json!({"data": {
+            "afterSolve": {"html": "<body>签到成功</body>"}, "submit": null
+        }});
+        assert_eq!(
+            summarize_browserless_sign_in(&solved_page).unwrap().status,
+            "success"
+        );
+        for submit in [
+            json!({"click": {"time": 10}}),
+            json!({"submitForm": {"value": "200"}}),
+        ] {
+            let result = json!({"data": {
+                "goto": {"status": 200}, "submit": submit,
+                "html": {"html": "<body>立即签到</body>"}
+            }});
+            let output = summarize_browserless_sign_in(&result).unwrap();
+            assert_eq!(output.status, "failed");
+            assert!(output.message.contains("仍停留"));
+        }
+    }
+
     #[test]
     fn configured_results_require_a_match_and_preserve_outcomes() {
         for status in ["success", "already", "failed"] {
