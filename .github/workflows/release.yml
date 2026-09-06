@@ -15,6 +15,7 @@ on:
       - "Cargo.lock"
       - "docker/**"
       - ".github/workflows/release.yml"
+      - ".github/workflows/search.yml"
   workflow_dispatch:
     inputs:
       version:
@@ -41,30 +42,10 @@ permissions:
 
 jobs:
   search-assets:
-    name: Test local search and assets
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: search-encoder-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-      - name: Test native encoder parity
-        run: cargo test --locked --release --package search-encoder
-      - name: Verify checked-in catalog and vectors
-        run: cargo run --locked --release --package search-encoder --example assets -- verify
-      - name: Test search database and API behavior
-        env:
-          CARGO_PROFILE_DEV_DEBUG: "0"
-          CARGO_PROFILE_TEST_DEBUG: "0"
-        run: |
-          # The separate frontend job validates and supplies the actual UI bundle.
-          mkdir -p frontend/dist
-          cargo test --locked --package kirara --lib search::
+    name: Validate search before manual release
+    needs: prepare
+    if: needs.prepare.outputs.release_kind == 'manual'
+    uses: ./.github/workflows/search.yml
 
   prepare:
     name: Determine release metadata
@@ -218,12 +199,23 @@ jobs:
         with:
           name: frontend-dist
           path: frontend/dist
+          if-no-files-found: error
           retention-days: 7
 
   build:
     name: Build ${{ matrix.kind }} ${{ matrix.target }}
     needs: [prepare, frontend, search-assets]
+    # Snapshot search checks run independently; manual releases must pass them.
+    if: >-
+      ${{ !cancelled() &&
+          needs.prepare.result == 'success' &&
+          needs.frontend.result == 'success' &&
+          ((needs.prepare.outputs.release_kind == 'snapshot' && needs.search-assets.result == 'skipped') ||
+           (needs.prepare.outputs.release_kind == 'manual' && needs.search-assets.result == 'success')) }}
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -248,6 +240,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install cross
         if: matrix.use_cross
@@ -255,22 +249,14 @@ jobs:
         with:
           tool: cross
 
-      - name: Cache cargo registry
-        uses: actions/cache@v5
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-cargo-
+          key: ${{ matrix.target }}
+          cache-bin: false
 
       - name: Test backend on desktop platform
         if: matrix.kind == 'desktop'
-        env:
-          CARGO_PROFILE_DEV_DEBUG: "0"
-          CARGO_PROFILE_TEST_DEBUG: "0"
         run: cargo test --locked --package kirara --lib --tests --target ${{ matrix.target }}
 
       - name: Test native encoder on desktop platform
@@ -279,9 +265,6 @@ jobs:
 
       - name: Test desktop bridge on desktop platform
         if: matrix.kind == 'desktop'
-        env:
-          CARGO_PROFILE_DEV_DEBUG: "0"
-          CARGO_PROFILE_TEST_DEBUG: "0"
         run: cargo test --locked --package kirara-desktop --tests --target ${{ matrix.target }}
 
       - name: Build Linux binary
@@ -338,6 +321,9 @@ jobs:
         with:
           name: kirara-${{ matrix.target }}
           path: ${{ env.ARCHIVE }}
+          if-no-files-found: error
+          # Archives and installers are already compressed.
+          compression-level: 0
           retention-days: 7
 
   docker-linux:
@@ -366,6 +352,7 @@ jobs:
           chmod +x kirara
 
       - name: Set up QEMU
+        if: matrix.platform != 'linux/amd64'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -401,6 +388,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
+          cache-from: type=gha,scope=kirara-${{ matrix.suffix }}
+          cache-to: type=gha,scope=kirara-${{ matrix.suffix }},mode=min,ignore-error=true
 
   docker-linux-manifest:
     name: Docker linux manifest
