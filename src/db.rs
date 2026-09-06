@@ -18,8 +18,8 @@ use crate::stats::{DownloaderSpeedSnapshot, TaskStatsSnapshot};
 mod media;
 mod openlist;
 mod ptd_backup;
-mod webdav;
 pub mod search;
+mod webdav;
 
 pub use openlist::{
     ManualMediaRelocationTarget, MediaRelocationJob, OpenListConfig, OpenListPathMapping,
@@ -658,7 +658,7 @@ impl Database {
                     serde_json::to_string(&browserless.result_rules).expect("serializable result rules"),
                 ],
             )
-            .map_err(sql_error)?;
+            .map_err(sign_in_write_error)?;
             Ok(conn.last_insert_rowid())
         })
         .await
@@ -707,7 +707,7 @@ impl Database {
                     id,
                 ],
             )
-            .map_err(sql_error)?;
+            .map_err(sign_in_write_error)?;
             Ok(())
         })
         .await
@@ -3416,6 +3416,7 @@ impl Database {
                 [],
             )
             .map_err(sql_error)?;
+            ensure_unique_sign_in_site(&conn)?;
             for column in [
                 "cloakbrowser_license_key",
                 "cloakbrowser_headless",
@@ -3668,6 +3669,53 @@ fn join_error(error: tokio::task::JoinError) -> AppError {
     AppError::Database {
         message: format!("database task join error: {}", error),
     }
+}
+
+// Archive duplicate configurations before merging their history. The whole upgrade is atomic.
+fn ensure_unique_sign_in_site(conn: &Connection) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction().map_err(sql_error)?;
+    let migrated: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_sign_in_tasks_unique_site')",
+        [], |row| row.get(0),
+    ).map_err(sql_error)?;
+    if migrated {
+        return Ok(());
+    }
+
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS sign_in_tasks_duplicate_archive AS
+             SELECT * FROM sign_in_tasks WHERE 0;
+         INSERT INTO sign_in_tasks_duplicate_archive
+             SELECT * FROM sign_in_tasks WHERE id NOT IN
+                 (SELECT MIN(id) FROM sign_in_tasks GROUP BY site_id);
+         UPDATE sign_in_records SET task_id = (
+             SELECT MIN(kept.id) FROM sign_in_tasks kept
+             WHERE kept.site_id = (SELECT old.site_id FROM sign_in_tasks old
+                                   WHERE old.id = sign_in_records.task_id)
+         ) WHERE task_id IN (SELECT id FROM sign_in_tasks WHERE id NOT IN
+                             (SELECT MIN(id) FROM sign_in_tasks GROUP BY site_id));
+         DELETE FROM sign_in_tasks WHERE id NOT IN
+             (SELECT MIN(id) FROM sign_in_tasks GROUP BY site_id);
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_sign_in_tasks_unique_site ON sign_in_tasks(site_id);"
+    ).map_err(sql_error)?;
+    tx.commit().map_err(sql_error)
+}
+
+fn sign_in_write_error(error: rusqlite::Error) -> AppError {
+    if let rusqlite::Error::SqliteFailure(_, Some(message)) = &error {
+        if message == "UNIQUE constraint failed: sign_in_tasks.site_id" {
+            return AppError::InvalidConfig {
+                message: "该站点已有签到任务（包括已暂停任务），请编辑现有任务，不可重复创建。"
+                    .into(),
+            };
+        }
+        if message == "UNIQUE constraint failed: sign_in_tasks.name" {
+            return AppError::InvalidConfig {
+                message: "签到任务名称已存在，请使用其他名称。".into(),
+            };
+        }
+    }
+    sql_error(error)
 }
 
 fn sql_error(error: rusqlite::Error) -> AppError {
@@ -3964,6 +4012,120 @@ mod migration_tests {
     use super::*;
     use rusqlite::Connection;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn sign_in_site_uniqueness_covers_concurrency_updates_and_paused_tasks() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).await.unwrap();
+        let site = db
+            .create_site("one", "nexusphp", "https://one.example", "{}", "[]", false)
+            .await
+            .unwrap();
+        let other_site = db
+            .create_site("two", "nexusphp", "https://two.example", "{}", "[]", false)
+            .await
+            .unwrap();
+        let request = SignInTaskRequest {
+            name: "first".into(),
+            site_id: site,
+            cron_expression: "0 0 0/8 * * *".into(),
+            browser: None,
+            sign_in_method: None,
+            browserless: None,
+        };
+        let mut other = request.clone();
+        other.name = "second".into();
+        let (a, b) = tokio::join!(
+            db.create_sign_in_task(&request),
+            db.create_sign_in_task(&other)
+        );
+        assert_ne!(a.is_ok(), b.is_ok());
+        let id = a.or(b).unwrap();
+        db.set_sign_in_task_enabled(id, false).await.unwrap();
+        let error = db
+            .create_sign_in_task(&other)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("该站点已有签到任务"), "{error}");
+        let mut edit = request.clone();
+        edit.name = "renamed".into();
+        db.update_sign_in_task(id, &edit).await.unwrap();
+        other.site_id = other_site;
+        other.name = "other".into();
+        let other_id = db.create_sign_in_task(&other).await.unwrap();
+        other.site_id = site;
+        assert!(
+            db.update_sign_in_task(other_id, &other)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("该站点已有签到任务")
+        );
+        assert_eq!(
+            db.get_sign_in_task(other_id)
+                .await
+                .unwrap()
+                .unwrap()
+                .site_id,
+            other_site
+        );
+        db.delete_sign_in_task(id).await.unwrap();
+        edit.name = "replacement".into();
+        db.create_sign_in_task(&edit).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn sign_in_duplicate_migration_archives_configuration_and_preserves_history() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).await.unwrap();
+        let site = db
+            .create_site("one", "nexusphp", "https://one.example", "{}", "[]", false)
+            .await
+            .unwrap();
+        let conn = open_connection(&db.path).unwrap();
+        conn.execute_batch("DROP INDEX idx_sign_in_tasks_unique_site;")
+            .unwrap();
+        for (id, name) in [(1, "keep"), (2, "duplicate")] {
+            conn.execute("INSERT INTO sign_in_tasks(id,name,site_id,cron_expression,lightpanda_token,created_at,updated_at) VALUES(?1,?2,?3,'0 0 0/8 * * *','','now','now')", params![id,name,site]).unwrap();
+            conn.execute("INSERT INTO sign_in_records(task_id,site_id,site_name,started_at,finished_at,status,message) VALUES(?1,?2,'one','now','now','success','preserve me')",params![id,site]).unwrap();
+        }
+        drop(conn);
+        drop(db);
+        let reopened = Database::open(dir.path()).await.unwrap();
+        let tasks = reopened.list_sign_in_tasks().await.unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].name, "keep");
+        let conn = open_connection(&reopened.path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM sign_in_records WHERE task_id=1",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT name FROM sign_in_tasks_duplicate_archive",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "duplicate"
+        );
+        ensure_unique_sign_in_site(&conn).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM sign_in_tasks_duplicate_archive",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
 
     #[tokio::test]
     async fn kirara_reuses_legacy_database_without_losing_settings() {

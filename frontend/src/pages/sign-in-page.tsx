@@ -9,6 +9,7 @@ import {
   FlaskConical,
   History,
   Loader2,
+  Layers,
   Pause,
   Play,
   Plus,
@@ -22,6 +23,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { SignInCreatePanel, type SignInSiteOption } from "@/components/sign-in-create-panel";
 import { Button } from "@/components/ui/button";
 import { SearchFeedback, SearchPagination } from "@/components/search-controls";
 import { useServerSearch } from "@/lib/server-search";
@@ -168,6 +170,7 @@ export function SignInPage() {
   const [configFeedback, setConfigFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [savingBrowser, setSavingBrowser] = useState(false);
   const [probingBrowser, setProbingBrowser] = useState(false);
+  const [createMode, setCreateMode] = useState<"single" | "batch" | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<SignInTaskRequest>({ ...emptyForm });
@@ -337,13 +340,13 @@ export function SignInPage() {
     requestAnimationFrame(() => document.getElementById(`sign-in-${nextView}-tab`)?.focus());
   }
 
-  function openAdd() {
-    const preset = siteSignInPreset(nexusSites[0]);
+  function openAdd(site: SiteRecord) {
+    const preset = siteSignInPreset(site);
     setEditingId(null);
     setForm({
       ...emptyForm,
-      site_id: nexusSites[0]?.id ?? 0,
-      name: nexusSites[0]?.name ?? "",
+      site_id: site.id,
+      name: site.name,
       browser: preset?.browser ?? "lightpanda",
       sign_in_method: preset?.sign_in_method ?? "open_page",
       browserless: { ...(preset?.browserless ?? DEFAULT_BROWSERLESS_TASK) },
@@ -366,6 +369,7 @@ export function SignInPage() {
   }
 
   function closeForm() {
+    if (submitting) return;
     setFormOpen(false);
     setEditingId(null);
     setSubmitError("");
@@ -435,6 +439,10 @@ export function SignInPage() {
       setSubmitError("名称不能为空");
       return;
     }
+    if (tasks.some(task => task.site_id === form.site_id && task.id !== editingId)) {
+      setSubmitError("该站点已有签到任务（包括已暂停任务），请编辑现有任务。");
+      return;
+    }
     if (!form.site_id) {
       setSubmitError("请选择 NexusPHP 站点");
       return;
@@ -473,7 +481,9 @@ export function SignInPage() {
         await api("/api/sign-in-tasks", { method: "POST", body: JSON.stringify(body) });
         setActiveView("tasks");
       }
-      closeForm();
+      setFormOpen(false);
+      setEditingId(null);
+      setCreateMode(null);
       setMessage(editingId !== null ? "自动签到任务已更新" : "自动签到任务已创建");
       loadData();
     } catch (error) {
@@ -508,6 +518,19 @@ export function SignInPage() {
       setDeleting(false);
     }
   }
+
+  const createOptions: SignInSiteOption[] = nexusSites.map(site => {
+    const profile = siteSignInPreset(site);
+    const reason = tasks.some(task => task.site_id === site.id) ? "已有任务"
+      : !site.auth_configured ? "缺少登录凭据"
+      : !profile ? "需手动配置"
+      : !isBrowserConfigured(settings, profile.browser) ? `请先配置 ${browserLabel(profile.browser)}` : "";
+    return { site, reason, request: profile ? {
+      name: site.name, site_id: site.id, cron_expression: intervalToCron(8),
+      browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless,
+    } : null };
+  });
+  const selectableSites = nexusSites.filter(site => !tasks.some(task => task.site_id === site.id && task.id !== editingId));
 
   return (
     <div className="space-y-6">
@@ -546,14 +569,20 @@ export function SignInPage() {
                 <RefreshCw className="mr-2 h-4 w-4" />
                 刷新
               </Button>
-              <Button onClick={openAdd}>
+              <Button id="sign-in-batch-add" variant="outline" disabled={loading || !settings || createMode !== null} onClick={() => setCreateMode("batch")}>
+                <Layers className="mr-2 h-4 w-4" />批量创建签到任务
+              </Button>
+              <Button id="sign-in-single-add" disabled={loading || !settings || createMode !== null} onClick={() => setCreateMode("single")}>
                 <Plus className="mr-2 h-4 w-4" />
-                添加任务
+                新增签到任务
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {createMode ? <SignInCreatePanel key={createMode} mode={createMode} options={createOptions} tasks={tasks}
+            onClose={() => { const button = createMode === "batch" ? "sign-in-batch-add" : "sign-in-single-add"; setCreateMode(null); requestAnimationFrame(() => document.getElementById(button)?.focus()); }}
+            onCreated={message => { setMessage(message); setActiveView("tasks"); loadData(); }} onManual={openAdd} /> : null}
           <div
             className="grid grid-cols-2 gap-2 rounded-xl bg-surface-container/70 p-1.5"
             role="tablist"
@@ -1021,7 +1050,7 @@ export function SignInPage() {
                 id="sign-in-site"
                 value={form.site_id ? String(form.site_id) : ""}
                 onChange={(value) => selectSite(value === "" ? 0 : Number(value))}
-                options={nexusSites.length === 0 ? [{ value: "", label: "请先添加 NexusPHP 站点" }] : nexusSites.map((site) => ({ value: String(site.id), label: `${site.name} · #${site.id} (${site.site_type})` }))}
+                options={selectableSites.length === 0 ? [{ value: "", label: "暂无可创建任务的站点" }] : selectableSites.map((site) => ({ value: String(site.id), label: `${site.name} · #${site.id} (${site.site_type})` }))}
               />
             </div>
             <div className="space-y-2">
