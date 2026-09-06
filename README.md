@@ -36,8 +36,8 @@
 
 | 系统 | 安装包 | 使用方式 |
 | --- | --- | --- |
-| Windows x64 | `kirara-2.4.1-x86_64-pc-windows-msvc-setup.exe` | 运行安装程序，完成后从开始菜单打开 Kirara |
-| macOS Apple Silicon | `kirara-2.4.1-aarch64-apple-darwin.dmg` | 打开映像，将 Kirara 拖入“应用程序”，然后打开 |
+| Windows x64 | `kirara-2.4.2-x86_64-pc-windows-msvc-setup.exe` | 运行安装程序，完成后从开始菜单打开 Kirara |
+| macOS Apple Silicon | `kirara-2.4.2-aarch64-apple-darwin.dmg` | 打开映像，将 Kirara 拖入“应用程序”，然后打开 |
 
 桌面应用启动后直接显示管理界面，无需打开终端或浏览器。关闭窗口后，应用会隐藏到 Windows 系统托盘或 macOS 菜单栏，自动扫描、下载队列和定时任务继续在后台运行。
 
@@ -85,7 +85,7 @@ http://127.0.0.1:3000
 docker run --name kirara \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/data:/data \
-  ghcr.io/imythu/kirara:2.4.1
+  ghcr.io/imythu/kirara:2.4.2
 ```
 
 自动构建提供 `latest-beta`（Linux amd64）；正式版提供 `latest`（Linux amd64 / arm64）。
