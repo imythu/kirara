@@ -921,12 +921,21 @@ fn parse_labeled_number(text: &str, labels: &[&str]) -> Option<f64> {
 }
 
 fn parse_labeled_integer(text: &str, labels: &[&str]) -> Option<u32> {
-    parse_labeled_number(text, labels).and_then(|value| {
-        if value.is_finite() && value >= 0.0 && value <= u32::MAX as f64 {
-            Some(value as u32)
-        } else {
-            None
-        }
+    // Counts must immediately follow their label. The generic number parser
+    // also matches "Seeding Bonus Per Hour", and truncates fractional rates.
+    labels.iter().find_map(|label| {
+        let expression = format!(
+            r"(?i){}\s*[:：]?\s*([0-9][0-9,]*)(?:$|[\s)）;；|])",
+            escape(label)
+        );
+        Regex::new(&expression)
+            .ok()?
+            .captures(text)?
+            .get(1)?
+            .as_str()
+            .replace(',', "")
+            .parse()
+            .ok()
     })
 }
 
@@ -2064,6 +2073,36 @@ mod tests {
             parse_labeled_size(traditional, &["下載量"]),
             Some(2_147_483_648)
         );
+    }
+
+    #[test]
+    fn peer_counts_do_not_read_bonus_rates_or_other_seeding_metrics() {
+        for text in [
+            "Seeding Bonus Per Hour: 64.892",
+            "Seeding Points: 1234",
+            "Seeding Time: 3600",
+            "Seeding Size: 64 GiB",
+            "当前做种 时魔: 64.892",
+            "Seeding: 64.892",
+        ] {
+            assert_eq!(
+                parse_labeled_integer(text, &["当前做种", "Seeding"]),
+                None,
+                "{text}"
+            );
+        }
+        assert_eq!(
+            parse_labeled_integer(
+                "Seeding Bonus Per Hour: 64.892 Seeding: 69 Leeching: 1",
+                &["Seeding"]
+            ),
+            Some(69)
+        );
+        assert_eq!(
+            parse_labeled_integer("当前做种：1,234", &["当前做种"]),
+            Some(1234)
+        );
+        assert_eq!(parse_labeled_integer("Seeding: 0", &["Seeding"]), Some(0));
     }
 
     #[test]

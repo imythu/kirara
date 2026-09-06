@@ -1,3 +1,4 @@
+mod search;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
@@ -195,6 +196,15 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
     let media_scheduler = Arc::clone(&state.media_scheduler);
     let self_use = state.self_use;
     Router::new()
+        .route("/api/sites/search", get(search::sites))
+        .route("/api/sign-in-tasks/search", get(search::sign_tasks))
+        .route("/api/brush-tasks/search", get(search::brush_tasks))
+        .route("/api/sign-in-records/search", get(search::records))
+        .route("/api/site-catalog/search", get(search::catalog))
+        .route(
+            "/api/sites/{id}/search-binding",
+            get(search::get_binding).put(search::put_binding),
+        )
         .route("/api/features", get(get_features))
         .route("/api/settings", get(get_settings).put(update_settings))
         // 站点管理

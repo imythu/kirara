@@ -18,6 +18,7 @@ use crate::stats::{DownloaderSpeedSnapshot, TaskStatsSnapshot};
 mod media;
 mod openlist;
 mod ptd_backup;
+pub mod search;
 
 pub use openlist::{
     ManualMediaRelocationTarget, MediaRelocationJob, OpenListConfig, OpenListPathMapping,
@@ -2300,7 +2301,7 @@ impl Database {
 
                 CREATE TABLE IF NOT EXISTS sites (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
                     site_type TEXT NOT NULL,
                     base_url TEXT NOT NULL,
                     auth_config TEXT NOT NULL,
@@ -2308,6 +2309,15 @@ impl Database {
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS site_search_bindings (
+                    site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+                    mode TEXT NOT NULL DEFAULT 'auto' CHECK(mode IN ('auto','manual','none')),
+                    catalog_id TEXT,
+                    matched_host TEXT,
+                    catalog_revision TEXT NOT NULL DEFAULT ''
+                );
+                INSERT OR IGNORE INTO site_search_bindings(site_id) SELECT id FROM sites;
 
                 CREATE TABLE IF NOT EXISTS site_stats (
                     site_id INTEGER PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
@@ -2736,6 +2746,8 @@ impl Database {
                 conn.execute("UPDATE sites SET request_headers = ?1", [defaults])
                     .map_err(sql_error)?;
             }
+
+            search::migrate_site_names(&conn)?;
 
             conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS tag_rules (

@@ -17,6 +17,7 @@ mod ptd_site_catalog;
 mod ptd_sites;
 mod relocation;
 mod rss;
+mod search;
 mod sign_in;
 mod site;
 mod site_stats;

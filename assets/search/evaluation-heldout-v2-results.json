@@ -1,0 +1,1120 @@
+{
+  "fixture": "search-heldout-v2.json",
+  "summaries": {
+    "reference_wasm": {
+      "ndcg10": 0.833866608449639,
+      "precision5": 0.97,
+      "no_result_false_recall": "10/10"
+    },
+    "lexical_concept": {
+      "ndcg10": 0.5543993955082326,
+      "precision5": 0.86,
+      "no_result_false_recall": "1/10"
+    },
+    "native_hybrid": {
+      "ndcg10": 0.5181237275752767,
+      "precision5": 0.6300000000000001,
+      "no_result_false_recall": "0/10"
+    }
+  },
+  "rows": [
+    {
+      "query": "Where can I download albums with lossless audio quality?",
+      "topic": "music",
+      "reference_wasm": {
+        "ndcg10": 0.6854687041968494,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.4351869256057173,
+        "precision5": 1,
+        "returned": 164
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "snakepop",
+          "opencd",
+          "kimoji",
+          "torrenthub",
+          "joyhd"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "想收集无损音乐和歌手专辑",
+      "topic": "music",
+      "reference_wasm": {
+        "ndcg10": 0.8413237459515275,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.27897474644789505,
+        "precision5": 0.6,
+        "returned": 163
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8196654844012308,
+        "precision5": 1,
+        "returned": 163
+      },
+      "top5": {
+        "reference": [
+          "snakepop",
+          "kimoji",
+          "desigaane",
+          "opencd",
+          "orpheus"
+        ],
+        "lexical": [
+          "cgpeers",
+          "cnlang",
+          "hd4fans",
+          "chdbits",
+          "audiences"
+        ],
+        "native": [
+          "desigaane",
+          "jpopsuki",
+          "dicmusic",
+          "kimoji",
+          "opencd"
+        ]
+      }
+    },
+    {
+      "query": "I am looking for animated television from Japan.",
+      "topic": "anime",
+      "reference_wasm": {
+        "ndcg10": 0.7126568226208191,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "moecat",
+          "animelovers",
+          "jptvclub",
+          "animez",
+          "nekobt"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "我想寻找日系动漫和动画剧集",
+      "topic": "anime",
+      "reference_wasm": {
+        "ndcg10": 0.9174986862536413,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.4351869256057173,
+        "precision5": 1,
+        "returned": 189
+      },
+      "native_hybrid": {
+        "ndcg10": 0.4351869256057173,
+        "precision5": 1,
+        "returned": 134
+      },
+      "top5": {
+        "reference": [
+          "animez",
+          "animelovers",
+          "nekobt",
+          "moecat",
+          "bakabt"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "moecat",
+          "jptvclub",
+          "retrotoon",
+          "cangbaoge",
+          "anirena"
+        ]
+      }
+    },
+    {
+      "query": "Where can I find a wide range of feature films?",
+      "topic": "movies",
+      "reference_wasm": {
+        "ndcg10": 0.7431286862216818,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5159958223394445,
+        "precision5": 1,
+        "returned": 225
+      },
+      "native_hybrid": {
+        "ndcg10": 0.7471676901847084,
+        "precision5": 1,
+        "returned": 225
+      },
+      "top5": {
+        "reference": [
+          "cinemaz",
+          "filept",
+          "telly",
+          "awesomehd",
+          "pt99"
+        ],
+        "lexical": [
+          "m-team",
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky"
+        ],
+        "native": [
+          "sdbits",
+          "anthelion",
+          "awesomehd",
+          "beitai",
+          "greatposterwall"
+        ]
+      }
+    },
+    {
+      "query": "想收藏不同年代的电影作品",
+      "topic": "movies",
+      "reference_wasm": {
+        "ndcg10": 0.6593007041766438,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5159958223394445,
+        "precision5": 1,
+        "returned": 225
+      },
+      "native_hybrid": {
+        "ndcg10": 0.6895275770090115,
+        "precision5": 1,
+        "returned": 225
+      },
+      "top5": {
+        "reference": [
+          "beitai",
+          "cinemaz",
+          "ihdbits",
+          "hdai",
+          "hd4free"
+        ],
+        "lexical": [
+          "m-team",
+          "totheglory",
+          "hdchina",
+          "leaves",
+          "hdatmos"
+        ],
+        "native": [
+          "hdai",
+          "hdstreet",
+          "byrbt",
+          "anthelion",
+          "awesomehd"
+        ]
+      }
+    },
+    {
+      "query": "I would like a library of ebooks and literature.",
+      "topic": "books",
+      "reference_wasm": {
+        "ndcg10": 0.7799856614522905,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 75
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8125952066495403,
+        "precision5": 1,
+        "returned": 75
+      },
+      "top5": {
+        "reference": [
+          "simurg",
+          "audiobookbay",
+          "siqi",
+          "myanonamouse",
+          "gtorg"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "u2",
+          "hdtime",
+          "piggo"
+        ],
+        "native": [
+          "siqi",
+          "xingtan",
+          "simurg",
+          "audiobookbay",
+          "myanonamouse"
+        ]
+      }
+    },
+    {
+      "query": "哪里可以找文学图书和电子书",
+      "topic": "books",
+      "reference_wasm": {
+        "ndcg10": 0.7684197340385843,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.38599432614303064,
+        "precision5": 0.4,
+        "returned": 75
+      },
+      "native_hybrid": {
+        "ndcg10": 0.7202097522096597,
+        "precision5": 1,
+        "returned": 75
+      },
+      "top5": {
+        "reference": [
+          "gtorg",
+          "siqi",
+          "simurg",
+          "xingtan",
+          "myanonamouse"
+        ],
+        "lexical": [
+          "animetosho",
+          "ehentai",
+          "exoticaz",
+          "gtorg",
+          "oppaiti"
+        ],
+        "native": [
+          "siqi",
+          "thevault",
+          "xingtan",
+          "gtorg",
+          "myanonamouse"
+        ]
+      }
+    },
+    {
+      "query": "A library of spoken books would be useful to me.",
+      "topic": "audiobooks",
+      "reference_wasm": {
+        "ndcg10": 0.5817786607078652,
+        "precision5": 0.6,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.12811612289210494,
+        "precision5": 0.2,
+        "returned": 75
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 3
+      },
+      "top5": {
+        "reference": [
+          "simurg",
+          "audiobookbay",
+          "siqi",
+          "myanonamouse",
+          "gtorg"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "u2",
+          "hdtime",
+          "piggo"
+        ],
+        "native": [
+          "milkie",
+          "hdtime",
+          "pthome"
+        ]
+      }
+    },
+    {
+      "query": "我想收听有声书和有声小说",
+      "topic": "audiobooks",
+      "reference_wasm": {
+        "ndcg10": 0.70692339884085,
+        "precision5": 0.8,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5364673227675152,
+        "precision5": 1,
+        "returned": 16
+      },
+      "native_hybrid": {
+        "ndcg10": 0.7147757949093178,
+        "precision5": 0.8,
+        "returned": 30
+      },
+      "top5": {
+        "reference": [
+          "htpt",
+          "audiobookbay",
+          "karagarga",
+          "soulvoice",
+          "simurg"
+        ],
+        "lexical": [
+          "digitalcore",
+          "nordicbytes",
+          "ptfans",
+          "audiences",
+          "leaves"
+        ],
+        "native": [
+          "htpt",
+          "audiobookbay",
+          "karagarga",
+          "simurg",
+          "myanonamouse"
+        ]
+      }
+    },
+    {
+      "query": "I want documentaries about animals and historical events.",
+      "topic": "documentary",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 109
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "afun",
+          "pt99",
+          "gainbound",
+          "piggo",
+          "rousipro"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "希望找到讲述自然历史的纪录片",
+      "topic": "documentary",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 108
+      },
+      "native_hybrid": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 122
+      },
+      "top5": {
+        "reference": [
+          "gainbound",
+          "pt99",
+          "dajiao",
+          "afun",
+          "hares"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "zrpt",
+          "gainbound",
+          "dajiao",
+          "pt99",
+          "afun"
+        ]
+      }
+    },
+    {
+      "query": "Where can I find recordings of sports competitions?",
+      "topic": "sports",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 89
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "cdy",
+          "btschool"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "找一些体育比赛和足球录像",
+      "topic": "sports",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 89
+      },
+      "native_hybrid": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 89
+      },
+      "top5": {
+        "reference": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "hhanclub",
+          "retroflix"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "springsunday",
+          "oshen"
+        ]
+      }
+    },
+    {
+      "query": "I want to discover a collection of computer games.",
+      "topic": "games",
+      "reference_wasm": {
+        "ndcg10": 0.8383354523103074,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 84
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8383354523103074,
+        "precision5": 1,
+        "returned": 83
+      },
+      "top5": {
+        "reference": [
+          "gazellegames",
+          "ggpt",
+          "pterclub",
+          "brokenstones",
+          "torrentleech"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "totheglory",
+          "hddolby",
+          "pttime"
+        ],
+        "native": [
+          "gazellegames",
+          "ggpt",
+          "kufirc",
+          "phoenixproject",
+          "brokenstones"
+        ]
+      }
+    },
+    {
+      "query": "想寻找电脑游戏以及主机游戏",
+      "topic": "games",
+      "reference_wasm": {
+        "ndcg10": 0.8383354523103074,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 83
+      },
+      "native_hybrid": {
+        "ndcg10": 0.7887733705174911,
+        "precision5": 0.8,
+        "returned": 83
+      },
+      "top5": {
+        "reference": [
+          "gazellegames",
+          "ggpt",
+          "torrentleech",
+          "brokenstones",
+          "kufirc"
+        ],
+        "lexical": [
+          "pornbay",
+          "tokyotosho",
+          "cgpeers",
+          "kufirc",
+          "audiences"
+        ],
+        "native": [
+          "gazellegames",
+          "ggpt",
+          "kufirc",
+          "torrentleech",
+          "gfxpeers"
+        ]
+      }
+    },
+    {
+      "query": "Is there a collection of software for Mac computers?",
+      "topic": "software",
+      "reference_wasm": {
+        "ndcg10": 0.8471779732814124,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 70
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "ianon",
+          "phoenixproject",
+          "brokenstones",
+          "railgunpt",
+          "cgpeers"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "pttime",
+          "hdtime",
+          "hdkyl"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "想寻找各种电脑软件和应用程序",
+      "topic": "software",
+      "reference_wasm": {
+        "ndcg10": 0.8471779732814124,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 70
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8471779732814124,
+        "precision5": 1,
+        "returned": 70
+      },
+      "top5": {
+        "reference": [
+          "ianon",
+          "phoenixproject",
+          "brokenstones",
+          "gfxpeers",
+          "cgpeers"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "pttime",
+          "hdtime",
+          "hdkyl"
+        ],
+        "native": [
+          "gfxpeers",
+          "ianon",
+          "brokenstones",
+          "phoenixproject",
+          "cgpeers"
+        ]
+      }
+    },
+    {
+      "query": "I need courses and tutorials for learning new skills.",
+      "topic": "learning",
+      "reference_wasm": {
+        "ndcg10": 0.9558245273890439,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.7502332836680927,
+        "precision5": 1,
+        "returned": 22
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "thegeeks",
+          "rs",
+          "ptfans",
+          "nwsuaf6",
+          "qingyingpt"
+        ],
+        "lexical": [
+          "btschool",
+          "tccf",
+          "nwsuaf6",
+          "qingyingpt",
+          "rs"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "哪里可以找技术教程和学习资料",
+      "topic": "learning",
+      "reference_wasm": {
+        "ndcg10": 0.9539959859595427,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 38
+      },
+      "native_hybrid": {
+        "ndcg10": 0.9490593244271376,
+        "precision5": 1,
+        "returned": 25
+      },
+      "top5": {
+        "reference": [
+          "thegeeks",
+          "xingtan",
+          "gfxpeers",
+          "neu6",
+          "thevault"
+        ],
+        "lexical": [
+          "btschool",
+          "tccf",
+          "zrpt",
+          "tjupt",
+          "sjtu"
+        ],
+        "native": [
+          "thegeeks",
+          "thevault",
+          "xingtan",
+          "gfxpeers",
+          "hitpt"
+        ]
+      }
+    },
+    {
+      "query": "How do I cook noodles for dinner?",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 1
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "avgv",
+          "animelovers",
+          "animetosho",
+          "animez",
+          "tosky"
+        ],
+        "lexical": [
+          "avgv"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "What is the distance between Earth and Mars?",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "nebulance",
+          "nordicquality",
+          "pting-forum",
+          "frds",
+          "alpharatio"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "I need a plumber to fix my kitchen sink.",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "pornbits",
+          "nzbs-in",
+          "npupt",
+          "pting-forum",
+          "depthstudio"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "Can you recommend a hotel near the airport?",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "npupt",
+          "byrbt",
+          "snakepop",
+          "whupt",
+          "kimoji"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "My phone battery is swollen and hot.",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "happyfappy",
+          "empornium",
+          "ptneko",
+          "fsm",
+          "jpopsuki"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "番茄炒鸡蛋应该怎样做",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "torrentscsv",
+          "ptmsg",
+          "baconbits",
+          "wukongwendao",
+          "gtnet"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "明天去机场应该乘哪路公交车",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "torrentscsv",
+          "ptmsg",
+          "gtnet",
+          "rutracker",
+          "baconbits"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "帮我计算三角形的面积",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "ncore",
+          "frds",
+          "tosky",
+          "pting-forum",
+          "ptneko"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "家里的洗衣机漏水怎么办",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "ncore",
+          "ptmsg",
+          "wukongwendao",
+          "ptneko",
+          "0magnet"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "请解释一下什么是光合作用",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "nzbs-in",
+          "whupt",
+          "gtnet",
+          "baconbits",
+          "stspt"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    }
+  ]
+}

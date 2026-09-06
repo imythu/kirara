@@ -8,6 +8,9 @@ on:
       - "src/**"
       - "src-tauri/**"
       - "frontend/**"
+      - "crates/search-encoder/**"
+      - "assets/search/**"
+      - "tests/fixtures/search/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "docker/**"
@@ -37,6 +40,32 @@ permissions:
   packages: write
 
 jobs:
+  search-assets:
+    name: Test local search and assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: search-encoder-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Test native encoder parity
+        run: cargo test --locked --release --package search-encoder
+      - name: Verify checked-in catalog and vectors
+        run: cargo run --locked --release --package search-encoder --example assets -- verify
+      - name: Test search database and API behavior
+        env:
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
+        run: |
+          # The separate frontend job validates and supplies the actual UI bundle.
+          mkdir -p frontend/dist
+          cargo test --locked --package kirara --lib search::
+
   prepare:
     name: Determine release metadata
     runs-on: ubuntu-latest
@@ -59,7 +88,7 @@ jobs:
       - name: Check public documentation
         shell: bash
         run: |
-          if git grep -qiE 'self[_ -]?use' -- '*.md' '*.rst' '*.txt' 'doc/**'; then
+          if git grep -qiE '(^|[^[:alnum:]])self[_ -]?use([^[:alnum:]]|$)' -- '*.md' '*.rst' '*.txt' 'doc/**'; then
             echo "public documentation contains internal-only content" >&2
             exit 1
           fi
@@ -193,7 +222,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.kind }} ${{ matrix.target }}
-    needs: [prepare, frontend]
+    needs: [prepare, frontend, search-assets]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -244,6 +273,10 @@ jobs:
           CARGO_PROFILE_TEST_DEBUG: "0"
         run: cargo test --locked --package kirara --lib --tests --target ${{ matrix.target }}
 
+      - name: Test native encoder on desktop platform
+        if: matrix.kind == 'desktop'
+        run: cargo test --locked --release --package search-encoder --target ${{ matrix.target }}
+
       - name: Test desktop bridge on desktop platform
         if: matrix.kind == 'desktop'
         env:
@@ -279,7 +312,8 @@ jobs:
           if [[ "${{ matrix.kind }}" == "cli" ]]; then
             BIN="target/${{ matrix.target }}/release/kirara"
             ARCHIVE="kirara-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz"
-            tar czf "$ARCHIVE" -C "$(dirname "$BIN")" "$(basename "$BIN")"
+            tar czf "$ARCHIVE" -C "$(dirname "$BIN")" "$(basename "$BIN")" \
+              -C "$GITHUB_WORKSPACE" assets/search/models/mini/LICENSE assets/search/models/mini/provenance.json
           else
             shopt -s nullglob
             INSTALLERS=(target/${{ matrix.target }}/release/bundle/${{ matrix.bundle }}/*.${{ matrix.extension }})

@@ -1,0 +1,42 @@
+{
+  "baseline": {
+    "raw_bytes": 29710472,
+    "gzip9_bytes": 10400782,
+    "release_tar_gzip_bytes": 10489401,
+    "binary_sha256": "10c4be59525374ada0a91a87cd5811eb2cb66162aff8f17e814ce12be9f1d747",
+    "archive_sha256": "05333e9910cd189ba3d481dd7921a3f552494924b2fd9a188f3a0c09272c1c68"
+  },
+  "current": {
+    "raw_bytes": 40683680,
+    "gzip9_bytes": 16748254,
+    "release_tar_gzip_bytes": 16845849,
+    "binary_sha256": "ee21e6329baecd71f95a1d158422d4ecde0adbf4391c830ad569944e7736789d",
+    "archive_sha256": "3350b0be28bbd4d2980cd4d6b7eb8957f5bba46ae5ec246e8a0dd25b805a28c7"
+  },
+  "delta": {
+    "raw_bytes": {
+      "bytes": 10973208,
+      "MiB": 10.464866638183594,
+      "percent": 36.93380569652342
+    },
+    "gzip9_bytes": {
+      "bytes": 6347472,
+      "MiB": 6.0534210205078125,
+      "percent": 61.028795719398786
+    },
+    "release_tar_gzip_bytes": {
+      "bytes": 6356448,
+      "MiB": 6.061981201171875,
+      "percent": 60.59877012996262
+    }
+  },
+  "configuration": {
+    "target": "x86_64-unknown-linux-musl",
+    "rust": "1.97.1",
+    "profile": "release default; --locked --package kirara",
+    "c_compiler_linker": "musl-gcc (musl 1.2.5; GCC14.2)",
+    "extra_rustflags": null,
+    "tar": "GNU tar czf (default gzip compression); current includes MIT notice and provenance; baseline binary only",
+    "note": "Native musl target measured on Debian13; not cross container image; both builds use identical compiler and flags."
+  }
+}

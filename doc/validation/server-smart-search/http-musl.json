@@ -1,0 +1,822 @@
+{
+  "binary": "/tmp/kirara-musl-size/current/kirara",
+  "binary_sha256": "474a9e61ef2e261b1da051e6d111f1a898765a6fd16ef55a652c45979131b86e",
+  "machine": {
+    "platform": "Linux-6.18.18.c938-trim-x86_64-with-glibc2.41",
+    "cpu_count": 4,
+    "affinity_cpu_count": 2,
+    "cgroup_cpu_max": "max 100000",
+    "cgroup_memory_max": "max",
+    "cpu_model": "Intel(R) N150"
+  },
+  "fixture": {
+    "sites": 300,
+    "sign_tasks": 150,
+    "brush_tasks": 150,
+    "all_tasks_enabled": false,
+    "site_hosts": "reserved .example",
+    "large_history_rows": 100000
+  },
+  "checks": [
+    {
+      "name": "initial empty refresh idle",
+      "passed": true,
+      "details": {
+        "refreshing": false
+      }
+    },
+    {
+      "name": "static search route /api/sites/search",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "total": 300
+      }
+    },
+    {
+      "name": "static search route /api/sign-in-tasks/search",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "total": 150
+      }
+    },
+    {
+      "name": "static search route /api/brush-tasks/search",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "total": 150
+      }
+    },
+    {
+      "name": "static search route /api/sign-in-records/search",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "total": 1000
+      }
+    },
+    {
+      "name": "static search route /api/site-catalog/search",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "total": 308
+      }
+    },
+    {
+      "name": "duplicate renamed accounts preserved",
+      "passed": true,
+      "details": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "site DTO credentials absent",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "cookie never searchable",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "RSS credential never searchable",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "alias/pinyin/state QingWa 失败",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ids": [
+          2
+        ],
+        "filters": [
+          {
+            "field": "result",
+            "value": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "alias/pinyin/state qingwa 已暂停",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ids": [
+          1,
+          2
+        ],
+        "filters": [
+          {
+            "field": "enabled",
+            "value": "false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "alias/pinyin/state zhuli shualiuzhan",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ids": [
+          1,
+          2
+        ],
+        "filters": []
+      }
+    },
+    {
+      "name": "alias/pinyin/state site:主力刷流站 result:failed",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ids": [
+          2
+        ],
+        "filters": [
+          {
+            "field": "result",
+            "value": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "custom-name full pinyin",
+      "passed": true,
+      "details": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "hard negative unknown term stays required",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "page clamps and exact total",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "history older than legacy500 reachable",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ids": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "binding none update",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "binding none immediately removes alias",
+      "passed": true,
+      "details": [
+        2
+      ]
+    },
+    {
+      "name": "manual binding restored",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "invalid catalog rejected",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "reserved hostname not inferred from custom name",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "site mutation remains available",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "response": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "name": "rename reflected next search",
+      "passed": true,
+      "details": [
+        1
+      ]
+    },
+    {
+      "name": "manual identity survives URL edit",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "warm concurrent hybrid keeps complete semantic results",
+      "passed": true,
+      "details": [
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        },
+        {
+          "status": 200,
+          "semantic_status": "used",
+          "total": 85
+        }
+      ]
+    },
+    {
+      "name": "three ordinary searches remain eligible during history",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "admission limits excess concurrent scans",
+      "passed": true,
+      "details": [
+        503,
+        503,
+        200,
+        503,
+        503,
+        503,
+        503,
+        503
+      ]
+    },
+    {
+      "name": "single history worker completes; seven excess requests rejected",
+      "passed": true,
+      "details": [
+        503,
+        503,
+        200,
+        503,
+        503,
+        503,
+        503,
+        503
+      ]
+    },
+    {
+      "name": "site delete available",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "deleted identity never returned",
+      "passed": true,
+      "details": null
+    }
+  ],
+  "metrics": {
+    "rss_before_search_kib": 17380,
+    "cold_hybrid": {
+      "samples_ms": [
+        73.26477399328724
+      ],
+      "p50_ms": 73.26477399328724,
+      "p95_ms": 73.26477399328724,
+      "http_statuses": [
+        200
+      ],
+      "totals": [
+        85
+      ],
+      "semantic_statuses": [
+        "used"
+      ],
+      "peak_rss_kib": 39520
+    },
+    "hot_lexical": {
+      "samples_ms": [
+        8.539181028027087,
+        8.783661003690213,
+        9.673184948042035,
+        8.92369996290654,
+        8.307981013786048,
+        8.675877994392067,
+        8.682600047904998,
+        8.58168996637687,
+        8.333687030244619,
+        8.807787031400949,
+        8.720365993212909,
+        8.252905972767621,
+        8.538348018191755,
+        8.8068229961209,
+        8.55086196679622,
+        8.724518993403763,
+        8.54908605106175,
+        8.75643698964268,
+        8.409020025283098,
+        8.621371001936495
+      ],
+      "p50_ms": 8.648624498164281,
+      "p95_ms": 8.92369996290654,
+      "http_statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "totals": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "semantic_statuses": [
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed"
+      ],
+      "peak_rss_kib": 39496
+    },
+    "hot_hybrid": {
+      "samples_ms": [
+        18.602458003442734,
+        17.456624016631395,
+        17.888155998662114,
+        18.208688008598983,
+        18.17830902291462,
+        18.112776975613087,
+        18.86053499765694,
+        17.735181958414614,
+        17.314872005954385,
+        17.21507200272754,
+        18.536076007876545,
+        18.400571949314326,
+        17.607657006010413,
+        18.148076022043824,
+        17.378325981553644,
+        19.054264994338155,
+        18.014112953096628,
+        17.91204302571714,
+        18.901359988376498,
+        19.373337971046567
+      ],
+      "p50_ms": 18.130426498828456,
+      "p95_ms": 19.054264994338155,
+      "http_statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "totals": [
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85,
+        85
+      ],
+      "semantic_statuses": [
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used",
+        "used"
+      ],
+      "peak_rss_kib": 39524
+    },
+    "hot_task_lexical": {
+      "samples_ms": [
+        9.403168980497867,
+        9.297740005422384,
+        16.244735976215452,
+        18.240491044707596,
+        9.125904005486518,
+        9.112785977777094,
+        9.416482993401587,
+        8.979283971711993,
+        8.579346991609782,
+        10.160022007767111,
+        9.908118983730674,
+        11.36679103365168,
+        8.585764968302101,
+        8.872271981090307,
+        9.091462008655071,
+        9.749406017363071,
+        10.072904988192022,
+        11.459987028501928,
+        8.832365041598678,
+        8.74456501333043
+      ],
+      "p50_ms": 9.350454492960125,
+      "p95_ms": 16.244735976215452,
+      "http_statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "totals": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "semantic_statuses": [
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed",
+        "not_needed"
+      ],
+      "peak_rss_kib": 39356
+    },
+    "four_concurrent_hybrid": [
+      {
+        "status": 200,
+        "ms": 126.10390497138724,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 133.40223900740966,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 126.69191998429596,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 127.73812300292775,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 138.71122599812225,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 132.61292304378003,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 131.97119295364246,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 129.7201279667206,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 131.0830470174551,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 129.76918695494533,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 132.4174989713356,
+        "semantic_status": "used"
+      },
+      {
+        "status": 200,
+        "ms": 128.83575703017414,
+        "semantic_status": "used"
+      }
+    ],
+    "rss_before_large_history_kib": 38376,
+    "history100k_empty_deep": {
+      "samples_ms": [
+        48.38305898010731
+      ],
+      "p50_ms": 48.38305898010731,
+      "p95_ms": 48.38305898010731,
+      "http_statuses": [
+        200
+      ],
+      "totals": [
+        100000
+      ],
+      "semantic_statuses": [
+        "not_needed"
+      ],
+      "peak_rss_kib": 42308
+    },
+    "history100k_rare_lexical": {
+      "samples_ms": [
+        10299.142292991746
+      ],
+      "p50_ms": 10299.142292991746,
+      "p95_ms": 10299.142292991746,
+      "http_statuses": [
+        200
+      ],
+      "totals": [
+        1
+      ],
+      "semantic_statuses": [
+        "not_needed"
+      ],
+      "peak_rss_kib": 46664
+    },
+    "history100k_status": {
+      "samples_ms": [
+        9852.785458031576
+      ],
+      "p50_ms": 9852.785458031576,
+      "p95_ms": 9852.785458031576,
+      "http_statuses": [
+        200
+      ],
+      "totals": [
+        33333
+      ],
+      "semantic_statuses": [
+        "not_needed"
+      ],
+      "peak_rss_kib": 42436
+    },
+    "three_list_queries_during_history": [
+      {
+        "status": 200,
+        "ms": 81.95031696232036,
+        "total": 2
+      },
+      {
+        "status": 200,
+        "ms": 83.99148000171408,
+        "total": 2
+      },
+      {
+        "status": 200,
+        "ms": 79.97583597898483,
+        "total": 2
+      }
+    ],
+    "eight_concurrent_history": [
+      {
+        "status": 503,
+        "ms": 3.88405000558123,
+        "total": null
+      },
+      {
+        "status": 503,
+        "ms": 7.691967999562621,
+        "total": null
+      },
+      {
+        "status": 200,
+        "ms": 11093.995255010668,
+        "total": 0
+      },
+      {
+        "status": 503,
+        "ms": 6.497409020084888,
+        "total": null
+      },
+      {
+        "status": 503,
+        "ms": 2.429865999147296,
+        "total": null
+      },
+      {
+        "status": 503,
+        "ms": 2.0539520191960037,
+        "total": null
+      },
+      {
+        "status": 503,
+        "ms": 7.885537983383983,
+        "total": null
+      },
+      {
+        "status": 503,
+        "ms": 6.450289045460522,
+        "total": null
+      }
+    ],
+    "rss_final_kib": 41496,
+    "peak_rss_kib": 47012,
+    "kernel_peak_rss_kib": 47232,
+    "peak_extra_rss_kib": 29632,
+    "peak_extra_rss_mib": 28.9375
+  },
+  "data_dir": "/tmp/kirara-search-http-xnn6yyqm",
+  "scheduled_execution_rows": 0,
+  "required_checks_passed": true,
+  "required_check_count": 32,
+  "passed": true,
+  "server_log": "/tmp/kirara-search-http-xnn6yyqm/server.log"
+}

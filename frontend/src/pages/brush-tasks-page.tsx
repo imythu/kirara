@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Activity, ChevronLeft, ChevronRight, Edit, Eye, Pause, Play, Plus, Search, Trash2, Zap } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Edit, Eye, Pause, Play, Plus, RefreshCw, Search, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchFeedback, SearchPagination } from "@/components/search-controls";
+import { useServerSearch } from "@/lib/server-search";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -338,7 +340,9 @@ const selectClass =
 const checkboxClass = "h-4 w-4 rounded border border-border accent-[hsl(var(--primary))]";
 
 export function BrushTasksPage() {
-  const [tasks, setTasks] = useState<BrushTaskRecord[]>([]);
+  const [taskQuery, setTaskQuery] = useState("");
+  const [taskComposing, setTaskComposing] = useState(false);
+  const [searchPollUntil, setSearchPollUntil] = useState(0);
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [downloaders, setDownloaders] = useState<DownloaderRecord[]>([]);
   const [form, setForm] = useState<BrushTaskRequest>({ ...emptyForm });
@@ -361,14 +365,13 @@ export function BrushTasksPage() {
   const [saveSubPath, setSaveSubPath] = useState("");
   const [downloaderWeights, setDownloaderWeights] = useState<Record<number, number>>({});
 
-  function reload() {
-    api<BrushTaskRecord[]>("/api/brush-tasks")
-      .then(setTasks)
-      .catch((error: Error) => setMessage(error.message || "加载刷流任务失败"));
-  }
+  const taskSearch = useServerSearch<BrushTaskRecord>("/api/brush-tasks/search", {
+    query: taskQuery, composing: taskComposing, pollUntil: searchPollUntil,
+  });
+  const tasks = taskSearch.records;
+  function reload() { taskSearch.reload(); }
 
   useEffect(() => {
-    reload();
     api<SiteRecord[]>("/api/sites")
       .then(setSites)
       .catch((error: Error) => setMessage(error.message || "加载站点列表失败"));
@@ -485,6 +488,7 @@ export function BrushTasksPage() {
     try {
       await api(`/api/brush-tasks/${id}/start`, { method: "POST" });
       setMessage("刷流任务已启动");
+      setSearchPollUntil(Date.now() + 120_000);
       reload();
     } catch (error) {
       setMessage((error as Error).message || "启动刷流任务失败");
@@ -505,6 +509,7 @@ export function BrushTasksPage() {
     try {
       await api(`/api/brush-tasks/${id}/run`, { method: "POST" });
       setMessage("刷流任务已触发执行");
+      setSearchPollUntil(Date.now() + 120_000);
       reload();
     } catch (error) {
       setMessage((error as Error).message || "触发刷流任务失败");
@@ -582,15 +587,29 @@ export function BrushTasksPage() {
                 <CardTitle>刷流任务管理</CardTitle>
                 <CardDescription>管理 PT 刷流任务，配置选种与删种规则，查看种子状态。</CardDescription>
               </div>
-              <Button className="w-full sm:w-auto" onClick={openAdd}>
-                <Plus className="mr-2 h-4 w-4" />
-                添加任务
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={reload}>
+                  <RefreshCw className="mr-2 h-4 w-4" />刷新
+                </Button>
+                <Button type="button" onClick={openAdd}>
+                  <Plus className="mr-2 h-4 w-4" />添加任务
+                </Button>
+              </div>
+            </div>
+            <div className="relative">
+              <Label htmlFor="brush-task-search" className="sr-only">搜索刷流任务</Label>
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <Input id="brush-task-search" type="search" value={taskQuery} className="pl-10"
+                placeholder="搜索任务、站点别名、拼音或状态"
+                onChange={(event) => setTaskQuery(event.target.value)}
+                onCompositionStart={() => setTaskComposing(true)}
+                onCompositionEnd={(event) => { setTaskQuery(event.currentTarget.value); setTaskComposing(false); }} />
             </div>
           </CardHeader>
           <CardContent>
-            {tasks.length === 0 ? (
-              <div className="py-12 text-center text-sm text-muted">暂无刷流任务，点击上方按钮添加。</div>
+            <SearchFeedback search={taskSearch} onClearQuery={() => setTaskQuery("")} />
+            {taskSearch.loading || taskComposing || taskSearch.error ? null : tasks.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted">{taskQuery ? "没有匹配的刷流任务，请更换关键词或清除查询条件。" : "暂无刷流任务，点击上方按钮添加。"}</div>
             ) : (
               <div className="grid gap-3">
                 {tasks.map((task) => (
@@ -604,7 +623,7 @@ export function BrushTasksPage() {
                               task.enabled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
                             }`}
                           >
-                            {task.enabled ? "运行中" : "已停止"}
+                            {task.enabled ? "已启用" : "已停用"}
                           </span>
                         </div>
                         <div className="mt-0.5 text-[11px] text-muted">#{task.id}</div>
@@ -678,6 +697,7 @@ export function BrushTasksPage() {
                 ))}
               </div>
             )}
+            <SearchPagination search={taskSearch} label="刷流任务" />
           </CardContent>
         </Card>
       </div>
@@ -726,7 +746,7 @@ export function BrushTasksPage() {
                   options={
                     sites.length === 0
                       ? [{ value: "", label: "请先添加站点" }]
-                      : sites.map((site) => ({ value: String(site.id), label: `${site.name} (${site.site_type})` }))
+                      : sites.map((site) => ({ value: String(site.id), label: `${site.name} · #${site.id} (${site.site_type})` }))
                   }
                 />
               </div>

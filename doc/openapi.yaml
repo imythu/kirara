@@ -6,6 +6,104 @@ servers:
   - url: http://127.0.0.1:3000
 
 paths:
+  /api/sites/search:
+    get:
+      summary: Search local sites
+      description: All hard filters and relevance thresholds apply before counting and pagination. Requests share four admitted workers (at most one history request) and a 15-second deadline; saturation returns 503 and expiration returns 504. Out-of-range pages clamp to the last page. Empty results use page 1. Query length is limited to 256 Unicode scalar values.
+      parameters:
+        - {name: q, in: query, schema: {type: string, default: '', maxLength: 256}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: health, in: query, schema: {type: string, enum: [healthy, failed, pending]}}
+        - {name: type, in: query, schema: {type: string, minLength: 1}}
+      responses:
+        '200': {description: Search result, content: {application/json: {schema: {$ref: '#/components/schemas/SmartSearchResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/sign-in-tasks/search:
+    get:
+      summary: Search sign-in tasks
+      description: All hard filters and relevance thresholds apply before counting and pagination. Requests share four admitted workers (at most one history request) and a 15-second deadline; saturation returns 503 and expiration returns 504. Out-of-range pages clamp to the last page. Empty results use page 1. Query length is limited to 256 Unicode scalar values.
+      parameters:
+        - {name: q, in: query, schema: {type: string, default: '', maxLength: 256}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: site_id, in: query, schema: {type: integer, format: int64, minimum: 1}}
+        - {name: enabled, in: query, schema: {type: boolean}}
+        - {name: result, in: query, schema: {type: string, enum: [success, failed, unknown]}}
+      responses:
+        '200': {description: Search result, content: {application/json: {schema: {$ref: '#/components/schemas/SmartSearchResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/brush-tasks/search:
+    get:
+      summary: Search brush tasks
+      description: All hard filters and relevance thresholds apply before counting and pagination. Requests share four admitted workers (at most one history request) and a 15-second deadline; saturation returns 503 and expiration returns 504. Out-of-range pages clamp to the last page. Empty results use page 1. Query length is limited to 256 Unicode scalar values.
+      parameters:
+        - {name: q, in: query, schema: {type: string, default: '', maxLength: 256}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: site_id, in: query, schema: {type: integer, format: int64, minimum: 1}}
+        - {name: enabled, in: query, schema: {type: boolean}}
+        - {name: result, in: query, schema: {type: string, enum: [success, failed, unknown]}}
+      responses:
+        '200': {description: Search result, content: {application/json: {schema: {$ref: '#/components/schemas/SmartSearchResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/sign-in-records/search:
+    get:
+      summary: Search all stored sign-in records (no legacy 500 limit)
+      x-history-processing: Two bounded 256-row passes with global name census and disk-backed temporary ranking; one prepared semantic result per query; exact totals and deep pages.
+      description: All hard filters and relevance thresholds apply before counting and pagination. Requests share four admitted workers (at most one history request) and a 15-second deadline; saturation returns 503 and expiration returns 504. Out-of-range pages clamp to the last page. Empty results use page 1. Query length is limited to 256 Unicode scalar values.
+      parameters:
+        - {name: q, in: query, schema: {type: string, default: '', maxLength: 256}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: task_id, in: query, schema: {type: integer, format: int64, minimum: 1}}
+        - {name: site_id, in: query, schema: {type: integer, format: int64, minimum: 1}}
+        - {name: result, in: query, schema: {type: string, enum: [success, failed, unknown]}}
+      responses:
+        '200': {description: Search result, content: {application/json: {schema: {$ref: '#/components/schemas/SmartSearchResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/site-catalog/search:
+    get:
+      summary: Search public catalog entries for manual binding
+      description: All hard filters and relevance thresholds apply before counting and pagination. Requests share four admitted workers (at most one history request) and a 15-second deadline; saturation returns 503 and expiration returns 504. Out-of-range pages clamp to the last page. Empty results use page 1. Query length is limited to 256 Unicode scalar values.
+      parameters:
+        - {name: q, in: query, schema: {type: string, default: '', maxLength: 256}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200': {description: Search result, content: {application/json: {schema: {$ref: '#/components/schemas/SmartSearchResponse'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/sites/{id}/search-binding:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+    get:
+      summary: Resolve current search catalog association and domain provenance
+      responses:
+        '200': {description: Binding, content: {application/json: {schema: {$ref: '#/components/schemas/SiteSearchBinding'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      summary: Set auto, manual, or none search association
+      description: Manual requires an existing catalog ID. Auto and none require catalog_id absent or null. Automatic identity uses verified domains only; manual survives URL changes and none survives restarts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mode]
+              properties:
+                mode: {type: string, enum: [auto, manual, none]}
+                catalog_id: {type: string, nullable: true}
+      responses:
+        '200': {description: Updated binding, content: {application/json: {schema: {$ref: '#/components/schemas/SiteSearchBinding'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
   /api/settings:
     get:
       responses:
@@ -782,6 +880,41 @@ components:
           schema: {$ref: '#/components/schemas/ErrorResponse'}
 
   schemas:
+    SiteSearchBinding:
+      type: object
+      required: [site_id, mode, catalog_id, matched_host, catalog_revision]
+      properties:
+        site_id: {type: integer, format: int64}
+        mode: {type: string, enum: [auto, manual, none]}
+        catalog_id: {type: string, nullable: true}
+        matched_host: {type: string, nullable: true}
+        catalog_revision: {type: string}
+    SmartSearchResponse:
+      type: object
+      required: [items, total, page, page_size, parsed_filters, semantic_status]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [record, matched_by]
+            properties:
+              record:
+                type: object
+                description: Existing scope DTO (SiteResponse, SignInTaskRecord, BrushTaskRecord, SignInRecord), or public catalog entry with id/name/url/aka. Site credentials are never included.
+              matched_by: {type: array, items: {type: string}}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        parsed_filters:
+          type: array
+          items:
+            type: object
+            required: [field, value]
+            properties:
+              field: {type: string}
+              value: {type: string}
+        semantic_status: {type: string, description: 'Visible semantic channel state, including not_needed, used, or degradation reason.'}
     ErrorResponse:
       type: object
       required: [error]

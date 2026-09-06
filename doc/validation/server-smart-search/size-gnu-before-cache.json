@@ -1,0 +1,26 @@
+{
+  "target": "x86_64-unknown-linux-gnu",
+  "configuration": "cargo build --locked --release --package kirara; gzip level 9, mtime 0; GNU tar, deterministic headers; final archive includes model MIT notice/provenance",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "baseline": {
+    "binary_bytes": 30320696,
+    "binary_gzip_bytes": 9959850,
+    "sha256": "c566ee8f9f50e698155c3dd1f9f713918b7539086f5b0b3648c6b4e7a2e6d7af",
+    "frontend_bytes": 1145787,
+    "archive_bytes": 9959993
+  },
+  "current": {
+    "binary_bytes": 41365032,
+    "binary_gzip_bytes": 16217690,
+    "sha256": "3913da2472222c2ecb1efb4d6a93f6a35e07807733974afcc7878ad930fd7abf",
+    "frontend_bytes": 1155027,
+    "archive_bytes": 16219322
+  },
+  "delta": {
+    "binary_bytes": 11044336,
+    "binary_gzip_bytes": 6257840,
+    "frontend_bytes": 9240,
+    "archive_bytes": 6259329
+  },
+  "archive_growth_percent": 62.84471284266966
+}

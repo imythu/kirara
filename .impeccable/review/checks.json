@@ -1,0 +1,24 @@
+{
+  "errors": [],
+  "fixture": "Empty API responses; no real accounts or external writes",
+  "interaction_checks": [
+    "media mode persists across navigation",
+    "mobile navigation closes with Escape",
+    "add-site dialog closes with Escape",
+    "select opens via keyboard Enter and closes via Escape"
+  ],
+  "tablet": {
+    "width": 768,
+    "height": 600,
+    "content_bottom_padding": 110,
+    "save_bottom": 481,
+    "dock_top": 506
+  },
+  "keyboard_focus": "Opaque vermilion 2px ring plus 2px card offset verified for primary, outline and select",
+  "typescript": {
+    "existing_diagnostics": 13,
+    "matches_HEAD": true
+  },
+  "build": "Vite production build passes",
+  "data_scope": "Mock browser API fixtures only; no live PT/downloader integration exercised"
+}

@@ -13,3 +13,6 @@ __pycache__/
 
 # Prompt file with potential sensitive data
 提示词.md
+
+# Local PTD backups may contain account credentials
+/PTD_backup_*.zip

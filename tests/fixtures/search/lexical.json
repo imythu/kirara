@@ -1,0 +1,502 @@
+[
+  {
+    "name": "备用小站",
+    "query": "备用小站",
+    "expected": true
+  },
+  {
+    "name": "备用小站",
+    "query": "beiyongxiaozhan",
+    "expected": true
+  },
+  {
+    "name": "备用小站",
+    "query": "byxz",
+    "expected": true
+  },
+  {
+    "name": "备用小站",
+    "query": "BEIYONGXIAOZHAN",
+    "expected": true
+  },
+  {
+    "name": "备用小站",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "备用小站",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "备用小站",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "备用小站",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "主力刷流站",
+    "query": "主力刷流站",
+    "expected": true
+  },
+  {
+    "name": "主力刷流站",
+    "query": "zhulishualiuzhan",
+    "expected": true
+  },
+  {
+    "name": "主力刷流站",
+    "query": "zlslz",
+    "expected": true
+  },
+  {
+    "name": "主力刷流站",
+    "query": "ZHULISHUALIUZHAN",
+    "expected": true
+  },
+  {
+    "name": "主力刷流站",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "主力刷流站",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "主力刷流站",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "主力刷流站",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "失败收藏站",
+    "query": "失败收藏站",
+    "expected": true
+  },
+  {
+    "name": "失败收藏站",
+    "query": "shibaishoucangzhan",
+    "expected": true
+  },
+  {
+    "name": "失败收藏站",
+    "query": "sbscz",
+    "expected": true
+  },
+  {
+    "name": "失败收藏站",
+    "query": "SHIBAISHOUCANGZHAN",
+    "expected": true
+  },
+  {
+    "name": "失败收藏站",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "失败收藏站",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "失败收藏站",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "失败收藏站",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "音乐仓库",
+    "query": "音乐仓库",
+    "expected": true
+  },
+  {
+    "name": "音乐仓库",
+    "query": "yinyuecangku",
+    "expected": true
+  },
+  {
+    "name": "音乐仓库",
+    "query": "yyck",
+    "expected": true
+  },
+  {
+    "name": "音乐仓库",
+    "query": "YINYUECANGKU",
+    "expected": true
+  },
+  {
+    "name": "音乐仓库",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "音乐仓库",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "音乐仓库",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "音乐仓库",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "动漫备用站",
+    "query": "动漫备用站",
+    "expected": true
+  },
+  {
+    "name": "动漫备用站",
+    "query": "dongmanbeiyongzhan",
+    "expected": true
+  },
+  {
+    "name": "动漫备用站",
+    "query": "dmbyz",
+    "expected": true
+  },
+  {
+    "name": "动漫备用站",
+    "query": "DONGMANBEIYONGZHAN",
+    "expected": true
+  },
+  {
+    "name": "动漫备用站",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "动漫备用站",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "动漫备用站",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "动漫备用站",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "电影世界",
+    "query": "电影世界",
+    "expected": true
+  },
+  {
+    "name": "电影世界",
+    "query": "dianyingshijie",
+    "expected": true
+  },
+  {
+    "name": "电影世界",
+    "query": "dysj",
+    "expected": true
+  },
+  {
+    "name": "电影世界",
+    "query": "DIANYINGSHIJIE",
+    "expected": true
+  },
+  {
+    "name": "电影世界",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "电影世界",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "电影世界",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "电影世界",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "重庆小站",
+    "query": "重庆小站",
+    "expected": true
+  },
+  {
+    "name": "重庆小站",
+    "query": "chongqingxiaozhan",
+    "expected": true
+  },
+  {
+    "name": "重庆小站",
+    "query": "cqxz",
+    "expected": true
+  },
+  {
+    "name": "重庆小站",
+    "query": "CHONGQINGXIAOZHAN",
+    "expected": true
+  },
+  {
+    "name": "重庆小站",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "重庆小站",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "重庆小站",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "重庆小站",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "学习资料",
+    "query": "学习资料",
+    "expected": true
+  },
+  {
+    "name": "学习资料",
+    "query": "xuexiziliao",
+    "expected": true
+  },
+  {
+    "name": "学习资料",
+    "query": "xxzl",
+    "expected": true
+  },
+  {
+    "name": "学习资料",
+    "query": "XUEXIZILIAO",
+    "expected": true
+  },
+  {
+    "name": "学习资料",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "学习资料",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "学习资料",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "学习资料",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "家庭影院",
+    "query": "家庭影院",
+    "expected": true
+  },
+  {
+    "name": "家庭影院",
+    "query": "jiatingyingyuan",
+    "expected": true
+  },
+  {
+    "name": "家庭影院",
+    "query": "jtyy",
+    "expected": true
+  },
+  {
+    "name": "家庭影院",
+    "query": "JIATINGYINGYUAN",
+    "expected": true
+  },
+  {
+    "name": "家庭影院",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "家庭影院",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "家庭影院",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "家庭影院",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "快乐分享",
+    "query": "快乐分享",
+    "expected": true
+  },
+  {
+    "name": "快乐分享",
+    "query": "kuailefenxiang",
+    "expected": true
+  },
+  {
+    "name": "快乐分享",
+    "query": "klfx",
+    "expected": true
+  },
+  {
+    "name": "快乐分享",
+    "query": "KUAILEFENXIANG",
+    "expected": true
+  },
+  {
+    "name": "快乐分享",
+    "query": "不要失败",
+    "expected": false
+  },
+  {
+    "name": "快乐分享",
+    "query": "未失败",
+    "expected": false
+  },
+  {
+    "name": "快乐分享",
+    "query": "q",
+    "expected": false
+  },
+  {
+    "name": "快乐分享",
+    "query": "qzmxrandom",
+    "expected": false
+  },
+  {
+    "name": "QingWa",
+    "query": "qingwa",
+    "expected": true
+  },
+  {
+    "name": "QingWa",
+    "query": "QINGWA",
+    "expected": true
+  },
+  {
+    "name": "QingWa",
+    "query": "QingW",
+    "expected": true
+  },
+  {
+    "name": "QingWa",
+    "query": "xyzabcxyz",
+    "expected": false
+  },
+  {
+    "name": "TorrentGalaxy",
+    "query": "torrentgalaxy",
+    "expected": true
+  },
+  {
+    "name": "TorrentGalaxy",
+    "query": "TORRENTGALAXY",
+    "expected": true
+  },
+  {
+    "name": "TorrentGalaxy",
+    "query": "TorrentGalax",
+    "expected": true
+  },
+  {
+    "name": "TorrentGalaxy",
+    "query": "xyzabcxyz",
+    "expected": false
+  },
+  {
+    "name": "MovieWorld",
+    "query": "movieworld",
+    "expected": true
+  },
+  {
+    "name": "MovieWorld",
+    "query": "MOVIEWORLD",
+    "expected": true
+  },
+  {
+    "name": "MovieWorld",
+    "query": "MovieWorl",
+    "expected": true
+  },
+  {
+    "name": "MovieWorld",
+    "query": "xyzabcxyz",
+    "expected": false
+  },
+  {
+    "name": "MusicLibrary",
+    "query": "musiclibrary",
+    "expected": true
+  },
+  {
+    "name": "MusicLibrary",
+    "query": "MUSICLIBRARY",
+    "expected": true
+  },
+  {
+    "name": "MusicLibrary",
+    "query": "MusicLibrar",
+    "expected": true
+  },
+  {
+    "name": "MusicLibrary",
+    "query": "xyzabcxyz",
+    "expected": false
+  },
+  {
+    "name": "AnimeArchive",
+    "query": "animearchive",
+    "expected": true
+  },
+  {
+    "name": "AnimeArchive",
+    "query": "ANIMEARCHIVE",
+    "expected": true
+  },
+  {
+    "name": "AnimeArchive",
+    "query": "AnimeArchiv",
+    "expected": true
+  },
+  {
+    "name": "AnimeArchive",
+    "query": "xyzabcxyz",
+    "expected": false
+  }
+]

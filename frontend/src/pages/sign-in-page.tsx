@@ -23,6 +23,8 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchFeedback, SearchPagination } from "@/components/search-controls";
+import { useServerSearch } from "@/lib/server-search";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -152,7 +154,7 @@ export function SignInPage() {
   const [tasks, setTasks] = useState<SignInTaskRecord[]>([]);
   const [profiles, setProfiles] = useState<SiteSigner[]>([]);
   const [sites, setSites] = useState<SiteRecord[]>([]);
-  const [records, setRecords] = useState<SignInRecord[]>([]);
+  const [searchComposing, setSearchComposing] = useState(false);
   const [settings, setSettings] = useState<GlobalConfig | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<GlobalConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -160,6 +162,7 @@ export function SignInPage() {
   const [activeView, setActiveView] = useHashChoice<SignInView>("view", SIGN_IN_VIEWS, "tasks");
   const [searchTerm, setSearchTerm] = useState("");
   const [siteFilter, setSiteFilter] = useState(0);
+  const [searchPollUntil, setSearchPollUntil] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsBrowser, setSettingsBrowser] = useState<SignInBrowser>("lightpanda");
   const [configFeedback, setConfigFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -176,46 +179,32 @@ export function SignInPage() {
 
   const nexusSites = useMemo(() => sites.filter(isNexusSite), [sites]);
   const siteNameById = useMemo(
-    () => new Map(sites.map((site) => [site.id, `${site.name} (${site.site_type})`])),
-    [sites],
-  );
-  const siteSearchNameById = useMemo(
-    () => new Map(sites.map((site) => [site.id, site.name])),
+    () => new Map(sites.map((site) => [site.id, `${site.name} · #${site.id} (${site.site_type})`])),
     [sites],
   );
   const taskNameById = useMemo(
     () => new Map(tasks.map((task) => [task.id, task.name])),
     [tasks],
   );
-  const normalizedSearchTerm = searchTerm.trim().toLocaleLowerCase();
-  const filteredTasks = useMemo(
-    () => tasks.filter((task) => {
-      if (siteFilter !== 0 && task.site_id !== siteFilter) return false;
-      if (!normalizedSearchTerm) return true;
-      return [
-        task.name,
-        siteSearchNameById.get(task.site_id),
-        task.last_message,
-        String(task.id),
-      ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearchTerm));
-    }),
-    [normalizedSearchTerm, siteFilter, siteSearchNameById, tasks],
-  );
-  const filteredRecords = useMemo(
-    () => records.filter((record) => {
-      if (siteFilter !== 0 && record.site_id !== siteFilter) return false;
-      if (!normalizedSearchTerm) return true;
-      return [
-        taskNameById.get(record.task_id),
-        record.site_name,
-        siteSearchNameById.get(record.site_id),
-        record.message,
-        record.status,
-        String(record.task_id),
-      ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearchTerm));
-    }),
-    [normalizedSearchTerm, records, siteFilter, siteSearchNameById, taskNameById],
-  );
+  const searchOptions = {
+    query: searchTerm,
+    composing: searchComposing,
+    refreshKey: tasks,
+    pollUntil: searchPollUntil,
+    filters: { site_id: siteFilter || undefined },
+  };
+  const taskSearch = useServerSearch<SignInTaskRecord>("/api/sign-in-tasks/search", {
+    ...searchOptions, enabled: !loading && activeView === "tasks",
+  });
+  const recordSearch = useServerSearch<SignInRecord>("/api/sign-in-records/search", {
+    ...searchOptions, enabled: !loading && activeView === "records",
+  });
+  const activeSearch = activeView === "tasks" ? taskSearch : recordSearch;
+  const filteredTasks = useMemo(() => taskSearch.records.map((task) => {
+    const profile = profiles.find((item) => item.site_id === task.site_id)?.profile;
+    return profile ? { ...task, browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless } : task;
+  }), [taskSearch.records, profiles]);
+  const filteredRecords = recordSearch.records;
   const suggestedTaskName = editingId === null
     ? nexusSites.find((site) => site.id === form.site_id)?.name.trim() ?? ""
     : "";
@@ -245,18 +234,16 @@ export function SignInPage() {
     Promise.all([
       api<SignInTaskRecord[]>("/api/sign-in-tasks"),
       api<SiteRecord[]>("/api/sites"),
-      api<SignInRecord[]>("/api/sign-in-records?limit=100"),
       api<GlobalConfig>("/api/settings"),
       api<SiteSigner[]>("/api/sign-in-profiles"),
     ])
-      .then(([nextTasks, nextSites, nextRecords, nextSettings, nextProfiles]) => {
+      .then(([nextTasks, nextSites, nextSettings, nextProfiles]) => {
         setProfiles(nextProfiles);
         setTasks(nextTasks.map(task => {
           const profile = nextProfiles.find(item => item.site_id === task.site_id)?.profile;
           return profile ? { ...task, browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless } : task;
         }));
         setSites(nextSites);
-        setRecords(nextRecords);
         setSettings(nextSettings);
       })
       .catch((error: Error) => setMessage(error.message || "加载自动签到数据失败"))
@@ -496,10 +483,11 @@ export function SignInPage() {
     }
   }
 
-  async function runAction(action: Promise<unknown>, success: string) {
+  async function runAction(action: Promise<unknown>, success: string, background = false) {
     try {
       await action;
       setMessage(success);
+      if (background) setSearchPollUntil(Date.now() + 120_000);
       loadData();
     } catch (error) {
       setMessage((error as Error).message || "操作失败");
@@ -605,7 +593,7 @@ export function SignInPage() {
             >
               <History className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>执行日志</span>
-              <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground">{records.length}</span>
+
             </button>
           </div>
 
@@ -621,6 +609,8 @@ export function SignInPage() {
                 value={searchTerm}
                 placeholder={activeView === "tasks" ? "搜索任务、站点或最近消息" : "搜索任务、站点或日志消息"}
                 onChange={(event) => setSearchTerm(event.target.value)}
+                onCompositionStart={() => setSearchComposing(true)}
+                onCompositionEnd={(event) => { setSearchTerm(event.currentTarget.value); setSearchComposing(false); }}
               />
             </div>
             <div className="flex min-w-0 gap-2">
@@ -632,7 +622,7 @@ export function SignInPage() {
                   onChange={(value) => setSiteFilter(Number(value))}
                   options={[
                     { value: "0", label: "全部站点" },
-                    ...nexusSites.map((site) => ({ value: String(site.id), label: site.name })),
+                    ...nexusSites.map((site) => ({ value: String(site.id), label: `${site.name} · #${site.id}` })),
                   ]}
                 />
               </div>
@@ -652,12 +642,13 @@ export function SignInPage() {
             </div>
           </div>
 
+          {!loading ? <SearchFeedback search={activeSearch} onClearQuery={() => { setSearchTerm(""); setSiteFilter(0); }} /> : null}
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               加载中...
             </div>
-          ) : activeView === "tasks" ? (
+          ) : activeSearch.loading || searchComposing || activeSearch.error ? null : activeView === "tasks" ? (
             <div
               id="sign-in-tasks-panel"
               role="tabpanel"
@@ -666,7 +657,7 @@ export function SignInPage() {
               className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
               <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
-                显示 {filteredTasks.length} / {tasks.length} 个任务
+                匹配 {taskSearch.total} / {tasks.length} 个任务
               </p>
               {tasks.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">暂无自动签到任务，点击上方按钮添加。</div>
@@ -690,7 +681,7 @@ export function SignInPage() {
                           <div className="mt-0.5 text-[11px] text-muted-foreground">#{task.id}</div>
                         </div>
                         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                          <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => void runAction(api(`/api/sign-in-tasks/${task.id}/run`, { method: "POST" }), "已触发运行一次")}>
+                          <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => void runAction(api(`/api/sign-in-tasks/${task.id}/run`, { method: "POST" }), "已触发运行一次", true)}>
                             <Zap className="mr-1.5 h-3.5 w-3.5" />运行一次
                           </Button>
                           {task.enabled ? (
@@ -733,9 +724,9 @@ export function SignInPage() {
               className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
               <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
-                显示 {filteredRecords.length} / {records.length} 条日志，最多保留最近 100 条
+                匹配 {recordSearch.total} 条执行日志
               </p>
-              {records.length === 0 ? (
+              {recordSearch.total === 0 && !searchTerm && siteFilter === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">暂无签到执行日志。</div>
               ) : filteredRecords.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">没有匹配的执行日志，请更换关键词或站点筛选。</div>
@@ -772,6 +763,7 @@ export function SignInPage() {
               )}
             </div>
           )}
+          <SearchPagination search={activeSearch} label={activeView === "tasks" ? "签到任务" : "签到日志"} />
         </CardContent>
       </Card>
 
@@ -1029,7 +1021,7 @@ export function SignInPage() {
                 id="sign-in-site"
                 value={form.site_id ? String(form.site_id) : ""}
                 onChange={(value) => selectSite(value === "" ? 0 : Number(value))}
-                options={nexusSites.length === 0 ? [{ value: "", label: "请先添加 NexusPHP 站点" }] : nexusSites.map((site) => ({ value: String(site.id), label: `${site.name} (${site.site_type})` }))}
+                options={nexusSites.length === 0 ? [{ value: "", label: "请先添加 NexusPHP 站点" }] : nexusSites.map((site) => ({ value: String(site.id), label: `${site.name} · #${site.id} (${site.site_type})` }))}
               />
             </div>
             <div className="space-y-2">

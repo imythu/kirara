@@ -1,0 +1,11 @@
+{
+  "status": "all_exact_rankings_and_semantic_statuses_unchanged",
+  "query_count": 30,
+  "source_sha256": {
+    "src/search/mod.rs": "86874b79d50495f9c06696b40613f762961be1e6d41800e363cc2949947422bc",
+    "src/search/semantic.rs": "6da7cba2714fecd4a3680006bf89a65432667280534cd16398cf5829666a5bb3",
+    "crates/search-encoder/src/lib.rs": "7f6b8c9a50608a65524a8e631ad26ec18853ab9589a4c8d2d2357f487c6cde5c",
+    "assets/search/manifest.json": "6418bfa8b62e49d2df1bbe3952d37e8149719a166f6749cc3e9cc5bdcc0db8ed"
+  },
+  "note": "Existing third set regression; not a new holdout."
+}

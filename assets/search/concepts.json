@@ -1,0 +1,482 @@
+{
+  "version": 1,
+  "concepts": [
+    {
+      "id": "movies",
+      "terms": [
+        "电影",
+        "影片",
+        "影视",
+        "影院",
+        "movie",
+        "movies",
+        "film",
+        "films",
+        "cinema"
+      ],
+      "expansion": "movies film cinema video"
+    },
+    {
+      "id": "television",
+      "terms": [
+        "电视剧",
+        "剧集",
+        "电视节目",
+        "追剧",
+        "综艺",
+        "短剧",
+        "tv",
+        "series",
+        "drama",
+        "shows"
+      ],
+      "expansion": "television series shows drama"
+    },
+    {
+      "id": "anime",
+      "terms": [
+        "动漫",
+        "动画",
+        "二次元",
+        "国漫",
+        "anime",
+        "manga",
+        "animation",
+        "cartoons"
+      ],
+      "expansion": "anime animation cartoons manga"
+    },
+    {
+      "id": "children",
+      "terms": [
+        "儿童",
+        "少儿",
+        "孩子",
+        "亲子",
+        "早教",
+        "children",
+        "kids",
+        "family"
+      ],
+      "expansion": "children kids family education"
+    },
+    {
+      "id": "music",
+      "terms": [
+        "音乐",
+        "音频",
+        "无损",
+        "原声",
+        "演唱会",
+        "music",
+        "lossless",
+        "soundtrack",
+        "concert"
+      ],
+      "expansion": "music audio lossless soundtrack concert"
+    },
+    {
+      "id": "audiobooks",
+      "terms": [
+        "有声书",
+        "有声小说",
+        "广播剧",
+        "评书",
+        "audiobook",
+        "audiobooks"
+      ],
+      "expansion": "audiobooks spoken audio radio drama"
+    },
+    {
+      "id": "books",
+      "terms": [
+        "电子书",
+        "图书",
+        "文学",
+        "漫画",
+        "ebook",
+        "ebooks",
+        "books",
+        "comics",
+        "literature"
+      ],
+      "expansion": "books ebooks literature comics"
+    },
+    {
+      "id": "learning",
+      "terms": [
+        "学习资料",
+        "教程",
+        "技术学习",
+        "课程",
+        "learning",
+        "courses",
+        "tutorials"
+      ],
+      "expansion": "learning education courses tutorials"
+    },
+    {
+      "id": "documentary",
+      "terms": [
+        "纪录片",
+        "自然",
+        "documentary",
+        "documentaries",
+        "nature"
+      ],
+      "expansion": "documentary nature"
+    },
+    {
+      "id": "sports",
+      "terms": [
+        "体育",
+        "足球",
+        "篮球",
+        "赛车",
+        "f1",
+        "motogp",
+        "奥运",
+        "sports",
+        "football",
+        "basketball",
+        "racing"
+      ],
+      "expansion": "sports football basketball motorsports racing olympics"
+    },
+    {
+      "id": "games",
+      "terms": [
+        "游戏",
+        "主机",
+        "game",
+        "games",
+        "console",
+        "gaming"
+      ],
+      "expansion": "games console gaming"
+    },
+    {
+      "id": "software",
+      "terms": [
+        "软件",
+        "macos",
+        "ios",
+        "apple",
+        "software",
+        "apps"
+      ],
+      "expansion": "software applications apple mac ios"
+    },
+    {
+      "id": "adult",
+      "terms": [
+        "成人",
+        "绅士",
+        "r18",
+        "xxx",
+        "adult"
+      ],
+      "expansion": "adult content"
+    },
+    {
+      "id": "bluray",
+      "terms": [
+        "原盘",
+        "蓝光",
+        "blu-ray",
+        "bluray",
+        "uhd",
+        "4k",
+        "8k",
+        "remux"
+      ],
+      "expansion": "bluray disc remux ultra high definition full discs"
+    },
+    {
+      "id": "encodes",
+      "terms": [
+        "压制",
+        "小体积",
+        "x265",
+        "hevc",
+        "编码",
+        "encodes",
+        "compact"
+      ],
+      "expansion": "compact encodes x265 hevc high quality small size"
+    },
+    {
+      "id": "streaming",
+      "terms": [
+        "web",
+        "流媒体",
+        "netflix",
+        "追更",
+        "web-dl",
+        "streaming"
+      ],
+      "expansion": "web-dl streaming netflix fast releases"
+    },
+    {
+      "id": "diy",
+      "terms": [
+        "diy",
+        "特效字幕",
+        "国语配音",
+        "dubbed"
+      ],
+      "expansion": "custom bluray diy subtitles dubbed"
+    },
+    {
+      "id": "dolbyvision",
+      "terms": [
+        "杜比视界",
+        "dolby vision"
+      ],
+      "expansion": "dolby vision hdr video"
+    },
+    {
+      "id": "dolbyatmos",
+      "terms": [
+        "杜比全景声",
+        "dolby atmos"
+      ],
+      "expansion": "dolby atmos immersive audio"
+    },
+    {
+      "id": "hires",
+      "terms": [
+        "母带音频",
+        "hi-res"
+      ],
+      "expansion": "high resolution master audio"
+    },
+    {
+      "id": "vinyl",
+      "terms": [
+        "经典黑胶",
+        "黑胶",
+        "vinyl"
+      ],
+      "expansion": "vinyl records music"
+    },
+    {
+      "id": "cdrip",
+      "terms": [
+        "cd抓轨",
+        "cd 抓轨",
+        "cd rip"
+      ],
+      "expansion": "compact disc audio rips"
+    },
+    {
+      "id": "fanres",
+      "terms": [
+        "fanres",
+        "fan restoration"
+      ],
+      "expansion": "fan restorations fanres"
+    },
+    {
+      "id": "arthouse",
+      "terms": [
+        "冷门",
+        "艺术电影",
+        "rare",
+        "arthouse"
+      ],
+      "expansion": "rare obscure arthouse films"
+    },
+    {
+      "id": "classic_animation",
+      "terms": [
+        "经典动画",
+        "classic animation"
+      ],
+      "expansion": "classic vintage animation"
+    },
+    {
+      "id": "internal_groups",
+      "terms": [
+        "站内发布组",
+        "internal release groups"
+      ],
+      "expansion": "internal release groups"
+    },
+    {
+      "id": "zero_day",
+      "terms": [
+        "0-day",
+        "zero day"
+      ],
+      "expansion": "zero day fresh releases"
+    },
+    {
+      "id": "ratioless",
+      "terms": [
+        "无分享率",
+        "ratioless"
+      ],
+      "expansion": "ratioless no ratio requirement"
+    },
+    {
+      "id": "beginner",
+      "terms": [
+        "适合新手",
+        "新手友好",
+        "小白福音",
+        "beginner friendly",
+        "beginner-friendly",
+        "beginners"
+      ],
+      "expansion": "beginner friendly easy economy"
+    },
+    {
+      "id": "forums",
+      "terms": [
+        "论坛",
+        "交流",
+        "forum",
+        "forums"
+      ],
+      "expansion": "forum community discussion nas"
+    },
+    {
+      "id": "university",
+      "terms": [
+        "高校",
+        "校园",
+        "教育网",
+        "ipv6",
+        "university",
+        "campus"
+      ],
+      "expansion": "university campus education network ipv6"
+    },
+    {
+      "id": "inner",
+      "terms": [
+        "内站",
+        "华语社区"
+      ],
+      "expansion": "inner chinese language community trackers"
+    },
+    {
+      "id": "outer",
+      "terms": [
+        "外站",
+        "海外社区",
+        "international trackers"
+      ],
+      "expansion": "outer international global trackers"
+    },
+    {
+      "id": "top12",
+      "terms": [
+        "十二大",
+        "top 12 chinese trackers"
+      ],
+      "expansion": "top twelve chinese trackers"
+    },
+    {
+      "id": "traditional9",
+      "terms": [
+        "传统九大",
+        "traditional nine"
+      ],
+      "expansion": "traditional nine chinese trackers"
+    },
+    {
+      "id": "elite",
+      "terms": [
+        "外站影视三强",
+        "皮妞堡"
+      ],
+      "expansion": "ptp btn hdb elite movie television trackers"
+    },
+    {
+      "id": "korean",
+      "terms": [
+        "韩剧",
+        "korean"
+      ],
+      "expansion": "korean drama television"
+    },
+    {
+      "id": "japanese",
+      "terms": [
+        "日剧",
+        "japanese"
+      ],
+      "expansion": "japanese drama television"
+    },
+    {
+      "id": "donghua",
+      "terms": [
+        "国漫",
+        "donghua"
+      ],
+      "expansion": "chinese animation donghua"
+    },
+    {
+      "id": "cantonese",
+      "terms": [
+        "粤语",
+        "cantonese"
+      ],
+      "expansion": "cantonese chinese audio"
+    },
+    {
+      "id": "french",
+      "terms": [
+        "法语",
+        "法国",
+        "french"
+      ],
+      "expansion": "french france"
+    },
+    {
+      "id": "spanish",
+      "terms": [
+        "西班牙语",
+        "拉美",
+        "spanish"
+      ],
+      "expansion": "spanish latin american"
+    },
+    {
+      "id": "romanian",
+      "terms": [
+        "罗马尼亚",
+        "romanian"
+      ],
+      "expansion": "romanian romania"
+    },
+    {
+      "id": "russian",
+      "terms": [
+        "俄语",
+        "russian"
+      ],
+      "expansion": "russian"
+    },
+    {
+      "id": "portuguese",
+      "terms": [
+        "巴西",
+        "葡萄牙语",
+        "brazilian",
+        "portuguese"
+      ],
+      "expansion": "brazilian portuguese"
+    },
+    {
+      "id": "usenet",
+      "terms": [
+        "usenet",
+        "nzb"
+      ],
+      "expansion": "usenet nzb newznab indexer"
+    }
+  ]
+}

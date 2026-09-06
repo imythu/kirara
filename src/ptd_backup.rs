@@ -474,6 +474,9 @@ mod tests {
         assert_eq!(user_info["mteam"]["2026-09-04"]["levelId"], 9);
         assert_eq!(user_info["mteam"]["2026-09-04"]["messageCount"], 2);
         assert_eq!(user_info["mteam"]["2026-09-04"]["seedingSize"], 4096);
+        assert_eq!(user_info["mteam"]["2026-09-04"]["seeding"], 7);
+        assert_eq!(user_info["mteam"]["2026-09-04"]["leeching"], 1);
+        assert_eq!(user_info["mteam"]["2026-09-04"]["bonusPerHour"], 12.5);
 
         let user_info_bytes = serde_json::to_vec(&user_info).unwrap();
         let mut manifest = String::new();
@@ -813,6 +816,7 @@ mod tests {
                 leeching_count: Some(1),
                 details: UserStatsDetails {
                     message_count: Some(3),
+                    bonus_per_hour: Some(64.844),
                     ..Default::default()
                 },
             },
@@ -824,6 +828,47 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].snapshot_date, "2026-09-04");
         assert_eq!(history[0].stats.details.message_count, Some(3));
+        for (name, site_type, url, count, rate) in [
+            (
+                "hhanclub",
+                "nexusphp",
+                "https://www.hhanclub.top",
+                213,
+                165.614,
+            ),
+            (
+                "greatposterwall",
+                "gazelle",
+                "https://greatposterwall.com",
+                1,
+                0.7445,
+            ),
+        ] {
+            let id = db
+                .create_site(name, site_type, url, "{}", "[]", false)
+                .await
+                .unwrap();
+            for (date, seeding_count, bonus_per_hour) in [
+                ("2026-09-03T12:30:00Z", count + 10, rate + 20.0),
+                ("2026-09-04T12:30:00Z", count, rate),
+            ] {
+                db.upsert_site_stats_success(
+                    id,
+                    &UserStats {
+                        username: "alice".to_string(),
+                        seeding_count: Some(seeding_count),
+                        details: UserStatsDetails {
+                            bonus_per_hour: Some(bonus_per_hour),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    date,
+                )
+                .await
+                .unwrap();
+            }
+        }
         let mut config = db.get_ptd_backup_config().await.unwrap();
         config.webdav_url = format!("http://{address}/dav");
         config.username = "alice".to_string();
@@ -831,7 +876,7 @@ mod tests {
         db.update_ptd_backup_config(&config).await.unwrap();
 
         let result = backup_now(&db).await.unwrap();
-        assert_eq!(result.site_count, 1);
+        assert_eq!(result.site_count, 3);
         assert!(result.filename.starts_with("PTD_backup_"));
         let request = server.await.unwrap();
         let header_end = request
@@ -843,6 +888,41 @@ mod tests {
         assert!(headers.starts_with("put /dav/ptd_backup_"));
         assert!(headers.contains("authorization: basic ywxpy2u6c2vjcmv0"));
         assert!(request[header_end..].starts_with(b"PK"));
+
+        // Inspect the bytes received over HTTP, including the database read,
+        // historical snapshots, archive serialization and upload body.
+        let mut zip = zip::ZipArchive::new(Cursor::new(&request[header_end..])).unwrap();
+        let mut payload = Vec::new();
+        zip.by_name("userInfo.json")
+            .unwrap()
+            .read_to_end(&mut payload)
+            .unwrap();
+        let user_info: Value = serde_json::from_slice(&payload).unwrap();
+        for (site, date, count, rate) in [
+            ("mteam", "2026-09-04", 7, 64.844),
+            ("hhanclub", "2026-09-03", 223, 185.614),
+            ("hhanclub", "2026-09-04", 213, 165.614),
+            ("greatposterwall", "2026-09-03", 11, 20.7445),
+            ("greatposterwall", "2026-09-04", 1, 0.7445),
+        ] {
+            let snapshot = &user_info[site][date];
+            assert_eq!(snapshot["site"], site);
+            assert_eq!(snapshot["seeding"], count, "{site}/{date}");
+            assert!(
+                (snapshot["bonusPerHour"].as_f64().unwrap() - rate).abs() < 1e-9,
+                "{site}/{date}"
+            );
+        }
+        let mut manifest = String::new();
+        zip.by_name("manifest.json")
+            .unwrap()
+            .read_to_string(&mut manifest)
+            .unwrap();
+        let manifest: Value = serde_json::from_str(&manifest).unwrap();
+        assert_eq!(
+            manifest["files"]["userInfo"]["hash"],
+            format!("{:x}", md5::compute(&payload))
+        );
 
         let saved = db.get_ptd_backup_config().await.unwrap();
         assert_eq!(

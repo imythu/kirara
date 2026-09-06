@@ -32,6 +32,9 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchFeedback, SearchPagination } from "@/components/search-controls";
+import { SiteSearchBindingField, useSiteSearchBinding } from "@/components/site-search-binding";
+import { useServerSearch } from "@/lib/server-search";
 import {
   Card,
   CardContent,
@@ -697,7 +700,7 @@ export function SitesPage() {
   const [siteQuery, setSiteQuery] = useState("");
   const [siteStatusFilter, setSiteStatusFilter] = useState<"all" | SiteHealth>("all");
   const [siteTypeFilter, setSiteTypeFilter] = useState("all");
-  const [sitePage, setSitePage] = useState(1);
+  const [siteComposing, setSiteComposing] = useState(false);
   const [sitePresets, setSitePresets] = useState<PtdSitePreset[]>([]);
   const [sitePresetsLoading, setSitePresetsLoading] = useState(true);
   const [sitePresetsError, setSitePresetsError] = useState("");
@@ -720,6 +723,8 @@ export function SitesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<SiteForm>(emptySiteForm);
+  const savedSiteIdRef = useRef<number | null>(null);
+  const searchBinding = useSiteSearchBinding(editingId, formOpen);
   const [existingAuth, setExistingAuth] = useState<{
     siteType: SiteForm["site_type"];
     authType: AuthType;
@@ -790,35 +795,18 @@ export function SitesPage() {
     ],
     [sitePresets],
   );
-  const filteredSites = useMemo(() => {
-    const query = siteQuery.trim().toLocaleLowerCase();
-    return sites.filter((site) => {
-      if (siteStatusFilter !== "all" && getSiteHealth(site) !== siteStatusFilter) return false;
-      if (siteTypeFilter !== "all" && site.site_type !== siteTypeFilter) return false;
-      if (!query) return true;
-      return [
-        site.name,
-        site.base_url,
-        site.site_type,
-        site.stats?.username,
-        site.stats?.uid,
-        ptdConfig?.site_identifiers[String(site.id)],
-      ].some((value) => value?.toLocaleLowerCase().includes(query));
-    });
-  }, [ptdConfig?.site_identifiers, siteQuery, siteStatusFilter, siteTypeFilter, sites]);
-  const sitePageCount = Math.max(1, Math.ceil(filteredSites.length / SITE_PAGE_SIZE));
-  const pagedSites = filteredSites.slice(
-    (sitePage - 1) * SITE_PAGE_SIZE,
-    sitePage * SITE_PAGE_SIZE,
-  );
-
-  useEffect(() => {
-    setSitePage(1);
-  }, [siteQuery, siteStatusFilter, siteTypeFilter]);
-
-  useEffect(() => {
-    setSitePage((current) => Math.min(current, sitePageCount));
-  }, [sitePageCount]);
+  const siteSearch = useServerSearch<SiteRecord>("/api/sites/search", {
+    query: siteQuery,
+    composing: siteComposing,
+    enabled: !loading,
+    refreshKey: sites,
+    pageSize: SITE_PAGE_SIZE,
+    filters: {
+      health: siteStatusFilter === "all" ? undefined : siteStatusFilter,
+      type: siteTypeFilter === "all" ? undefined : siteTypeFilter,
+    },
+  });
+  const pagedSites = siteSearch.records;
 
   /* ---- data loading ---- */
 
@@ -1025,24 +1013,7 @@ export function SitesPage() {
     setCredentialMessage("");
   }
 
-  function handleOpenSite(site: SiteRecord) {
-    try {
-      const url = new URL(site.base_url.trim());
-      if (url.protocol !== "http:" && url.protocol !== "https:") {
-        throw new Error("unsupported protocol");
-      }
-      if (
-        (site.site_type === "nexusphp" || site.site_type === "nexus_php") &&
-        !url.pathname.endsWith("/index.php")
-      ) {
-        url.pathname = `${url.pathname.replace(/\/+$/, "")}/index.php`;
-      }
-      window.open(url.href, "_blank", "noopener,noreferrer");
-    } catch {
-      setActionsTarget(null);
-      setMessage(`${site.name} 的站点地址无效，仅支持 HTTP 或 HTTPS`);
-    }
-  }
+
 
   /* ---- form helpers ---- */
 
@@ -1123,6 +1094,7 @@ export function SitesPage() {
   }
 
   function openAdd() {
+    savedSiteIdRef.current = null;
     requestHeadersLoadRef.current += 1;
     setEditingId(null);
     setSelectedSitePreset(CUSTOM_SITE_PRESET);
@@ -1139,6 +1111,7 @@ export function SitesPage() {
   }
 
   function openEdit(site: SiteRecord) {
+    savedSiteIdRef.current = site.id;
     const loadId = requestHeadersLoadRef.current + 1;
     requestHeadersLoadRef.current = loadId;
     setEditingId(site.id);
@@ -1184,7 +1157,11 @@ export function SitesPage() {
   }
 
   function handleSubmit() {
-    if (submitting || requestHeadersLoading || requestHeadersError) return;
+    if (submitting || requestHeadersLoading || requestHeadersError || searchBinding.loading || searchBinding.error) return;
+    if (searchBinding.value.mode === "manual" && !searchBinding.value.catalog_id) {
+      setFormError("请选择关联的目录站点，或使用自动识别");
+      return;
+    }
     const errors: { name?: string; base_url?: string } = {};
     if (!form.name.trim()) errors.name = "请填写站点名称";
     try {
@@ -1228,9 +1205,10 @@ export function SitesPage() {
       request_headers: requestHeaders,
       clear_auth_config: editingId != null && clearAuthConfig,
     };
+    const savedId = savedSiteIdRef.current ?? editingId;
     const req =
-      editingId != null
-        ? api<{ ok: true }>(`/api/sites/${editingId}`, {
+      savedId != null
+        ? api<{ id?: number }>(`/api/sites/${savedId}`, {
             method: "PUT",
             body: JSON.stringify(body),
           })
@@ -1239,7 +1217,13 @@ export function SitesPage() {
             body: JSON.stringify(body),
           });
     req
-      .then(() => {
+      .then(async (result) => {
+        const id = savedId ?? result.id;
+        if (id == null) throw new Error("站点已保存，但未返回编号，请关闭表单并刷新列表");
+        // Retain the created ID if binding save fails, so retry updates instead of duplicating a site.
+        savedSiteIdRef.current = id;
+        try { await searchBinding.save(id); }
+        catch (error) { throw new Error(`站点已保存，目录关联保存失败：${error instanceof Error ? error.message : "请重试"}`); }
         requestHeadersLoadRef.current += 1;
         setFormOpen(false);
         setVisibleAuthFields(new Set());
@@ -1616,9 +1600,9 @@ export function SitesPage() {
           <section className="flex flex-wrap gap-2" aria-label="站点状态概览">
             {([
               { key: "all", label: "全部站点", value: sites.length, icon: Server, tone: "text-primary bg-primary/10" },
-              { key: "healthy", label: "最近拉取成功", value: siteCounts.healthy, icon: CircleCheck, tone: "text-emerald-700 bg-emerald-100" },
-              { key: "failed", label: "拉取失败", value: siteCounts.failed, icon: CircleX, tone: "text-red-700 bg-red-100" },
-              { key: "pending", label: "等待刷新", value: siteCounts.pending, icon: Clock3, tone: "text-amber-700 bg-amber-100" },
+              { key: "healthy", label: "同步成功", value: siteCounts.healthy, icon: CircleCheck, tone: "text-emerald-700 bg-emerald-100" },
+              { key: "failed", label: "同步失败", value: siteCounts.failed, icon: CircleX, tone: "text-red-700 bg-red-100" },
+              { key: "pending", label: "待同步", value: siteCounts.pending, icon: Clock3, tone: "text-amber-700 bg-amber-100" },
             ] as const).map((metric) => {
               const MetricIcon = metric.icon;
               const selected = siteStatusFilter === metric.key;
@@ -1650,9 +1634,11 @@ export function SitesPage() {
                 id="site-search"
                 value={siteQuery}
                 onChange={(event) => setSiteQuery(event.target.value)}
+                onCompositionStart={() => setSiteComposing(true)}
+                onCompositionEnd={(event) => { setSiteQuery(event.currentTarget.value); setSiteComposing(false); }}
                 className="h-11 rounded-2xl pl-10"
-                placeholder="搜索站点或账户"
-                title="支持站点、域名、用户名、UID 和 PTD 标识"
+                placeholder="搜索站点、别名、拼音或特色"
+                title="支持自定义名称、官方别名、拼音、账户和站点特色，可组合状态条件"
               />
             </div>
             <Label htmlFor="site-type-filter" className="sr-only">筛选站点类型</Label>
@@ -1676,13 +1662,15 @@ export function SitesPage() {
               className="w-full sm:w-40"
               options={[
                 { value: "all", label: "全部状态" },
-                { value: "healthy", label: "最近拉取成功" },
-                { value: "failed", label: "拉取失败" },
-                { value: "pending", label: "等待刷新" },
+                { value: "healthy", label: "同步成功" },
+                { value: "failed", label: "同步失败" },
+                { value: "pending", label: "待同步" },
               ]}
             />
-            <span className="shrink-0 px-1 text-xs font-semibold text-muted">显示 {filteredSites.length} / {sites.length}</span>
+            <span className="shrink-0 px-1 text-xs font-semibold text-muted">匹配 {siteSearch.total} / {sites.length}</span>
           </section>
+
+          {!loading ? <SearchFeedback search={siteSearch} onClearQuery={() => { setSiteQuery(""); setSiteTypeFilter("all"); setSiteStatusFilter("all"); }} /> : null}
 
           {sitesError ? (
             <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
@@ -1699,14 +1687,14 @@ export function SitesPage() {
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               加载中…
             </div>
-          ) : sitesError && sites.length === 0 ? null : sites.length === 0 ? (
+          ) : siteSearch.loading || siteComposing || siteSearch.error ? null : sitesError && sites.length === 0 ? null : sites.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border py-14 text-center">
               <Globe className="mx-auto size-8 text-muted" />
               <p className="mt-3 font-semibold">还没有配置 PT 站点</p>
               <p className="mt-1 text-sm text-muted">添加首个站点后即可测试连接并刷新账户数据。</p>
               <Button className={`mt-4 ${sitePrimaryButtonClassName}`} onClick={openAdd}><Plus className="mr-2 size-4" />添加站点</Button>
             </div>
-          ) : filteredSites.length === 0 ? (
+          ) : siteSearch.total === 0 ? (
             <div className="rounded-2xl border border-dashed border-border py-12 text-center text-sm text-muted">
               <p>没有符合当前筛选条件的站点</p>
               <Button variant="outline" className="mt-4 h-11" onClick={() => {
@@ -1720,20 +1708,18 @@ export function SitesPage() {
                   <caption className="sr-only">站点账户数据、刷新状态与管理操作</caption>
                   <thead className="border-b border-border text-muted">
                     <tr>
-                      <th scope="col" className="w-[25%] px-2 py-3 font-medium">站点 / 账户</th>
-                      <th scope="col" className="w-[24%] px-2 py-3 font-medium">账户数据</th>
-                      <th scope="col" className="px-2 py-3 font-medium">刷新状态</th>
-                      <th scope="col" className="w-[190px] px-2 py-3 text-right font-medium">操作</th>
+                      <th scope="col" className="w-[29%] px-2 py-3 font-medium">站点 / 账户</th>
+                      <th scope="col" className="w-[19%] px-2 py-3 font-medium">传输数据</th>
+                      <th scope="col" className="w-[15%] px-2 py-3 font-medium">做种</th>
+                      <th scope="col" className="px-2 py-3 font-medium">等级 / 权限</th>
+                      <th scope="col" className="w-[180px] px-2 py-3 text-right font-medium">操作</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {pagedSites.map((site) => (
                       <tr key={site.id} className="align-top hover:bg-accent/25">
                         <td className="px-2 py-4">
-                          <p className="break-words font-semibold">{site.name}</p>
-                          <p className="mt-1 truncate text-sm text-muted" title={site.base_url}>{site.base_url}</p>
-                          <p className="mt-2 break-words text-sm">{site.stats?.username ?? "账户待获取"}</p>
-                          <p className="mt-1 break-words text-xs text-muted">UID {site.stats?.uid ?? "—"} · {site.site_type === "gazelle" ? "Gazelle" : site.site_type}</p>
+                          <SiteAccountIdentity site={site} />
                         </td>
                         <td className="px-2 py-4">
                           <dl className="space-y-1.5 tabular-nums">
@@ -1743,7 +1729,8 @@ export function SitesPage() {
                             <div className="flex flex-wrap gap-x-2 text-xs text-muted"><dt>魔力</dt><dd>{site.stats?.bonus != null ? site.stats.bonus.toFixed(1) : "—"}</dd></div>
                           </dl>
                         </td>
-                        <td className="px-2 py-4"><SiteStatusDetail site={site} /></td>
+                        <td className="px-2 py-4"><SiteSeedingStats site={site} /></td>
+                        <td className="px-2 py-4"><SiteAccountLevel site={site} /></td>
                         <td className="px-2 py-4">{renderSiteActions(site)}</td>
                       </tr>
                     ))}
@@ -1754,49 +1741,24 @@ export function SitesPage() {
               <div className="grid gap-4 xl:hidden">
                 {pagedSites.map((site) => (
                   <article key={site.id} aria-label={site.name} className="min-w-0 rounded-xl border border-border p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="break-words text-base font-semibold">{site.name}</h3>
-                        <p className="mt-1 break-all text-sm text-muted">{site.base_url}</p>
-                        <p className="mt-1 break-words text-sm text-muted">{site.stats?.username ?? "账户待获取"}</p>
-                      </div>
-                      <SiteHealthBadge site={site} />
-                    </div>
-                    <dl className="my-4 grid grid-cols-3 gap-2 text-sm tabular-nums">
-                      <div><dt className="text-muted">上传</dt><dd className="mt-1 break-all font-medium">{site.stats?.uploaded != null ? formatBytes(site.stats.uploaded) : "—"}</dd></div>
-                      <div><dt className="text-muted">下载</dt><dd className="mt-1 break-all font-medium">{site.stats?.downloaded != null ? formatBytes(site.stats.downloaded) : "—"}</dd></div>
-                      <div><dt className="text-muted">分享率</dt><dd className="mt-1 break-all font-medium">{site.stats?.uploaded != null && site.stats.downloaded != null ? formatRatio(site.stats.uploaded, site.stats.downloaded) : "—"}</dd></div>
+                    <SiteAccountIdentity site={site} />
+                    <dl className="my-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm tabular-nums sm:grid-cols-3">
+                      <div><dt className="text-xs text-muted">上传</dt><dd className="mt-1 font-medium">{site.stats?.uploaded != null ? formatBytes(site.stats.uploaded) : "—"}</dd></div>
+                      <div><dt className="text-xs text-muted">下载</dt><dd className="mt-1 font-medium">{site.stats?.downloaded != null ? formatBytes(site.stats.downloaded) : "—"}</dd></div>
+                      <div><dt className="text-xs text-muted">做种数</dt><dd className="mt-1 font-medium">{site.stats?.seeding_count?.toLocaleString() ?? "—"}</dd></div>
+                      <div><dt className="text-xs text-muted">做种体积</dt><dd className="mt-1 font-medium">{site.stats?.seeding_size != null ? formatBytes(site.stats.seeding_size) : "—"}</dd></div>
+                      <div><dt className="text-xs text-muted">分享率</dt><dd className="mt-1 font-medium">{site.stats?.uploaded != null && site.stats.downloaded != null ? formatRatio(site.stats.uploaded, site.stats.downloaded) : "—"}</dd></div>
+                      <div><dt className="text-xs text-muted">魔力</dt><dd className="mt-1 font-medium">{site.stats?.bonus?.toFixed(1) ?? "—"}</dd></div>
                     </dl>
-                    <SiteStatusDetail site={site} showBadge={false} />
+                    <div className="border-t border-border pt-3">
+                      <p className="mb-1.5 text-xs text-muted">等级 / 权限</p>
+                      <SiteAccountLevel site={site} />
+                    </div>
                     <div className="mt-4 border-t border-border pt-3">{renderSiteActions(site)}</div>
                   </article>
                 ))}
               </div>
-              {sitePageCount > 1 ? (
-                <nav className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface-container/40 px-3 py-2" aria-label="站点分页">
-                  <span className="text-xs text-muted">
-                    第 {sitePage} / {sitePageCount} 页 · 每页 {SITE_PAGE_SIZE} 个
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="h-11 px-3 text-sm"
-                      onClick={() => setSitePage((current) => Math.max(1, current - 1))}
-                      disabled={sitePage <= 1}
-                    >
-                      <ChevronLeft className="mr-1 size-3.5" />上一页
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-11 px-3 text-sm"
-                      onClick={() => setSitePage((current) => Math.min(sitePageCount, current + 1))}
-                      disabled={sitePage >= sitePageCount}
-                    >
-                      下一页<ChevronRight className="ml-1 size-3.5" />
-                    </Button>
-                  </div>
-                </nav>
-              ) : null}
+              <SearchPagination search={siteSearch} label="站点" />
             </>
           )}
         </CardContent>
@@ -1991,7 +1953,6 @@ export function SitesPage() {
             </dl>
             <div className="grid gap-2">
               <Button variant="outline" className="h-11 justify-start" onClick={() => { setCredentialMessage(""); setCredentialsTarget(actionsTarget); setActionsTarget(null); }}><KeyRound className="mr-2 size-4" />查看凭据</Button>
-              <Button variant="outline" className="h-11 justify-start" onClick={() => handleOpenSite(actionsTarget)}><ExternalLink className="mr-2 size-4" />打开站点主页</Button>
               <Button variant="outline" className="h-11 justify-start text-red-700" onClick={() => { setDeleteError(""); setDeleteTarget(actionsTarget); setActionsTarget(null); }}><Trash2 className="mr-2 size-4" />删除站点</Button>
             </div>
           </div>
@@ -2041,7 +2002,7 @@ export function SitesPage() {
             {formError ? <p role="alert" className="break-words text-sm text-red-700">{formError}</p> : null}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" className="h-11" onClick={closeForm} disabled={submitting}>取消</Button>
-              <Button type="submit" form="site-connection-form" className={sitePrimaryButtonClassName} disabled={submitting || requestHeadersLoading || Boolean(requestHeadersError)}>
+              <Button type="submit" form="site-connection-form" className={sitePrimaryButtonClassName} disabled={submitting || requestHeadersLoading || Boolean(requestHeadersError) || searchBinding.loading || Boolean(searchBinding.error)}>
                 {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
                 {editingId != null ? "保存" : "添加"}
               </Button>
@@ -2138,6 +2099,8 @@ export function SitesPage() {
               />
               {fieldErrors.base_url ? <p id="site-url-error" className="text-sm text-red-700">{fieldErrors.base_url}</p> : null}
             </div>
+
+            <SiteSearchBindingField binding={searchBinding} open={formOpen} />
 
             {renderAuthFields()}
 
@@ -2402,34 +2365,83 @@ export function SitesPage() {
   );
 }
 
-function SiteStatusDetail({ site, showBadge = true }: { site: SiteRecord; showBadge?: boolean }) {
+function siteHomeUrl(site: SiteRecord): string | null {
+  try {
+    const url = new URL(site.base_url.trim());
+    if (!["https:", "http:"].includes(url.protocol)) return null;
+    if (site.site_type === "mteam" && url.hostname === "api.m-team.cc") {
+      return "https://kp.m-team.cc/";
+    }
+    if (["nexusphp", "nexus_php"].includes(site.site_type) && !url.pathname.endsWith("/index.php")) {
+      url.pathname = `${url.pathname.replace(/\/+$/, "")}/index.php`;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function SiteAccountIdentity({ site }: { site: SiteRecord }) {
+  const href = siteHomeUrl(site);
+  const identity = <>
+    <span className="flex items-start gap-1.5 font-semibold">
+      <span className="min-w-0 break-words">{site.name}</span>
+      {href ? <ExternalLink aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted" /> : null}
+    </span>
+    <span className="mt-1 block truncate text-xs text-muted" title={site.base_url}>{site.base_url}</span>
+  </>;
   return (
-    <div className="space-y-2">
-      {showBadge ? <SiteHealthBadge site={site} /> : null}
-      {site.stats?.last_error ? <p className="break-words text-sm leading-6 text-red-700">{site.stats.last_error}</p> : null}
-      <p className="text-xs leading-5 text-muted">{site.stats?.last_checked_at ? `最近检查：${formatDateTime(site.stats.last_checked_at)}` : "尚未刷新账户数据"}</p>
-      {site.stats?.last_error && site.stats.uploaded != null ? <p className="text-xs text-muted">账户数值为此前获取的数据</p> : null}
+    <div className="min-w-0">
+      {href ? <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`打开${site.name}（新窗口）`} className="group block min-h-11 rounded-sm underline-offset-4 hover:text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{identity}</a> : <div>{identity}<p className="mt-1 text-xs text-destructive">站点地址无效</p></div>}
+      <p className="mt-1 break-words text-sm">{site.stats?.username ?? "账户待获取"}</p>
+      <p className="mt-1 break-words text-xs text-muted">UID {site.stats?.uid ?? "—"} · {site.site_type === "gazelle" ? "Gazelle" : site.site_type}</p>
+      <div className="mt-2"><SiteStatusDetail site={site} /></div>
     </div>
   );
 }
 
-function SiteHealthBadge({ site }: { site: SiteRecord }) {
-  const health = getSiteHealth(site);
-  const styles: Record<SiteHealth, string> = {
-    healthy: "bg-emerald-100 text-emerald-700",
-    failed: "bg-red-100 text-red-700",
-    pending: "bg-amber-100 text-amber-700",
-  };
-  const labels: Record<SiteHealth, string> = {
-    healthy: "拉取成功",
-    failed: "失败",
-    pending: "待刷新",
-  };
+function SiteSeedingStats({ site }: { site: SiteRecord }) {
   return (
-    <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium ${styles[health]}`}>
-      {labels[health]}
-    </span>
+    <dl className="space-y-1.5 tabular-nums">
+      <div><dt className="text-xs text-muted">做种数</dt><dd className="mt-1 font-semibold">{site.stats?.seeding_count?.toLocaleString() ?? "—"}</dd></div>
+      <div><dt className="text-xs text-muted">做种体积</dt><dd className="mt-1 font-medium">{site.stats?.seeding_size != null ? formatBytes(site.stats.seeding_size) : "—"}</dd></div>
+    </dl>
   );
+}
+
+function SiteAccountLevel({ site }: { site: SiteRecord }) {
+  const stats = site.stats;
+  return (
+    <div className="space-y-1.5">
+      <p className="break-words text-sm font-medium">{stats?.level_name?.trim() || (stats?.level_id != null ? `等级 ${stats.level_id}` : "等级未获取")}</p>
+      {stats?.is_donor ? <p className="text-xs text-muted">捐赠用户</p> : null}
+      {stats?.invites != null ? <p className="text-xs text-muted">邀请名额 <span className="tabular-nums">{stats.invites.toLocaleString()}</span></p> : null}
+      <p className="text-xs text-muted">具体权限未提供</p>
+    </div>
+  );
+}
+
+function SiteStatusDetail({ site }: { site: SiteRecord }) {
+  const health = getSiteHealth(site);
+  const timestamp = site.stats?.last_checked_at;
+  const timeLabel = timestamp ? `最近检查：${formatDateTime(timestamp)}` : "尚未同步账户数据";
+  const label = health === "healthy" ? "同步成功" : health === "failed" ? "同步失败" : "待同步";
+  const Icon = health === "healthy" ? CircleCheck : health === "failed" ? CircleX : Clock3;
+  const status = <span className={`inline-flex items-center gap-1.5 text-xs ${health === "healthy" ? "text-emerald-700" : health === "failed" ? "text-red-700" : "text-muted"}`}><Icon className="size-3.5 shrink-0" aria-hidden="true" />{label}</span>;
+  if (health === "failed") return (
+    <details className="group text-xs">
+      <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-2 [&::-webkit-details-marker]:hidden" title={timeLabel}>
+        {status}<ChevronDown aria-hidden="true" className="size-3.5 text-muted transition-transform group-open:rotate-180" />
+        {site.stats?.uploaded != null ? <span className="text-muted">保留上次数据</span> : null}
+      </summary>
+      <div className="space-y-1.5 pb-1">
+        <p className="break-words leading-5 text-red-700">{site.stats?.last_error}</p>
+        <p className="text-muted">{timeLabel}</p>
+        {site.stats?.updated_at ? <p className="text-muted">数据更新：{formatDateTime(site.stats.updated_at)}</p> : null}
+      </div>
+    </details>
+  );
+  return <div title={timeLabel}>{status}<span className="sr-only">，{timeLabel}</span></div>;
 }
 
 function OverviewMetricCard({
@@ -2485,13 +2497,7 @@ function OverviewMobileCard({ row }: { row: SiteOverviewRow }) {
   const stats = row.stats;
   return (
     <div className="min-w-0 rounded-2xl border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 break-words">
-          <div className="text-base font-bold">{row.site.name}</div>
-          <div className="mt-0.5 text-[11px] text-muted">UID {stats?.uid ?? "-"} · {stats?.username ?? "-"}</div>
-        </div>
-        <SiteHealthBadge site={row.site} />
-      </div>
+      <SiteAccountIdentity site={row.site} />
       <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
         <div className="rounded-xl bg-surface-container/70 p-2.5">
           <div className="text-[10px] font-bold text-muted">上传量</div>
@@ -2506,7 +2512,6 @@ function OverviewMobileCard({ row }: { row: SiteOverviewRow }) {
           <div className="mt-0.5 text-sm font-black truncate">{stats ? formatRatio(stats.uploaded, stats.downloaded) : "-"}</div>
         </div>
       </div>
-      <div className="mt-3 border-t border-border pt-3"><SiteStatusDetail site={row.site} showBadge={false} /></div>
     </div>
   );
 }

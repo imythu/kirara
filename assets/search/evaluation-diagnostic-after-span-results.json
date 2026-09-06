@@ -1,0 +1,1103 @@
+{
+  "fixture": "evaluation.json",
+  "summaries": {
+    "reference_wasm": {
+      "ndcg10": 0.7438937072599293,
+      "precision5": 0.8800000000000001,
+      "no_result_false_recall": "10/10"
+    },
+    "lexical_concept": {
+      "ndcg10": 0.4515025086588599,
+      "precision5": 0.6900000000000001,
+      "no_result_false_recall": "3/10"
+    },
+    "native_hybrid": {
+      "ndcg10": 0.5787794334955579,
+      "precision5": 0.64,
+      "no_result_false_recall": "0/10"
+    }
+  },
+  "rows": [
+    {
+      "query": "想找高保真歌曲的分享社区",
+      "topic": "music",
+      "reference_wasm": {
+        "ndcg10": 0.04125065687317932,
+        "precision5": 0.2,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "npupt",
+          "ptvicomo",
+          "pting-forum",
+          "vclib",
+          "ptneko"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "recordings with studio quality sound",
+      "topic": "music",
+      "reference_wasm": {
+        "ndcg10": 0.5663179238270756,
+        "precision5": 0.8,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "opencd",
+          "cnlang",
+          "joyhd",
+          "uhd100",
+          "torrenthub"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "想收藏日本二次元作品",
+      "topic": "anime",
+      "reference_wasm": {
+        "ndcg10": 0.9258936567941141,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.4351869256057173,
+        "precision5": 1,
+        "returned": 134
+      },
+      "native_hybrid": {
+        "ndcg10": 0.9174986862536413,
+        "precision5": 1,
+        "returned": 134
+      },
+      "top5": {
+        "reference": [
+          "animelovers",
+          "animez",
+          "nekobt",
+          "bakabt",
+          "animetosho"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "hdhome"
+        ],
+        "native": [
+          "animelovers",
+          "nekobt",
+          "bakabt",
+          "snowpt",
+          "animez"
+        ]
+      }
+    },
+    {
+      "query": "Japanese animated stories and cartoons",
+      "topic": "anime",
+      "reference_wasm": {
+        "ndcg10": 0.9174986862536413,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.4351869256057173,
+        "precision5": 1,
+        "returned": 134
+      },
+      "native_hybrid": {
+        "ndcg10": 0.699049055155498,
+        "precision5": 1,
+        "returned": 115
+      },
+      "top5": {
+        "reference": [
+          "animez",
+          "animelovers",
+          "nekobt",
+          "moecat",
+          "bakabt"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "dmhy",
+          "anirena",
+          "freefarm",
+          "acgrip",
+          "animelovers"
+        ]
+      }
+    },
+    {
+      "query": "寻找经典影片收藏资源",
+      "topic": "movies",
+      "reference_wasm": {
+        "ndcg10": 0.7431286862216818,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5159958223394445,
+        "precision5": 1,
+        "returned": 225
+      },
+      "native_hybrid": {
+        "ndcg10": 0.7104686128238442,
+        "precision5": 1,
+        "returned": 225
+      },
+      "top5": {
+        "reference": [
+          "cinemaz",
+          "beitai",
+          "filept",
+          "telly",
+          "awesomehd"
+        ],
+        "lexical": [
+          "m-team",
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky"
+        ],
+        "native": [
+          "hdai",
+          "hdstreet",
+          "anthelion",
+          "awesomehd",
+          "beitai"
+        ]
+      }
+    },
+    {
+      "query": "a collection of motion pictures",
+      "topic": "movies",
+      "reference_wasm": {
+        "ndcg10": 0.8566951181628005,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "cinemaz",
+          "xingyunge",
+          "greatposterwall",
+          "ptp",
+          "pt99"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "寻找可以阅读的电子书",
+      "topic": "books",
+      "reference_wasm": {
+        "ndcg10": 0.7665911926090831,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 75
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8125952066495403,
+        "precision5": 1,
+        "returned": 75
+      },
+      "top5": {
+        "reference": [
+          "siqi",
+          "gtorg",
+          "simurg",
+          "xingtan",
+          "myanonamouse"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "u2",
+          "hdtime",
+          "piggo"
+        ],
+        "native": [
+          "siqi",
+          "thevault",
+          "xingtan",
+          "gtorg",
+          "myanonamouse"
+        ]
+      }
+    },
+    {
+      "query": "novels and digital reading material",
+      "topic": "books",
+      "reference_wasm": {
+        "ndcg10": 0.8030025006704564,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "audiobookbay",
+          "simurg",
+          "myanonamouse",
+          "gtorg",
+          "thevault"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "想听有声小说和广播剧",
+      "topic": "audiobooks",
+      "reference_wasm": {
+        "ndcg10": 0.662935480370944,
+        "precision5": 0.8,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6592367983634905,
+        "precision5": 1,
+        "returned": 16
+      },
+      "native_hybrid": {
+        "ndcg10": 0.6812273701117301,
+        "precision5": 0.8,
+        "returned": 28
+      },
+      "top5": {
+        "reference": [
+          "htpt",
+          "karagarga",
+          "audiobookbay",
+          "soulvoice",
+          "simurg"
+        ],
+        "lexical": [
+          "audiences",
+          "leaves",
+          "soulvoice",
+          "longpt",
+          "karagarga"
+        ],
+        "native": [
+          "htpt",
+          "karagarga",
+          "audiobookbay",
+          "simurg",
+          "myanonamouse"
+        ]
+      }
+    },
+    {
+      "query": "narrated novels to listen to",
+      "topic": "audiobooks",
+      "reference_wasm": {
+        "ndcg10": 0.409914109458751,
+        "precision5": 0.6,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "soulvoice",
+          "simurg",
+          "audiences",
+          "piggo",
+          "rousipro"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "寻找自然纪录片",
+      "topic": "documentary",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 108
+      },
+      "native_hybrid": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 108
+      },
+      "top5": {
+        "reference": [
+          "pt99",
+          "gainbound",
+          "afun",
+          "dajiao",
+          "hares"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "zrpt",
+          "dajiao",
+          "pt99",
+          "afun",
+          "gainbound"
+        ]
+      }
+    },
+    {
+      "query": "nonfiction films about the natural world",
+      "topic": "documentary",
+      "reference_wasm": {
+        "ndcg10": 0.2489083270225946,
+        "precision5": 0.4,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.7104770117651426,
+        "precision5": 0.8,
+        "returned": 225
+      },
+      "native_hybrid": {
+        "ndcg10": 0.3589542101716347,
+        "precision5": 0.4,
+        "returned": 225
+      },
+      "top5": {
+        "reference": [
+          "cinemaz",
+          "gainbound",
+          "pt99",
+          "awesomehd",
+          "filept"
+        ],
+        "lexical": [
+          "m-team",
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky"
+        ],
+        "native": [
+          "dajiao",
+          "pt99",
+          "sdbits",
+          "anthelion",
+          "awesomehd"
+        ]
+      }
+    },
+    {
+      "query": "想看足球和赛车比赛",
+      "topic": "sports",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 89
+      },
+      "native_hybrid": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 89
+      },
+      "top5": {
+        "reference": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "hhanclub",
+          "retroflix"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "springsunday",
+          "retroflix"
+        ]
+      }
+    },
+    {
+      "query": "recorded football matches and motor racing",
+      "topic": "sports",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 89
+      },
+      "native_hybrid": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 89
+      },
+      "top5": {
+        "reference": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "retroflix",
+          "oshen"
+        ],
+        "lexical": [
+          "chdbits",
+          "audiences",
+          "hhanclub",
+          "hdsky",
+          "pterclub"
+        ],
+        "native": [
+          "sportscult",
+          "f1carreras",
+          "ptfans",
+          "springsunday",
+          "retroflix"
+        ]
+      }
+    },
+    {
+      "query": "寻找游戏主机资源",
+      "topic": "games",
+      "reference_wasm": {
+        "ndcg10": 0.8383354523103074,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.5821032065260976,
+        "precision5": 1,
+        "returned": 83
+      },
+      "native_hybrid": {
+        "ndcg10": 0.7887733705174911,
+        "precision5": 0.8,
+        "returned": 83
+      },
+      "top5": {
+        "reference": [
+          "gazellegames",
+          "ggpt",
+          "torrentleech",
+          "brokenstones",
+          "kufirc"
+        ],
+        "lexical": [
+          "pornbay",
+          "tokyotosho",
+          "cgpeers",
+          "kufirc",
+          "audiences"
+        ],
+        "native": [
+          "gazellegames",
+          "ggpt",
+          "kufirc",
+          "torrentleech",
+          "gfxpeers"
+        ]
+      }
+    },
+    {
+      "query": "interactive entertainment for consoles",
+      "topic": "games",
+      "reference_wasm": {
+        "ndcg10": 0.4539870836339926,
+        "precision5": 0.8,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 1
+      },
+      "native_hybrid": {
+        "ndcg10": 0,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "avgv",
+          "pterclub",
+          "railgunpt",
+          "xauat6",
+          "nanyangpt"
+        ],
+        "lexical": [
+          "avgv"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "想找苹果电脑的软件",
+      "topic": "software",
+      "reference_wasm": {
+        "ndcg10": 0.8471779732814124,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 70
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8471779732814124,
+        "precision5": 1,
+        "returned": 70
+      },
+      "top5": {
+        "reference": [
+          "ianon",
+          "phoenixproject",
+          "brokenstones",
+          "cgpeers",
+          "iptorrents"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "pttime",
+          "hdtime",
+          "hdkyl"
+        ],
+        "native": [
+          "ianon",
+          "gfxpeers",
+          "brokenstones",
+          "phoenixproject",
+          "cgpeers"
+        ]
+      }
+    },
+    {
+      "query": "applications for Apple desktop computers",
+      "topic": "software",
+      "reference_wasm": {
+        "ndcg10": 0.8471779732814124,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 70
+      },
+      "native_hybrid": {
+        "ndcg10": 0.8871958738785232,
+        "precision5": 1,
+        "returned": 70
+      },
+      "top5": {
+        "reference": [
+          "ianon",
+          "phoenixproject",
+          "brokenstones",
+          "cgpeers",
+          "zhixing"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "pttime",
+          "hdtime",
+          "hdkyl"
+        ],
+        "native": [
+          "ianon",
+          "brokenstones",
+          "gfxpeers",
+          "phoenixproject",
+          "filelist"
+        ]
+      }
+    },
+    {
+      "query": "寻找技术学习课程和教程",
+      "topic": "learning",
+      "reference_wasm": {
+        "ndcg10": 0.9490593244271376,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.6943559465628251,
+        "precision5": 1,
+        "returned": 38
+      },
+      "native_hybrid": {
+        "ndcg10": 0.9490593244271376,
+        "precision5": 1,
+        "returned": 24
+      },
+      "top5": {
+        "reference": [
+          "thegeeks",
+          "xingtan",
+          "gfxpeers",
+          "neu6",
+          "thevault"
+        ],
+        "lexical": [
+          "btschool",
+          "tccf",
+          "zrpt",
+          "tjupt",
+          "sjtu"
+        ],
+        "native": [
+          "thegeeks",
+          "xingtan",
+          "thevault",
+          "gfxpeers",
+          "hitpt"
+        ]
+      }
+    },
+    {
+      "query": "educational tutorials and training courses",
+      "topic": "learning",
+      "reference_wasm": {
+        "ndcg10": 1,
+        "precision5": 1,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": 0.7502332836680927,
+        "precision5": 1,
+        "returned": 22
+      },
+      "native_hybrid": {
+        "ndcg10": 0.9235889866407062,
+        "precision5": 0.8,
+        "returned": 24
+      },
+      "top5": {
+        "reference": [
+          "thegeeks",
+          "rs",
+          "ptfans",
+          "nwsuaf6",
+          "qingyingpt"
+        ],
+        "lexical": [
+          "btschool",
+          "tccf",
+          "nwsuaf6",
+          "qingyingpt",
+          "rs"
+        ],
+        "native": [
+          "thegeeks",
+          "xingtan",
+          "audiobookbay",
+          "nanyangpt",
+          "ptfans"
+        ]
+      }
+    },
+    {
+      "query": "明天会不会下雨",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "whupt",
+          "wukongwendao",
+          "rutracker",
+          "ptmsg",
+          "nice"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "附近的川菜餐馆在哪里",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "ncore",
+          "frds",
+          "tosky",
+          "ptneko",
+          "empornium"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "今天股票市场涨了多少",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "torrentscsv",
+          "ptmsg",
+          "baconbits",
+          "wukongwendao",
+          "rutracker"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "预约牙科检查",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "torrentscsv",
+          "ptmsg",
+          "baconbits",
+          "wukongwendao",
+          "ydypt"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "如何修理自行车轮胎",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "torrentscsv",
+          "pornbits",
+          "ydypt",
+          "ptmsg",
+          "stspt"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "weather forecast tomorrow",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 1
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "aither",
+          "alpharatio",
+          "nebulance",
+          "gazellegames",
+          "baconbits"
+        ],
+        "lexical": [
+          "aither"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "restaurants serving spicy noodles",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 2
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "avgv",
+          "anthelion",
+          "dhtclub",
+          "ptchina",
+          "torrentscsv"
+        ],
+        "lexical": [
+          "avgv",
+          "anthelion"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "book a dentist appointment",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 75
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "audiobookbay",
+          "simurg",
+          "myanonamouse",
+          "siqi",
+          "gtorg"
+        ],
+        "lexical": [
+          "audiences",
+          "pterclub",
+          "u2",
+          "hdtime",
+          "piggo"
+        ],
+        "native": []
+      }
+    },
+    {
+      "query": "fix a broken bicycle wheel",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "nzbs-in",
+          "sportscult",
+          "f1carreras",
+          "bitporn",
+          "snowpt"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    },
+    {
+      "query": "qzxwplm vnrkty nonsense",
+      "topic": "unrelated",
+      "reference_wasm": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 308
+      },
+      "lexical_concept": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "native_hybrid": {
+        "ndcg10": null,
+        "precision5": 0,
+        "returned": 0
+      },
+      "top5": {
+        "reference": [
+          "uhd100",
+          "hdhome",
+          "hdsky",
+          "clearjav",
+          "reelflix"
+        ],
+        "lexical": [],
+        "native": []
+      }
+    }
+  ]
+}

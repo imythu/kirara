@@ -1,0 +1,5493 @@
+{
+  "schema_version": 1,
+  "fixture": {
+    "sites": 1000,
+    "sign_tasks": 5000,
+    "brush_tasks": 5000,
+    "unbound_sites": 142,
+    "tasks_per_site_per_scope": 5,
+    "duplicate_custom_name_site_ids": [
+      1,
+      2
+    ],
+    "enabled_tasks": 0,
+    "hosts": "reserved .example only",
+    "history_rows": 0
+  },
+  "machine": {
+    "platform": "Linux-6.18.18.c938-trim-x86_64-with-glibc2.41",
+    "host_cpu_count": 4,
+    "server_cpu_affinity": [
+      0,
+      1
+    ],
+    "cpu_model": "Intel(R) N150",
+    "cgroup_cpu_max": "max 100000",
+    "cgroup_memory_max": "max"
+  },
+  "catalog_sha256": "4ec5937ea8848fb9dd41e40408e09202b7f090410a98f058dae2358ff68de8ed",
+  "build_environment": {
+    "description": "Final x86_64-unknown-linux-musl release build; server affinity restricted to two CPUs",
+    "installed_rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+  },
+  "correctness": [
+    {
+      "name": "initial empty site refresh idle",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "sites exact unfiltered total",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 43.56793197803199,
+        "total": 1000,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "name": "sites exact custom name",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 24.463985988404602,
+        "total": 2,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "sites alias/multiple accounts",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 15.450966020580381,
+        "total": 2,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "sites hard-negative AND",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 28.91489095054567,
+        "total": 0,
+        "semantic_status": "not_needed",
+        "ids": []
+      }
+    },
+    {
+      "name": "sign exact unfiltered total",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 103.69087802246213,
+        "total": 5000,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "name": "sign exact custom name",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 233.8667730218731,
+        "total": 1,
+        "semantic_status": "not_needed",
+        "ids": [
+          4321
+        ]
+      }
+    },
+    {
+      "name": "sign alias/multiple accounts",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 180.4468460031785,
+        "total": 10,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2,
+          1001,
+          1002,
+          2001,
+          2002,
+          3001,
+          3002,
+          4001,
+          4002
+        ]
+      }
+    },
+    {
+      "name": "sign hard-negative AND",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 258.2725999527611,
+        "total": 0,
+        "semantic_status": "not_needed",
+        "ids": []
+      }
+    },
+    {
+      "name": "brush exact unfiltered total",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 121.12430896377191,
+        "total": 5000,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ]
+      }
+    },
+    {
+      "name": "brush exact custom name",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 276.16849599871784,
+        "total": 1,
+        "semantic_status": "not_needed",
+        "ids": [
+          4321
+        ]
+      }
+    },
+    {
+      "name": "brush alias/multiple accounts",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 214.92484799819067,
+        "total": 10,
+        "semantic_status": "not_needed",
+        "ids": [
+          1,
+          2,
+          1001,
+          1002,
+          2001,
+          2002,
+          3001,
+          3002,
+          4001,
+          4002
+        ]
+      }
+    },
+    {
+      "name": "brush hard-negative AND",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 290.0653809774667,
+        "total": 0,
+        "semantic_status": "not_needed",
+        "ids": []
+      }
+    },
+    {
+      "name": "cold hybrid uses model",
+      "passed": true,
+      "details": {
+        "status": 200,
+        "ms": 107.67576500074938,
+        "total": 250,
+        "semantic_status": "used",
+        "ids": [
+          18,
+          183,
+          325,
+          632,
+          797,
+          939,
+          342,
+          649,
+          956,
+          257,
+          564,
+          871,
+          20,
+          327,
+          634,
+          941,
+          79,
+          386,
+          1000,
+          19
+        ]
+      }
+    },
+    {
+      "name": "sites warm empty stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          1000
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sites warm name stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          2
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sites warm alias stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          2
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sites warm hybrid stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          250
+        ],
+        "semantic_statuses": [
+          "used"
+        ]
+      }
+    },
+    {
+      "name": "sites four concurrent alias preserves full results",
+      "passed": true,
+      "details": {
+        "totals": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "semantic_statuses": [
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sites four concurrent hybrid preserves full results",
+      "passed": true,
+      "details": {
+        "totals": [
+          250,
+          250,
+          250,
+          250,
+          250,
+          250,
+          250,
+          250,
+          250,
+          250,
+          250,
+          250
+        ],
+        "semantic_statuses": [
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used"
+        ]
+      }
+    },
+    {
+      "name": "sign warm empty stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          5000
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sign warm name stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          1
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sign warm alias stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          10
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sign warm hybrid stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          1250
+        ],
+        "semantic_statuses": [
+          "used"
+        ]
+      }
+    },
+    {
+      "name": "sign four concurrent alias preserves full results",
+      "passed": true,
+      "details": {
+        "totals": [
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10
+        ],
+        "semantic_statuses": [
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "sign four concurrent hybrid preserves full results",
+      "passed": true,
+      "details": {
+        "totals": [
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250
+        ],
+        "semantic_statuses": [
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used"
+        ]
+      }
+    },
+    {
+      "name": "brush warm empty stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          5000
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "brush warm name stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          1
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "brush warm alias stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          10
+        ],
+        "semantic_statuses": [
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "brush warm hybrid stable response",
+      "passed": true,
+      "details": {
+        "totals": [
+          1250
+        ],
+        "semantic_statuses": [
+          "used"
+        ]
+      }
+    },
+    {
+      "name": "brush four concurrent alias preserves full results",
+      "passed": true,
+      "details": {
+        "totals": [
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10,
+          10
+        ],
+        "semantic_statuses": [
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed",
+          "not_needed"
+        ]
+      }
+    },
+    {
+      "name": "brush four concurrent hybrid preserves full results",
+      "passed": true,
+      "details": {
+        "totals": [
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250,
+          1250
+        ],
+        "semantic_statuses": [
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used",
+          "used"
+        ]
+      }
+    },
+    {
+      "name": "no scheduled execution records",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "all fixture jobs disabled",
+      "passed": true,
+      "details": null
+    }
+  ],
+  "metrics": {
+    "sites_first_empty": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 43.56793197803199,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "p50_ms": 43.56793197803199,
+      "p95_ms": 43.56793197803199,
+      "peak_rss_kib": 20296
+    },
+    "sites_first_name": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 24.463985988404602,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        }
+      ],
+      "p50_ms": 24.463985988404602,
+      "p95_ms": 24.463985988404602,
+      "peak_rss_kib": 21536
+    },
+    "sign_first_empty": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 103.69087802246213,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "p50_ms": 103.69087802246213,
+      "p95_ms": 103.69087802246213,
+      "peak_rss_kib": 55832
+    },
+    "sign_first_name": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 233.8667730218731,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        }
+      ],
+      "p50_ms": 233.8667730218731,
+      "p95_ms": 233.8667730218731,
+      "peak_rss_kib": 55856
+    },
+    "brush_first_empty": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 121.12430896377191,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "p50_ms": 121.12430896377191,
+      "p95_ms": 121.12430896377191,
+      "peak_rss_kib": 54052
+    },
+    "brush_first_name": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 276.16849599871784,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        }
+      ],
+      "p50_ms": 276.16849599871784,
+      "p95_ms": 276.16849599871784,
+      "peak_rss_kib": 55008
+    },
+    "process_cold_hybrid_sites": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 107.67576500074938,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        }
+      ],
+      "p50_ms": 107.67576500074938,
+      "p95_ms": 107.67576500074938,
+      "peak_rss_kib": 40540
+    },
+    "sites_warm_empty": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 13.574968033935875,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 13.335925003048033,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 12.539748975541443,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 13.388676976319402,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 12.823918019421399,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 12.782967009115964,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 12.970075011253357,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 13.025424967054278,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 13.657305971719325,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 12.825581012293696,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 12.604215007741004,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 13.184154988266528,
+          "total": 1000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "p50_ms": 12.997749989153817,
+      "p95_ms": 13.657305971719325,
+      "peak_rss_kib": 40288,
+      "target_p95_ms": 50,
+      "meets_latency_target": true
+    },
+    "sites_warm_name": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 15.571364026982337,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.193129995372146,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.521071036346257,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.90569200925529,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 14.698466984555125,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.35652396362275,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.803862013854086,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.28837699536234,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.312962990719825,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.831171011086553,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.236406983807683,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.522542991675436,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        }
+      ],
+      "p50_ms": 15.81751651247032,
+      "p95_ms": 16.35652396362275,
+      "peak_rss_kib": 40544,
+      "target_p95_ms": 50,
+      "meets_latency_target": true
+    },
+    "sites_warm_alias": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 16.079192981123924,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.849161009304225,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 14.860538009088486,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.777262044139206,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.295672987122089,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 14.646763971541077,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.393089037388563,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.66857802774757,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.254350019153208,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 15.657212992664427,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.666253039147705,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 16.156205034349114,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        }
+      ],
+      "p50_ms": 15.928227512631565,
+      "p95_ms": 16.849161009304225,
+      "peak_rss_kib": 40556,
+      "target_p95_ms": 50,
+      "meets_latency_target": true
+    },
+    "sites_warm_hybrid": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 43.38754201307893,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 43.29350299667567,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 43.1763359811157,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 43.433170998468995,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 43.950964987743646,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 44.33478397550061,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 44.147392036393285,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 46.388149028643966,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 44.95298198889941,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 44.05441996641457,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 51.30608502076939,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 43.47822198178619,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        }
+      ],
+      "p50_ms": 44.00269247707911,
+      "p95_ms": 51.30608502076939,
+      "peak_rss_kib": 40592,
+      "target_p95_ms": 200,
+      "meets_latency_target": true
+    },
+    "sites_four_concurrent_alias": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 87.2991619980894,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 114.0009940136224,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 100.66577099496499,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 107.82756301341578,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 68.61952401231974,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 83.85726099368185,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 115.60641200048849,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 97.74318896234035,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 143.31976498942822,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 106.93589999573305,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 79.23164503881708,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 82.0412429748103,
+          "total": 2,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2
+          ]
+        }
+      ],
+      "p50_ms": 99.20447997865267,
+      "p95_ms": 143.31976498942822,
+      "peak_rss_kib": 49604,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "sites_four_concurrent_hybrid": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 339.57603899762034,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 338.81141600431874,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 345.26948700658977,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 333.68136000353843,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 362.7508010249585,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 341.1012040451169,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 351.7348720342852,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 356.58700100611895,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 360.77612900407985,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 273.20627600420266,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 343.2742290315218,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 328.02226196508855,
+          "total": 250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            342,
+            649,
+            956,
+            257,
+            564,
+            871,
+            20,
+            327,
+            634,
+            941,
+            79,
+            386,
+            1000,
+            19
+          ]
+        }
+      ],
+      "p50_ms": 342.18771653831936,
+      "p95_ms": 362.7508010249585,
+      "peak_rss_kib": 50596,
+      "target_p95_ms": 200,
+      "meets_latency_target": false
+    },
+    "sign_warm_empty": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 109.25647499971092,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 105.92558298958465,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 113.50051802583039,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 106.02880897931755,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 101.28018102841452,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 119.06525696394965,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 105.04568601027131,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 101.7736719804816,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 109.77192898280919,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 113.89582400443032,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 104.73874601302668,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 102.49997896607965,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "p50_ms": 105.9771959844511,
+      "p95_ms": 119.06525696394965,
+      "peak_rss_kib": 72336,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "sign_warm_name": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 236.7643730249256,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 243.60065296059474,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 237.96101694460958,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 236.19952000444755,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 238.10960695846006,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 243.03650099318475,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 241.53719702735543,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 245.2158789965324,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 242.39756900351495,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 254.0104590007104,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 251.9861999899149,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 250.57635694975033,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        }
+      ],
+      "p50_ms": 242.71703499834985,
+      "p95_ms": 254.0104590007104,
+      "peak_rss_kib": 72344,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "sign_warm_alias": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 179.96307398425415,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 174.89299300359562,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 186.43878400325775,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 174.47714402806014,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 175.95777299720794,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 175.76038400875404,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 177.8335000271909,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 178.60171297797933,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 186.0202779644169,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 186.07526400592178,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 182.14296700898558,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 180.88847998296842,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        }
+      ],
+      "p50_ms": 179.28239348111674,
+      "p95_ms": 186.43878400325775,
+      "peak_rss_kib": 72360,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "sign_warm_hybrid": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 346.74382203957066,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 361.7926019942388,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 343.72029796941206,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 338.2764279958792,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 355.76735803624615,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 352.92424401268363,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 370.40659197373316,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 379.80983703164384,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 358.08262799400836,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 356.1611729674041,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 343.1605100049637,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 362.248138000723,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        }
+      ],
+      "p50_ms": 355.96426550182514,
+      "p95_ms": 379.80983703164384,
+      "peak_rss_kib": 75788,
+      "target_p95_ms": 200,
+      "meets_latency_target": false
+    },
+    "sign_four_concurrent_alias": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 1100.3910130239092,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1047.4019920220599,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 981.9252259912901,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 981.1361329630017,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1059.8662220290862,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1064.600773039274,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1007.9981299932115,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1145.7421919913031,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1027.6270370231941,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1012.0767780463211,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 996.0340399993584,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 874.4355320231989,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        }
+      ],
+      "p50_ms": 1019.8519075347576,
+      "p95_ms": 1145.7421919913031,
+      "peak_rss_kib": 179504,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "sign_four_concurrent_hybrid": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 2743.4458439820446,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2758.6074779974297,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2602.53409598954,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2751.641415990889,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2588.4433169849217,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2579.33973002946,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2602.0323089906015,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2577.3364229826257,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2590.761824976653,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2584.6320660202764,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2534.226739022415,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2546.826047997456,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        }
+      ],
+      "p50_ms": 2589.6025709807873,
+      "p95_ms": 2758.6074779974297,
+      "peak_rss_kib": 180008,
+      "target_p95_ms": 200,
+      "meets_latency_target": false
+    },
+    "brush_warm_empty": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 144.66985000763088,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 147.31467701494694,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 150.45021096011624,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 129.6903759939596,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 121.91673897905275,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 121.75083201145753,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 121.78598798345774,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 119.78806398110464,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 120.6532780197449,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 121.52491899905726,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 127.77844205265865,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 128.6731120198965,
+          "total": 5000,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ]
+        }
+      ],
+      "p50_ms": 124.8475905158557,
+      "p95_ms": 150.45021096011624,
+      "peak_rss_kib": 85480,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "brush_warm_name": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 324.84709698474035,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 305.04959798417985,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 360.43648701161146,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 338.1797990296036,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 278.1680570333265,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 280.4154400364496,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 287.2328899684362,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 273.03214505081996,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 277.8975369874388,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 274.4101589778438,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 278.96334702381864,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 275.8694709627889,
+          "total": 1,
+          "semantic_status": "not_needed",
+          "ids": [
+            4321
+          ]
+        }
+      ],
+      "p50_ms": 279.6893935301341,
+      "p95_ms": 360.43648701161146,
+      "peak_rss_kib": 85668,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "brush_warm_alias": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 217.01492700958624,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 213.52538303472102,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 219.99650198267773,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 213.68436299962923,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 213.3608389995061,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 218.47889199852943,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 213.05676898919046,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 216.89100802177563,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 218.31269701942801,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 215.49684996716678,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 222.64226502738893,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 224.02723599225283,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        }
+      ],
+      "p50_ms": 216.95296751568094,
+      "p95_ms": 224.02723599225283,
+      "peak_rss_kib": 73180,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "brush_warm_hybrid": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 382.1675530052744,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 390.07968502119184,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 399.823531974107,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 398.38435500860214,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 389.39277501776814,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 409.8652600077912,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 378.1990919960663,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 383.81026894785464,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 384.86454100348055,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 388.1453789654188,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 387.7161010168493,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 394.26525798626244,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        }
+      ],
+      "p50_ms": 388.76907699159347,
+      "p95_ms": 409.8652600077912,
+      "peak_rss_kib": 73316,
+      "target_p95_ms": 200,
+      "meets_latency_target": false
+    },
+    "brush_four_concurrent_alias": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 1216.041342006065,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1259.3136070063338,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1224.1036109626293,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1242.217478051316,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1246.9717970234342,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1213.2992800325155,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1214.5958329783753,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1359.6554840332828,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1206.8545880028978,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1191.986515012104,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1191.8754649814218,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 1106.036780984141,
+          "total": 10,
+          "semantic_status": "not_needed",
+          "ids": [
+            1,
+            2,
+            1001,
+            1002,
+            2001,
+            2002,
+            3001,
+            3002,
+            4001,
+            4002
+          ]
+        }
+      ],
+      "p50_ms": 1215.31858749222,
+      "p95_ms": 1359.6554840332828,
+      "peak_rss_kib": 171640,
+      "target_p95_ms": 50,
+      "meets_latency_target": false
+    },
+    "brush_four_concurrent_hybrid": {
+      "observations": [
+        {
+          "status": 200,
+          "ms": 2941.3198639522307,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2941.7156359995715,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2928.750239952933,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2961.3501710118726,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2765.896195953246,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2750.7289689965546,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2761.533505981788,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2884.1449370374903,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2773.099902959075,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2763.1762299570255,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2760.6833649915643,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        },
+        {
+          "status": 200,
+          "ms": 2697.317316022236,
+          "total": 1250,
+          "semantic_status": "used",
+          "ids": [
+            18,
+            183,
+            325,
+            632,
+            797,
+            939,
+            1018,
+            1183,
+            1325,
+            1632,
+            1797,
+            1939,
+            2018,
+            2183,
+            2325,
+            2632,
+            2797,
+            2939,
+            3018,
+            3183
+          ]
+        }
+      ],
+      "p50_ms": 2769.4980494561605,
+      "p95_ms": 2961.3501710118726,
+      "peak_rss_kib": 178792,
+      "target_p95_ms": 200,
+      "meets_latency_target": false
+    }
+  },
+  "measurement_notes": [
+    "HTTP timings include loopback transport and complete JSON response decoding.",
+    "Warm p95 uses nearest-rank percentile of the recorded samples.",
+    "One shared model has only one process-cold query; later scopes reuse it.",
+    "Performance targets are reported, not used to suppress correctness results."
+  ],
+  "binary": {
+    "source": "/tmp/kirara-musl-size/current/kirara",
+    "sha256": "474a9e61ef2e261b1da051e6d111f1a898765a6fd16ef55a652c45979131b86e",
+    "size_bytes": 40678400
+  },
+  "rss_before_search_kib": 16172,
+  "peak_rss_kib": 180008,
+  "kernel_peak_rss_kib": 180008,
+  "peak_extra_rss_mib": 159.99609375,
+  "meets_extra_memory_target_64_mib": false,
+  "server_log_tail": "2026-09-06T08:18:39.243397Z  INFO kirara-server ThreadId(04) startup configuration: listen_addr=127.0.0.1:42849 data_dir=/tmp/kirara-scale-probe-ebzief3m/data database_dir=/tmp/kirara-scale-probe-ebzief3m/data\n2026-09-06T08:18:39.261330Z  INFO tokio-rt-worker ThreadId(06) media scheduler started subscription_poll_secs=15.0 download_poll_secs=2.0\n2026-09-06T08:18:39.261381Z  INFO tokio-rt-worker ThreadId(06) downloader snapshot collector started (interval: 10s)\n2026-09-06T08:18:39.261501Z  INFO tokio-rt-worker ThreadId(06) sign-in scheduler started\n2026-09-06T08:18:39.261559Z  INFO tokio-rt-worker ThreadId(06) site stats refresher started (interval: 1h)\n2026-09-06T08:18:39.261598Z  INFO tokio-rt-worker ThreadId(05) stats consumer started\n2026-09-06T08:18:39.261619Z  INFO tokio-rt-worker ThreadId(05) brush scheduler started\n2026-09-06T08:18:39.261627Z  INFO tokio-rt-worker ThreadId(06) system monitor started (interval: 10s)\n2026-09-06T08:18:39.261743Z  INFO tokio-rt-worker ThreadId(05) tag rule new torrent subscriber started\n2026-09-06T08:18:39.261761Z  INFO tokio-rt-worker ThreadId(05) new torrent publisher started interval_secs=10\n2026-09-06T08:18:39.261797Z  INFO tokio-rt-worker ThreadId(05) media relocation scheduler disabled\n2026-09-06T08:18:39.270599Z  INFO   kirara-server ThreadId(04) web server listening on 127.0.0.1:42849\n2026-09-06T08:18:39.280117Z  INFO tokio-rt-worker ThreadId(05) tag rule scheduler started, scanning every 420s\n2026-09-06T08:18:39.284342Z  INFO tokio-rt-worker ThreadId(05) media scheduler startup lease recovery completed recovered_abandoned_subscriptions=0 recovered_abandoned_downloads=0 recovered_expired_subscriptions=0 recovered_expired_downloads=0\n2026-09-06T08:19:31.710689Z  INFO tokio-rt-worker ThreadId(05) media scheduler stopped\n",
+  "temporary_database_removed": true,
+  "correctness_passed": true
+}

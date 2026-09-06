@@ -1,0 +1,16 @@
+{
+  "name": "@ternlight/mini",
+  "version": "0.1.1",
+  "license": "MIT",
+  "upstream_repository": "https://github.com/soycaporal/ternlight",
+  "upstream_tag": "v0.1.1",
+  "engine_revision": "c6d2c0a35d14c574ed2898b3dbf95977bca07208",
+  "npm_tarball": "https://registry.npmjs.org/@ternlight/mini/-/mini-0.1.1.tgz",
+  "reference_wasm_sha256": "ec5e7595bd803e1ba70e05e07e920b065eee4a5376b94fee0821e9ac7a8716c1",
+  "model_sha256": "07d8cfdba5773ad69a3fe6164b6c964e87b2368cc3ad6c2bdaf8566f2e5b6c98",
+  "model_bytes": 4839512,
+  "tokenizer_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+  "tokenizer_bytes": 711396,
+  "tokenizer_source": "https://github.com/soycaporal/ternlight/blob/c6d2c0a35d14c574ed2898b3dbf95977bca07208/engine/assets/tokenizer.json",
+  "extraction": "Load published package WebAssembly static data into a maintenance process; locate TERN v1 int4 header; copy exactly 4839512 bytes; verify embedded trailing SHA256 and pinned whole-file SHA256. Shipped server embeds only the raw weights/tokenizer and native Rust engine."
+}

@@ -21,6 +21,10 @@
     "targets": "all",
     "category": "Utility",
     "shortDescription": "Kirara desktop application",
+    "resources": {
+      "../assets/search/models/mini/LICENSE": "licenses/search-encoder-LICENSE",
+      "../assets/search/models/mini/provenance.json": "licenses/search-encoder-provenance.json"
+    },
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "macOS": { "minimumSystemVersion": "10.15", "signingIdentity": "-" },
     "windows": { "nsis": { "installMode": "currentUser", "languages": ["SimpChinese", "English"], "displayLanguageSelector": true } }
