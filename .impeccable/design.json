@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-05T12:58:37.283327+00:00",
+  "generatedAt": "2026-09-06T09:02:44.228484+00:00",
   "title": "Design System: 云母",
   "extensions": {
     "colorMeta": {
@@ -481,6 +481,11 @@
         "name": "The Bordered Surface Rule",
         "body": "Standard cards have no shadow; light surface changes and thin warm borders separate content.",
         "section": "elevation"
+      },
+      {
+        "name": "The Local Feedback Rule",
+        "body": "Keep an operation’s failure message beside its affected record and retry action; keep configuration feedback beside the save controls. Use explicit text for service and processing states, and expandable detail for longer result explanations.",
+        "section": "components"
       }
     ],
     "dos": [
@@ -488,7 +493,8 @@
       "Do keep active navigation identifiable through the cream fill and diamond as well as color.",
       "Do preserve readable Chinese labels, numeric alignment and keyboard focus.",
       "Do reserve bottom clearance throughout the mobile and tablet layout.",
-      "Do keep asset provenance with the authored SVG files."
+      "Do keep asset provenance with the authored SVG files.",
+      "Do keep configuration feedback by save controls and retry errors beside the affected result."
     ],
     "donts": [
       "Don’t turn the cream workspace into a glass or gradient surface.",

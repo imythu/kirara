@@ -18,6 +18,7 @@ use crate::stats::{DownloaderSpeedSnapshot, TaskStatsSnapshot};
 mod media;
 mod openlist;
 mod ptd_backup;
+mod webdav;
 pub mod search;
 
 pub use openlist::{
@@ -89,6 +90,7 @@ impl Database {
         };
         let db = Self { path };
         db.init().await?;
+        db.init_webdav().await?;
         Ok(db)
     }
 

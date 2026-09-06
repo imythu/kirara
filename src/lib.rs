@@ -25,6 +25,7 @@ mod stats;
 mod tag_rule;
 mod torrent_watcher;
 mod web;
+mod webdav;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -268,6 +269,8 @@ async fn run(
         relocation_scheduler_ref.start().await;
     });
 
+    let dav_stop = shutdown.child_token();
+    let dav_handle = tokio::spawn(webdav::run(db.clone(), dav_stop.clone()));
     let web_result = web::serve(
         listener,
         db,
@@ -285,6 +288,9 @@ async fn run(
         shutdown,
     )
     .await;
+
+    dav_stop.cancel();
+    let _ = dav_handle.await;
 
     media_scheduler.stop();
     relocation_scheduler.stop();

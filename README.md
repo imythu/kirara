@@ -108,6 +108,8 @@ KIRARA_DATA_DIR=/data
 
 ## 首次配置
 
+PTD 用户可点击站点管理中的「导入 PTD 配置」，按页面说明导出并选择 PTD 备份，手动导入站点 Cookie。也可在「站点管理 → 备份与同步 → Cookie 自动同步」启用内置 WebDAV 接收服务，让 PTD 定时推送后自动更新站点 Cookie。与现有 Web 服务共用端口，接收路径为 `/dav/ptd/`，首次保存生成独立连接密码；Docker 无需额外映射端口。配置方法、同步规则和部署说明见 [WebDAV Cookie 自动同步](doc/webdav-cookie-sync.md)。
+
 建议按以下顺序完成配置：
 
 1. 在“站点管理”中添加 PT 站点并测试连接。

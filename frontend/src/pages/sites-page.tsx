@@ -54,6 +54,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { PtdImportPanel } from "@/components/ptd-import-panel";
+import { WebdavSyncPanel } from "@/components/webdav-sync-panel";
 import type {
   PtdBackupConfig,
   PtdBackupRunResult,
@@ -710,6 +712,7 @@ export function SitesPage() {
   const [ptdConfig, setPtdConfig] = useState<PtdBackupConfig | null>(null);
   const [ptdConfigLoading, setPtdConfigLoading] = useState(true);
   const [ptdDialogOpen, setPtdDialogOpen] = useState(false);
+  const [ptdPanel, setPtdPanel] = useState<"receive" | "backup" | "import">("receive");
   const [ptdForm, setPtdForm] = useState<PtdBackupForm>(emptyPtdBackupForm);
   const [ptdFormError, setPtdFormError] = useState("");
   const [ptdConfigError, setPtdConfigError] = useState("");
@@ -1572,6 +1575,7 @@ export function SitesPage() {
                 <ListChecks className="mr-2 size-4" />
                 数据总览
               </Button>
+              <Button variant="outline" className="h-11" onClick={() => { setPtdPanel("import"); setPtdDialogOpen(true); }}>导入 PTD 配置</Button>
               <Button variant="outline" className="h-11" onClick={openPtdConfig} disabled={ptdConfigLoading}>
                 <CloudCog className="mr-2 size-4" />
                 备份与同步
@@ -1770,12 +1774,19 @@ export function SitesPage() {
 
       <Dialog
         open={ptdDialogOpen}
-        onClose={() => setPtdDialogOpen(false)}
+        onClose={() => { setPtdDialogOpen(false); loadSites(); loadPtdConfig(); }}
         title="备份与同步"
-        description="将站点账户数据备份到蜂巢或其他 WebDAV 服务，兼容 PT-Depiler。"
+        description="导入 PTD 配置、自动同步 Cookie，或将账户数据备份到 WebDAV。"
         panelClassName="max-w-3xl"
       >
-        <div className="space-y-5 p-4 sm:p-6">
+        <div className="flex flex-wrap gap-2 border-b border-border px-4 py-3 sm:px-6" role="group" aria-label="备份与同步方式">
+          <Button variant={ptdPanel === "import" ? "default" : "outline"} aria-pressed={ptdPanel === "import"} onClick={() => setPtdPanel("import")}>导入 PTD 配置</Button>
+          <Button variant={ptdPanel === "receive" ? "default" : "outline"} aria-pressed={ptdPanel === "receive"} onClick={() => setPtdPanel("receive")}>Cookie 自动同步</Button>
+          <Button variant={ptdPanel === "backup" ? "default" : "outline"} aria-pressed={ptdPanel === "backup"} onClick={() => setPtdPanel("backup")}>账户数据备份</Button>
+        </div>
+        {ptdDialogOpen && ptdPanel === "import" ? <PtdImportPanel onImported={loadSites} /> : null}
+        {ptdDialogOpen && ptdPanel === "receive" ? <WebdavSyncPanel /> : null}
+        {ptdPanel === "backup" ? <div className="space-y-5 p-4 sm:p-6">
           <section className="space-y-3 rounded-2xl border border-border bg-surface-container/40 p-4" aria-label="备份状态">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1937,7 +1948,7 @@ export function SitesPage() {
               {ptdSaving ? "保存中" : "保存配置"}
             </Button>
           </div>
-        </div>
+        </div> : null}
       </Dialog>
 
       <Dialog

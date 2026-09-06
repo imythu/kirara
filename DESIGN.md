@@ -202,6 +202,12 @@ The rail groups destinations under collapsible 12px labels. Destination rows are
 
 Dialogs are bottom-aligned on phones and centered from 640px, capped at 90dvh and 1024px wide. On phones only the top corners are rounded; larger layouts round all corners. Headers and optional footers remain outside the scrolling body. Retain existing Escape/confirmation behavior and focus management.
 
+### Automation configuration and results
+
+Keep operational settings in the existing dialog and shared controls. A compact group of primary/outline buttons identifies the selected mode with `aria-pressed`; labels describe each operation. Use thin dividers to separate configuration, connection instructions and result records. At narrow widths, stack fields and let actions wrap; preserve the path from configuration to its save action before connection instructions and history.
+
+**The Local Feedback Rule.** Keep an operation’s failure message beside its affected record and retry action; keep configuration feedback beside the save controls. Use explicit text for service and processing states, and expandable detail for longer result explanations.
+
 ### Brand and empty states
 
 `frontend/public/yunmu-icon.svg` is the authored flat cat emblem, used for the brand entrance and favicon. The shell displays it at 48px. `frontend/public/kirara-rest.svg` is the authored resting two-tail illustration, displayed at 156px by 114px for the empty subscription state, with empty alt text. Its cream fur/charcoal markings/vermilion eyes are artwork colors, independent of UI tokens. Other empty states use simple contextual icons. Provenance is recorded in `frontend/public/ASSETS.md`. No shipping raster was created for this redesign. Media poster content is separate from brand art.
@@ -216,6 +222,7 @@ The dark slate log console, local status colors, isolated peach trophy accent, u
 - Do preserve readable Chinese labels, numeric alignment and keyboard focus.
 - Do reserve bottom clearance throughout the mobile and tablet layout.
 - Do keep asset provenance with the authored SVG files.
+- Do keep configuration feedback by save controls and retry errors beside the affected result.
 
 ### Don't:
 - Don’t turn the cream workspace into a glass or gradient surface.

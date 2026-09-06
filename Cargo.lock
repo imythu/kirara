@@ -2963,6 +2963,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "subtle",
  "sysinfo",
  "tempfile",
  "thiserror 2.0.18",

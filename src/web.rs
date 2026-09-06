@@ -192,6 +192,8 @@ pub async fn serve(
 }
 
 fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -> Router {
+    let dav_db = state.db.clone();
+    let dav_router = crate::webdav::receiver_router(dav_db.clone(), state.shutdown.clone());
     let media = Arc::clone(&state.media);
     let media_scheduler = Arc::clone(&state.media_scheduler);
     let self_use = state.self_use;
@@ -329,6 +331,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
             "/api/media",
             media_router(media, media_scheduler, relocation_scheduler, self_use),
         )
+        .merge(crate::webdav::management_router(dav_db))
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
                 info_span!(
@@ -339,6 +342,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
             }),
         )
         .layer(cors_layer())
+        .merge(dav_router)
 }
 
 const VITE_DEV_ORIGINS: [&str; 3] = [

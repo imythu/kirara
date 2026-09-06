@@ -235,6 +235,75 @@ paths:
         '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SitePreset'}}}}}
         default: {$ref: '#/components/responses/Error'}
 
+  /api/sites/ptd-import:
+    post:
+      summary: Import PTD site cookies from a local backup
+      description: Shares matching and transactional updates with WebDAV. Does not require the receiver to be enabled or change its settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [content_base64, existing_policy, auto_create]
+              properties:
+                content_base64: {type: string, format: byte, description: Unencrypted PTD ZIP or cookies.json, decoded limit 8 MiB}
+                existing_policy: {type: string, enum: [update, skip]}
+                auto_create: {type: boolean}
+      responses:
+        '200':
+          description: Import completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: {type: integer}
+                  updated: {type: integer}
+                  unchanged: {type: integer}
+                  skipped: {type: integer}
+                  details: {type: array, items: {type: string}}
+        '400': {description: Invalid import policy}
+        '413': {description: Request body too large}
+        '422': {description: Invalid file or encrypted backup}
+        '500': {description: Import failed and transaction rolled back}
+
+  /api/sites/webdav-sync:
+    get:
+      summary: Read embedded WebDAV receiver configuration and runtime status
+      description: Never returns the password or its hash. Reception and background synchronization are separate states.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/WebDavSyncConfig'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      summary: Configure the embedded WebDAV receiver
+      description: Changes take effect without restarting the application. Set rotate_password to generate a new 256-bit password; only this response includes new_password. Enabling requires a configured password. The receiver shares the main Web listener at /dav/ptd/ and requires HTTP Basic authentication.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/WebDavSyncConfigInput'}}}
+      responses:
+        '200': {description: Saved; receiver enablement takes effect immediately, content: {application/json: {schema: {$ref: '#/components/schemas/WebDavSyncConfig'}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/sites/webdav-sync/runs:
+    get:
+      summary: List up to 100 latest WebDAV synchronization jobs
+      description: Results and reasons are redacted; cookie values and uploaded bodies are never returned here.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/WebDavSyncRun'}}}}}
+        default: {$ref: '#/components/responses/Error'}
+
+  /api/sites/webdav-sync/runs/{id}/retry:
+    post:
+      summary: Retry a failed sync job whose payload is still retained
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+      responses:
+        '200': {description: Queued, content: {application/json: {schema: {$ref: '#/components/schemas/OkResponse'}}}}
+        '409': {description: Job is not failed or its payload was cleaned up}
+        default: {$ref: '#/components/responses/Error'}
+
   /api/sites/ptd-backup:
     get:
       summary: Read Hive PTD-compatible WebDAV backup configuration
@@ -1094,6 +1163,53 @@ components:
       required: [refreshing]
       properties:
         refreshing: {type: boolean}
+
+    WebDavSyncConfigInput:
+      type: object
+      additionalProperties: false
+      required: [enabled, username, existing_policy, auto_create]
+      properties:
+        enabled: {type: boolean}
+        username: {type: string, minLength: 1, maxLength: 128, default: ptd}
+        existing_policy: {type: string, enum: [update, skip], default: update}
+        auto_create: {type: boolean, default: true}
+        rotate_password: {type: boolean, default: false}
+
+    WebDavSyncConfig:
+      type: object
+      required: [enabled, username, existing_policy, auto_create, password_configured, running, runtime_error, last_received_at, path]
+      properties:
+        enabled: {type: boolean}
+        username: {type: string}
+        existing_policy: {type: string, enum: [update, skip]}
+        auto_create: {type: boolean}
+        password_configured: {type: boolean}
+        running: {type: boolean}
+        runtime_error: {type: string, nullable: true}
+        last_received_at: {type: integer, format: int64, nullable: true, description: Unix milliseconds}
+        path: {type: string, example: /dav/ptd/}
+        new_password: {type: string, description: Returned only in the PUT response that rotates the password}
+
+    WebDavSyncRun:
+      type: object
+      required: [id, name, received_at, status, attempts, result, error, can_retry]
+      properties:
+        id: {type: integer, format: int64}
+        name: {type: string}
+        received_at: {type: integer, format: int64, description: Unix milliseconds}
+        status: {type: string, enum: [pending, retry, done, failed]}
+        attempts: {type: integer}
+        can_retry: {type: boolean, description: Payload is retained; only failed jobs can be retried}
+        error: {type: string, nullable: true}
+        result:
+          type: object
+          nullable: true
+          properties:
+            created: {type: integer}
+            updated: {type: integer}
+            unchanged: {type: integer}
+            skipped: {type: integer}
+            details: {type: array, items: {type: string}}
 
     PtdBackupConfigResponse:
       type: object
