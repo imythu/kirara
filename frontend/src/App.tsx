@@ -531,7 +531,8 @@ export default function App() {
           </div>, document.body
         ) : null}
 
-        <section className="kirara-content min-h-0 min-w-0 overflow-y-auto sm:p-6 lg:px-8 lg:py-7 xl:px-10">
+        {/* Keep absolute descendants, including sr-only labels, inside this scroll container. */}
+        <section className="kirara-content relative min-h-0 min-w-0 overflow-y-auto sm:p-6 lg:px-8 lg:py-7 xl:px-10">
           <header className="kirara-page-header relative pb-6">
             <div className="relative flex items-center justify-between gap-3 lg:items-start">
               <div className="flex min-w-0 items-center gap-2 lg:items-start lg:gap-3">
