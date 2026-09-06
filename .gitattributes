@@ -1,0 +1,3 @@
+# Search manifests hash raw file bytes; preserve them on Windows checkouts too.
+/assets/search/**/*.json text eol=lf
+/assets/search/**/*.bin binary

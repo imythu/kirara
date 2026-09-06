@@ -13,6 +13,7 @@ on:
       - "tests/fixtures/search/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - ".gitattributes"
       - "docker/**"
       - ".github/workflows/release.yml"
       - ".github/workflows/search.yml"
@@ -255,13 +256,17 @@ jobs:
           key: ${{ matrix.target }}
           cache-bin: false
 
-      - name: Test backend on desktop platform
-        if: matrix.kind == 'desktop'
-        run: cargo test --locked --package kirara --lib --tests --target ${{ matrix.target }}
-
       - name: Test native encoder on desktop platform
         if: matrix.kind == 'desktop'
         run: cargo test --locked --release --package search-encoder --target ${{ matrix.target }}
+
+      - name: Verify search assets on desktop platform
+        if: matrix.kind == 'desktop'
+        run: cargo run --locked --release --package search-encoder --target ${{ matrix.target }} --example assets -- verify
+
+      - name: Test backend on desktop platform
+        if: matrix.kind == 'desktop'
+        run: cargo test --locked --package kirara --lib --tests --target ${{ matrix.target }}
 
       - name: Test desktop bridge on desktop platform
         if: matrix.kind == 'desktop'
