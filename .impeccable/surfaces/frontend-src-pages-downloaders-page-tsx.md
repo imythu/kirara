@@ -21,7 +21,7 @@ FINISH: Parent-reported finish reviewer disposition: Ship, with no material find
 - Category and tags use a definition list with explicit Chinese labels. Empty categories show 未分类; empty tags show 无标签. Comma-separated tags are trimmed, empty entries removed and visible values separated by a middle dot.
 - Search matches the directory path, torrent name, hash, category or tags, case-insensitively. A matching torrent keeps its entire directory group visible, including the other torrents in that group.
 - Search placeholder and accessible label mention paths, torrents, tags and categories.
-- Parent-reported backend integration allows the read-only torrent listing when `self_use` is disabled.
+- The read-only torrent listing is available for save-path analysis.
 
 ## Scope and validation
 
