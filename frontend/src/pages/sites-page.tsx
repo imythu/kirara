@@ -2442,7 +2442,19 @@ function SiteStatusDetail({ site }: { site: SiteRecord }) {
   const timeLabel = timestamp ? `最近检查：${formatDateTime(timestamp)}` : "尚未同步账户数据";
   const label = health === "healthy" ? "同步成功" : health === "failed" ? "同步失败" : "待同步";
   const Icon = health === "healthy" ? CircleCheck : health === "failed" ? CircleX : Clock3;
-  const status = <span className={`inline-flex items-center gap-1.5 text-xs ${health === "healthy" ? "text-emerald-700" : health === "failed" ? "text-red-700" : "text-muted"}`}><Icon className="size-3.5 shrink-0" aria-hidden="true" />{label}</span>;
+  const status = (
+    <span className={`inline-flex items-start gap-1.5 text-xs ${health === "healthy" ? "text-emerald-700" : health === "failed" ? "text-red-700" : "text-muted"}`}>
+      <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      <span className="min-w-0">
+        {label}
+        {health !== "pending" && timestamp ? (
+          <time dateTime={timestamp} className="text-[11px] font-normal tabular-nums" title={timeLabel}>
+            （{formatDateTime(timestamp)}）
+          </time>
+        ) : null}
+      </span>
+    </span>
+  );
   if (health === "failed") return (
     <details className="group text-xs">
       <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-2 [&::-webkit-details-marker]:hidden" title={timeLabel}>
