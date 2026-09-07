@@ -253,7 +253,7 @@ impl NexusPhpAdapter {
             .as_deref()
             .and_then(parse_user_datetime_millis),
             message_count: parse_message_count(index_html),
-            invites: parse_labeled_u64(&detail_text, &["邀请", "邀請", "Invites", "Invitations"]),
+            invites: parse_invite_count(detail_html),
             avatar: extract_avatar(detail_html)
                 .and_then(|avatar| self.resolve_same_origin_url(&avatar).ok().or(Some(avatar))),
             true_downloaded: parse_labeled_size(
@@ -926,6 +926,70 @@ fn parse_labeled_u64(text: &str, labels: &[&str]) -> Option<u64> {
             None
         }
     })
+}
+
+fn parse_invite_count(html: &str) -> Option<u64> {
+    // Keep invitation counts inside their own field: whole-page matching can
+    // consume an inviter's username or a number in the following profile row.
+    // PT-depiler's NexusPHP invitation collector prefers Available over Sent.
+    let document = Html::parse_document(html);
+    let labels = Regex::new(
+        r"(?i)^(?:邀请(?:名额|数量)?|邀請(?:名額|數量)?|Invites|Invitations)\s*[:：]?\s*$",
+    )
+    .ok()?;
+    let inline = Regex::new(
+        r"(?i)^(?:邀请(?:名额|数量)?|邀請(?:名額|數量)?|Invites|Invitations)(?:\s*[:：]\s*|\s+)(.+)$",
+    )
+    .ok()?;
+    let available = Regex::new(
+        r"(?i)(?:\bAvailable|可用(?:邀请|邀請|名额|名額)?|剩余|剩餘)\s*[:：]?\s*([0-9][0-9,]*)(?:$|[\s;；|/()（）])",
+    )
+    .ok()?;
+    let number = Regex::new(r"^([0-9][0-9,]*)(?:$|[\s;；|/()（）])").ok()?;
+    let parse_count = |value: &str| {
+        available
+            .captures(value)
+            .or_else(|| number.captures(value.trim()))?
+            .get(1)?
+            .as_str()
+            .replace(',', "")
+            .parse::<u64>()
+            .ok()
+    };
+
+    let selector = Selector::parse("td, th, dt, span").ok()?;
+    // Prefer structured profile fields to navigation summaries.
+    for element in document.select(&selector) {
+        let Some(label) = normalize_text(element.text()) else {
+            continue;
+        };
+        if labels.is_match(&label) {
+            if let Some(value) = element
+                .next_sibling_element()
+                .and_then(|sibling| normalize_text(sibling.text()))
+            {
+                if let Some(count) = parse_count(&value) {
+                    return Some(count);
+                }
+            }
+        }
+    }
+    let nested_rows = Selector::parse("tr").ok()?;
+    for element in document.select(&selector) {
+        if element.select(&nested_rows).next().is_some() {
+            continue;
+        }
+        let Some(text) = normalize_text(element.text()) else {
+            continue;
+        };
+        if let Some(count) = inline
+            .captures(&text)
+            .and_then(|capture| parse_count(capture.get(1)?.as_str()))
+        {
+            return Some(count);
+        }
+    }
+    None
 }
 
 fn parse_labeled_duration_seconds(text: &str, labels: &[&str]) -> Option<u64> {
@@ -2115,6 +2179,67 @@ mod tests {
             ),
             Some((2, Some(1_610_612_736)))
         );
+    }
+
+    #[test]
+    fn invitation_counts_are_scoped_to_the_available_invitation_field() {
+        for (label, value, expected) in [
+            ("邀请", "5", Some(5)),
+            ("邀請：", "0", Some(0)),
+            ("邀请名额", "1,234", Some(1234)),
+            ("Invites", "Sent: 12 Available: 5", Some(5)),
+            ("Invitations", "12 (Available: 0)", Some(0)),
+            ("邀请", "已使用：12 可用：3", Some(3)),
+            ("邀请", "", None),
+            ("邀请", "无限", None),
+            ("Invites", "N/A", None),
+            ("Invites", "Sent: 12", None),
+            ("Invites", "1.5", None),
+            ("Invites", "18446744073709551616", None),
+            ("邀请人", "user123", None),
+            ("Invited by", "123", None),
+        ] {
+            let html = format!(
+                r#"<nav>邀请 99</nav><table><tr><td><table>
+                <tr><td class="rowhead">邀请人</td><td>user456</td></tr>
+                <tr><td class="rowhead">{label}</td><td>{value}</td></tr>
+                <tr><td>加入日期</td><td>2026-09-07</td></tr>
+                </table></td></tr></table>"#
+            );
+            assert_eq!(super::parse_invite_count(&html), expected, "{label}: {value}");
+        }
+        for html in [
+            "<table><tr><td>邀请：5</td></tr></table>",
+            "<table><tr><td>Invites: Sent: 12 Available: 5</td></tr></table>",
+            "<span>邀請：</span><span>5</span>",
+            "<dl><dt>Invitations</dt><dd>5</dd></dl>",
+        ] {
+            assert_eq!(super::parse_invite_count(html), Some(5), "{html}");
+        }
+    }
+
+    #[tokio::test]
+    async fn user_stats_syncs_available_invites_without_reading_the_inviter() {
+        let (base_url, server) = serve_fixture(
+            Router::new().route(
+                "/userdetails.php",
+                get(|| async {
+                    Html(r#"<div id="info_block"><a href="userdetails.php?id=42">Alice</a>邀请 99</div>
+                <div>上传量 2 GiB 下载量 1 GiB</div><table>
+                <tr><td>邀请人</td><td>user123</td></tr>
+                <tr><td>邀请</td><td>Sent: 12 Available: 5</td></tr>
+                </table>"#)
+                }),
+            ),
+        )
+        .await;
+        let stats = fixture_adapter(base_url)
+            .with_cached_user_id(Some("42"))
+            .get_user_stats()
+            .await
+            .unwrap();
+        assert_eq!(stats.details.invites, Some(5));
+        server.abort();
     }
 
     #[test]
