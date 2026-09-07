@@ -29,6 +29,95 @@ async fn get(endpoint: &ListenEndpoint, path: &str) -> String {
 }
 
 #[tokio::test]
+async fn save_path_analysis_lists_all_torrents_without_self_use() {
+    use axum::{
+        Json, Router,
+        routing::{get, post},
+    };
+    use serde_json::{Value, json};
+
+    let qb = Router::new()
+        .route(
+            "/api/v2/auth/login",
+            post(|| async { ([("set-cookie", "SID=test-session; path=/")], "Ok.") }),
+        )
+        .route(
+            "/api/v2/torrents/info",
+            get(|| async {
+                Json(json!([
+                    {"hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Complete",
+                     "size": 100, "downloaded": 100, "progress": 1.0,
+                     "state": "stalledUP", "save_path": "/downloads/movies", "added_on": 1},
+                    {"hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Partial",
+                     "size": 200, "downloaded": 50, "progress": 0.25,
+                     "state": "downloading", "save_path": "/downloads/tv", "added_on": 2}
+                ]))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let qb_address = listener.local_addr().unwrap();
+    let qb_server = tokio::spawn(async move { axum::serve(listener, qb).await.unwrap() });
+    let dir = tempfile::tempdir().unwrap();
+    let server = kirara::start(options(
+        &dir,
+        ListenEndpoint::Tcp("127.0.0.1:0".parse().unwrap()),
+    ))
+    .await
+    .unwrap();
+    let ListenEndpoint::Tcp(address) = server.endpoint() else {
+        panic!("expected TCP")
+    };
+    let base = format!("http://{address}");
+    let client = reqwest::Client::new();
+    let features: Value = client
+        .get(format!("{base}/api/features"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        features["self_use"], false,
+        "run this test with SELF_USE=false"
+    );
+    let created: Value = client.post(format!("{base}/api/downloaders"))
+        .json(&json!({"name": "Test", "downloader_type": "qbittorrent",
+                     "url": format!("http://{qb_address}"), "username": "admin", "password": "test"}))
+        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    let url = format!("{base}/api/downloaders/{}/torrents", created["id"]);
+    let torrents: Vec<Value> = client
+        .get(format!("{url}?include_incomplete=true"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(torrents.len(), 2);
+    assert_eq!(torrents[0]["save_path"], "/downloads/tv");
+    assert_eq!(torrents[0]["downloaded"], 50);
+    assert_eq!(torrents[0]["size"], 200);
+    assert_eq!(torrents[1]["save_path"], "/downloads/movies");
+    let completed: Vec<Value> = client
+        .get(&url)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(completed.len(), 1);
+    assert_eq!(completed[0]["name"], "Complete");
+    server.shutdown().await.unwrap();
+    qb_server.abort();
+}
+
+#[tokio::test]
 async fn tcp_start_respond_shutdown_and_restart_preserves_database() {
     let dir = tempfile::tempdir().unwrap();
     let server = kirara::start(options(

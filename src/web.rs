@@ -3882,9 +3882,7 @@ async fn list_downloader_torrents(
     Path(id): Path<i64>,
     Query(query): Query<DownloaderTorrentQuery>,
 ) -> Result<Json<Vec<TransferableTorrentResponse>>, ApiError> {
-    if !state.self_use {
-        return Err(ApiError::not_found("功能不可用"));
-    }
+    // Save-path analysis also uses this read-only endpoint outside self-use mode.
     let downloader = state
         .db
         .get_downloader(id)

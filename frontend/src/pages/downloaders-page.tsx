@@ -374,7 +374,9 @@ export function DownloadersPage() {
         || group.torrents.some(
           (torrent) =>
             torrent.name.toLowerCase().includes(normalizedDirectoryQuery)
-            || torrent.hash.toLowerCase().includes(normalizedDirectoryQuery),
+            || torrent.hash.toLowerCase().includes(normalizedDirectoryQuery)
+            || torrent.category.toLowerCase().includes(normalizedDirectoryQuery)
+            || torrent.tags.toLowerCase().includes(normalizedDirectoryQuery),
         ),
     )
     .sort((left, right) => {
@@ -589,8 +591,8 @@ export function DownloadersPage() {
                       value={directoryQuery}
                       onChange={(event) => setDirectoryQuery(event.target.value)}
                       className="pl-10"
-                      placeholder="搜索保存路径、种子名称或 Hash"
-                      aria-label="搜索保存路径和种子"
+                      placeholder="搜索路径、种子、标签或分类"
+                      aria-label="搜索保存路径、种子、标签或分类"
                     />
                   </div>
                   <div className="w-full lg:w-48">
@@ -1012,17 +1014,28 @@ function DirectoryGroupPanel({
       {expanded ? (
         <div className="border-t border-border bg-card/60">
           {group.torrents.map((torrent) => (
-            <div key={torrent.hash} className="grid gap-3 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_minmax(180px,260px)] lg:items-center">
+            <div key={torrent.hash} className="grid gap-3 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_minmax(180px,260px)] lg:items-center">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium" title={torrent.name}>{torrent.name}</div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
                   <span className="font-mono">{torrent.hash.slice(0, 12)}</span>
-                  {[torrent.category, torrent.tags].filter(Boolean).length > 0 ? (
-                    <span>{[torrent.category, torrent.tags].filter(Boolean).join(" · ")}</span>
-                  ) : null}
                   <span>{formatTorrentState(torrent.state)}</span>
                 </div>
               </div>
+              <dl className="min-w-0 space-y-1.5 text-xs">
+                <div className="flex items-baseline gap-2">
+                  <dt className="shrink-0 text-muted">分类</dt>
+                  <dd className="min-w-0 break-words [overflow-wrap:anywhere]">
+                    {torrent.category.trim() || <span className="text-muted">未分类</span>}
+                  </dd>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <dt className="shrink-0 text-muted">标签</dt>
+                  <dd className="min-w-0 break-words [overflow-wrap:anywhere]">
+                    {torrent.tags.split(",").map((tag) => tag.trim()).filter(Boolean).join(" · ") || <span className="text-muted">无标签</span>}
+                  </dd>
+                </div>
+              </dl>
               <div className="min-w-0">
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <span className="text-muted">
