@@ -88,7 +88,7 @@ function groupTorrentsBySavePath(torrents: TransferableTorrent[]): DirectoryGrou
     const directory = normalizeSavePath(torrent.save_path);
     const isCaseInsensitive = /^[A-Za-z]:\//.test(directory) || directory.startsWith("//");
     const key = isCaseInsensitive ? directory.toLowerCase() : directory;
-    const pendingBytes = Math.max(0, torrent.size - torrent.downloaded);
+    const pendingBytes = torrent.amount_left;
     const group = groups.get(key) ?? {
       directory,
       torrents: [],
@@ -100,7 +100,7 @@ function groupTorrentsBySavePath(torrents: TransferableTorrent[]): DirectoryGrou
     group.torrents.push(torrent);
     group.totalSize += Math.max(0, torrent.size);
     group.pendingBytes += pendingBytes;
-    group.incompleteCount += pendingBytes > 0 ? 1 : 0;
+    group.incompleteCount += torrent.incomplete ? 1 : 0;
     group.lastAddedOn = Math.max(group.lastAddedOn, torrent.added_on);
     groups.set(key, group);
   }
@@ -150,6 +150,12 @@ export function DownloadersPage() {
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set());
   const [directoryQuery, setDirectoryQuery] = useState("");
   const [directorySort, setDirectorySort] = useState("size");
+  const [directoryTags, setDirectoryTags] = useState<string[]>([]);
+  const [directoryCategories, setDirectoryCategories] = useState<string[]>([]);
+  const [filterTorrents, setFilterTorrents] = useState<TransferableTorrent[] | null>(null);
+  const [filterLoading, setFilterLoading] = useState(false);
+  const [filterError, setFilterError] = useState("");
+  const [filterReload, setFilterReload] = useState(0);
   const directoryAnalysisController = useRef<AbortController | null>(null);
 
   function loadDownloaders() {
@@ -191,6 +197,18 @@ export function DownloadersPage() {
     loadDownloaders();
     return () => directoryAnalysisController.current?.abort();
   }, []);
+
+  useEffect(() => {
+    if (detailId === null) return;
+    const controller = new AbortController();
+    setFilterLoading(true);
+    setFilterError("");
+    api<TransferableTorrent[]>(`/api/downloaders/${detailId}/torrents?include_incomplete=true`, { signal: controller.signal })
+      .then((torrents) => { if (!controller.signal.aborted) setFilterTorrents(torrents); })
+      .catch((error: Error) => { if (!controller.signal.aborted) setFilterError(error.message || "标签和分类加载失败"); })
+      .finally(() => { if (!controller.signal.aborted) setFilterLoading(false); });
+    return () => controller.abort();
+  }, [detailId, filterReload]);
 
   function openAdd() {
     setEditingId(null);
@@ -251,6 +269,10 @@ export function DownloadersPage() {
     setExpandedDirectories(new Set());
     setDirectoryQuery("");
     setDirectorySort("size");
+    setDirectoryTags([]);
+    setDirectoryCategories([]);
+    setFilterTorrents(null);
+    setFilterError("");
   }
 
   function closeDetail() {
@@ -271,7 +293,12 @@ export function DownloadersPage() {
         { signal: controller.signal },
       );
       if (directoryAnalysisController.current !== controller) return;
-      const groups = groupTorrentsBySavePath(torrents);
+      setFilterTorrents(torrents);
+      const groups = groupTorrentsBySavePath(torrents.filter((torrent) => {
+        const tags = torrent.tags.split(",").map((tag) => tag.trim()).filter(Boolean);
+        return (directoryCategories.length === 0 || directoryCategories.includes(torrent.category))
+          && (directoryTags.length === 0 || directoryTags.some((tag) => tag === "" ? tags.length === 0 : tags.includes(tag)));
+      }));
       setDirectoryGroups(groups);
       setExpandedDirectories(new Set(groups[0] ? [groups[0].directory] : []));
       setDirectoryAnalysisTime(new Date());
@@ -294,6 +321,15 @@ export function DownloadersPage() {
       else next.add(directory);
       return next;
     });
+  }
+
+  function changeDirectoryFilters(tags: string[], categories: string[]) {
+    setDirectoryTags(tags);
+    setDirectoryCategories(categories);
+    setDirectoryGroups(null);
+    setDirectoryAnalysisTime(null);
+    setDirectoryAnalysisError("");
+    setDirectoryQuery("");
   }
 
   function closeDialog() {
@@ -385,6 +421,10 @@ export function DownloadersPage() {
       if (directorySort === "path") return left.directory.localeCompare(right.directory);
       return right.totalSize - left.totalSize;
     });
+  const categoryOptions = Array.from(new Set(["", ...(filterTorrents ?? []).map((torrent) => torrent.category), ...directoryCategories]))
+    .sort((left, right) => left.localeCompare(right)).map((value) => ({ value, label: value || "未分类" }));
+  const tagOptions = Array.from(new Set(["", ...(filterTorrents ?? []).flatMap((torrent) => torrent.tags.split(",").map((tag) => tag.trim()).filter(Boolean)), ...directoryTags]))
+    .sort((left, right) => left.localeCompare(right)).map((value) => ({ value, label: value || "无标签" }));
   const analyzedTorrentCount = directoryGroups?.reduce((total, group) => total + group.torrents.length, 0) ?? 0;
   const analyzedTotalSize = directoryGroups?.reduce((total, group) => total + group.totalSize, 0) ?? 0;
   const analyzedPendingBytes = directoryGroups?.reduce((total, group) => total + group.pendingBytes, 0) ?? 0;
@@ -540,7 +580,7 @@ export function DownloadersPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card role="region" aria-label="保存路径占用分析">
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -550,22 +590,52 @@ export function DownloadersPage() {
                 </CardTitle>
                 <p className="mt-2 text-sm text-muted">按 qBittorrent 实际保存路径统计占用和待下载空间。</p>
               </div>
-              <Button
-                variant="outline"
-                className="shrink-0"
-                disabled={directoryAnalysisLoading}
-                onClick={() => analyzeSaveDirectories(detailDownloader.id)}
-              >
-                {directoryAnalysisLoading ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <ScanSearch className="mr-2 h-4 w-4" />
-                )}
-                {directoryAnalysisLoading ? "统计中..." : directoryGroups ? "重新统计" : "开始统计"}
-              </Button>
+
             </div>
           </CardHeader>
           <CardContent>
+            <div className="mb-5 space-y-3 border-b border-border pb-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="analysis-categories">分类（多选）</Label>
+                  <Select id="analysis-categories" multiple searchable value={directoryCategories}
+                    onChange={(values) => changeDirectoryFilters(directoryTags, values)}
+                    options={categoryOptions} placeholder="全部分类" searchPlaceholder="搜索分类"
+                    disabled={filterLoading || !!filterError || filterTorrents === null || directoryAnalysisLoading}
+                    aria-describedby="analysis-filter-help" />
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="analysis-tags">标签（多选）</Label>
+                  <Select id="analysis-tags" multiple searchable value={directoryTags}
+                    onChange={(values) => changeDirectoryFilters(values, directoryCategories)}
+                    options={tagOptions} placeholder="全部标签" searchPlaceholder="搜索标签"
+                    disabled={filterLoading || !!filterError || filterTorrents === null || directoryAnalysisLoading}
+                    aria-describedby="analysis-filter-help" />
+                </div>
+                <Button className="h-11 sm:col-span-2 xl:col-span-1"
+                  disabled={filterLoading || !!filterError || filterTorrents === null || directoryAnalysisLoading}
+                  onClick={() => analyzeSaveDirectories(detailDownloader.id)}>
+                  {directoryAnalysisLoading ? <LoaderCircle className="mr-2 size-4 animate-spin motion-reduce:animate-none" /> : <ScanSearch className="mr-2 size-4" />}
+                  {directoryAnalysisLoading ? "统计中..." : directoryGroups ? "重新统计" : "开始统计"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p id="analysis-filter-help" className="text-xs leading-5 text-muted">
+                  不选则统计全部；同组内匹配任一项，分类与标签同时满足。更改筛选后点击“开始统计”。
+                </p>
+                {directoryTags.length > 0 || directoryCategories.length > 0 ? (
+                  <Button variant="outline" className="h-9 px-3 text-xs" disabled={directoryAnalysisLoading}
+                    onClick={() => changeDirectoryFilters([], [])}>清空筛选</Button>
+                ) : null}
+              </div>
+              {filterLoading ? <p role="status" className="text-xs text-muted">正在加载标签和分类...</p> : null}
+              {filterError ? (
+                <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
+                  <span className="min-w-0 break-words">标签和分类加载失败：{filterError}</span>
+                  <Button variant="outline" onClick={() => setFilterReload((value) => value + 1)}>重试加载</Button>
+                </div>
+              ) : null}
+            </div>
             {directoryAnalysisError ? (
               <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {directoryAnalysisError}
@@ -616,7 +686,7 @@ export function DownloadersPage() {
 
                 {directoryGroups.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
-                    下载器中暂无种子。
+                    {directoryTags.length > 0 || directoryCategories.length > 0 ? "所选标签和分类下暂无种子。" : "下载器中暂无种子。"}
                   </div>
                 ) : visibleDirectoryGroups.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
@@ -637,7 +707,7 @@ export function DownloadersPage() {
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
-                点击“开始统计”查看每个实际保存路径的空间占用和种子明细。
+                选择标签或分类后，点击“开始统计”查看对应保存路径的空间占用和种子明细。
               </div>
             )}
           </CardContent>
@@ -1039,7 +1109,7 @@ function DirectoryGroupPanel({
               <div className="min-w-0">
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <span className="text-muted">
-                    {formatBytes(Math.max(0, torrent.downloaded))} / {formatBytes(torrent.size)}
+                    {formatBytes(torrent.completed)} / {formatBytes(torrent.size)}
                   </span>
                   <span className="shrink-0 font-medium">
                     {Math.round(Math.min(1, Math.max(0, torrent.progress)) * 100)}%
@@ -1051,9 +1121,9 @@ function DirectoryGroupPanel({
                     style={{ width: `${Math.min(1, Math.max(0, torrent.progress)) * 100}%` }}
                   />
                 </div>
-                {torrent.downloaded < torrent.size ? (
+                {torrent.amount_left > 0 ? (
                   <div className="mt-1 text-right text-[11px] text-muted">
-                    剩余 {formatBytes(Math.max(0, torrent.size - torrent.downloaded))}
+                    剩余 {formatBytes(torrent.amount_left)}
                   </div>
                 ) : null}
               </div>

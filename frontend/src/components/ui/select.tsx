@@ -10,21 +10,7 @@ export interface SelectOption {
   keywords?: readonly string[];
 }
 
-export function Select({
-  value,
-  onChange,
-  options,
-  className,
-  id,
-  disabled = false,
-  searchable = false,
-  searchPlaceholder = "搜索选项",
-  emptyMessage = "没有匹配的选项",
-  "aria-describedby": ariaDescribedBy,
-  "aria-invalid": ariaInvalid,
-}: {
-  value: string;
-  onChange: (val: string) => void;
+type SelectProps = {
   options: readonly SelectOption[];
   className?: string;
   id?: string;
@@ -32,9 +18,34 @@ export function Select({
   searchable?: boolean;
   searchPlaceholder?: string;
   emptyMessage?: string;
+  placeholder?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
-}) {
+} & ({
+  multiple?: false;
+  value: string;
+  onChange: (val: string) => void;
+} | {
+  multiple: true;
+  value: string[];
+  onChange: (val: string[]) => void;
+});
+
+export function Select({
+  value,
+  onChange,
+  multiple,
+  options,
+  className,
+  id,
+  disabled = false,
+  searchable = false,
+  searchPlaceholder = "搜索选项",
+  emptyMessage = "没有匹配的选项",
+  placeholder = "请选择",
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+}: SelectProps) {
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -56,7 +67,8 @@ export function Select({
         .some((item) => item?.normalize("NFKC").toLocaleLowerCase().includes(query)),
     );
   }, [options, searchQuery, searchable]);
-  const matchedSelectedIndex = filteredOptions.findIndex((option) => option.value === value);
+  const isValueSelected = (optionValue: string) => multiple ? value.includes(optionValue) : value === optionValue;
+  const matchedSelectedIndex = filteredOptions.findIndex((option) => isValueSelected(option.value));
   const selectedIndex = Math.max(0, matchedSelectedIndex);
 
   function updateDropdownPosition() {
@@ -97,6 +109,15 @@ export function Select({
     setSearchQuery("");
     if (restoreFocus) {
       requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }
+
+  function selectValue(optionValue: string) {
+    if (multiple) {
+      onChange(value.includes(optionValue) ? value.filter((item) => item !== optionValue) : [...value, optionValue]);
+    } else {
+      onChange(optionValue);
+      closeDropdown({ restoreFocus: true });
     }
   }
 
@@ -145,6 +166,15 @@ export function Select({
       if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
         return;
       }
+      // Multi-select can change the page height while its menu stays open.
+      // Follow the trigger during the resulting scroll instead of dismissing it.
+      if (multiple) {
+        const rect = triggerRef.current?.getBoundingClientRect();
+        if (rect && rect.bottom > 0 && rect.top < window.innerHeight) {
+          updateDropdownPosition();
+          return;
+        }
+      }
       setOpen(false);
     }
     window.addEventListener("scroll", handleScroll, true);
@@ -153,7 +183,7 @@ export function Select({
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", handleScroll);
     };
-  }, [open]);
+  }, [open, multiple]);
 
   React.useEffect(() => {
     if (disabled) setOpen(false);
@@ -162,7 +192,7 @@ export function Select({
   React.useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
-      if (searchable) searchRef.current?.focus();
+      if (searchable) searchRef.current?.focus({ preventScroll: true });
       else optionRefs.current[activeIndex]?.focus();
     });
     return () => cancelAnimationFrame(frame);
@@ -173,7 +203,9 @@ export function Select({
   }, [filteredOptions.length]);
 
   const selectedOption = options.find((option) => option.value === value);
-  const selectedLabel = selectedOption?.label ?? (value ? "当前选项不可用" : "请选择");
+  const selectedLabel = multiple
+    ? value.length ? value.map((item) => options.find((option) => option.value === item)?.label ?? item).join("、") : placeholder
+    : selectedOption?.label ?? (value ? "当前选项不可用" : placeholder);
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -204,7 +236,8 @@ export function Select({
         }}
         className="flex h-11 w-full items-center justify-between rounded-lg border border-border bg-input px-4 py-2 text-sm transition-colors hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card aria-[invalid=true]:border-destructive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-input"
       >
-        <span className="truncate">{selectedLabel}</span>
+        <span className="truncate" title={selectedLabel}>{selectedLabel}</span>
+        {multiple && value.length > 0 ? <span className="ml-2 shrink-0 text-xs tabular-nums">已选 {value.length}</span> : null}
         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
       </button>
 
@@ -237,8 +270,7 @@ export function Select({
                       focusOption(filteredOptions.length - 1);
                     } else if (event.key === "Enter" && filteredOptions.length === 1) {
                       event.preventDefault();
-                      onChange(filteredOptions[0].value);
-                      closeDropdown({ restoreFocus: true });
+                      selectValue(filteredOptions[0].value);
                     } else if (event.key === "Escape") {
                       event.preventDefault();
                       event.stopPropagation();
@@ -257,11 +289,11 @@ export function Select({
               </div>
             </div>
           ) : null}
-          <div id={listboxId} role="listbox" aria-labelledby={triggerId} className="min-h-0 overflow-y-auto p-1">
+          <div id={listboxId} role="listbox" aria-multiselectable={multiple || undefined} aria-labelledby={triggerId} className="min-h-0 overflow-y-auto p-1">
           {filteredOptions.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted">{emptyMessage}</p>
           ) : filteredOptions.map((opt, index) => {
-            const isSelected = value === opt.value;
+            const isSelected = isValueSelected(opt.value);
             return (
               <button
                 key={opt.value}
@@ -279,8 +311,7 @@ export function Select({
                     : "text-foreground hover:bg-accent",
                 )}
                 onClick={() => {
-                  onChange(opt.value);
-                  closeDropdown({ restoreFocus: true });
+                  selectValue(opt.value);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowDown") {

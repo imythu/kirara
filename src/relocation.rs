@@ -743,6 +743,8 @@ mod tests {
             size: 10,
             uploaded: 0,
             downloaded: 10,
+            amount_left: None,
+            completed: None,
             progress,
             upload_speed: 0,
             download_speed: 0,

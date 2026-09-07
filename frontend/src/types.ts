@@ -191,6 +191,9 @@ export type TransferableTorrent = {
   name: string;
   size: number;
   downloaded: number;
+  amount_left: number;
+  completed: number;
+  incomplete: boolean;
   save_path: string;
   category: string;
   tags: string;

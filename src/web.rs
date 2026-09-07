@@ -3869,6 +3869,9 @@ struct TransferableTorrentResponse {
     name: String,
     size: i64,
     downloaded: i64,
+    amount_left: u64,
+    completed: u64,
+    incomplete: bool,
     save_path: String,
     category: String,
     tags: String,
@@ -3904,13 +3907,14 @@ async fn list_downloader_torrents(
         .into_iter()
         .filter(|torrent| {
             query.include_incomplete
-                || torrent_is_complete(
-                    torrent.completion_on,
-                    torrent.downloaded,
-                    torrent.size,
-                    torrent.progress,
-                    &torrent.state,
-                )
+                || (!torrent.is_download_incomplete()
+                    && torrent_is_complete(
+                        torrent.completion_on,
+                        torrent.downloaded,
+                        torrent.size,
+                        torrent.progress,
+                        &torrent.state,
+                    ))
         })
         .filter(|torrent| {
             keyword.is_empty()
@@ -3918,6 +3922,9 @@ async fn list_downloader_torrents(
                 || torrent.hash.to_lowercase().contains(&keyword)
         })
         .map(|torrent| TransferableTorrentResponse {
+            amount_left: torrent.pending_download_bytes(),
+            completed: torrent.completed_bytes(),
+            incomplete: torrent.is_download_incomplete(),
             hash: torrent.hash,
             name: torrent.name,
             size: torrent.size,

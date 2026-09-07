@@ -26,6 +26,8 @@ struct TolerantTorrent {
     size: Option<i64>,
     uploaded: Option<i64>,
     downloaded: Option<i64>,
+    amount_left: Option<i64>,
+    completed: Option<i64>,
     progress: Option<f64>,
     upspeed: Option<i64>,
     dlspeed: Option<i64>,
@@ -465,6 +467,8 @@ impl From<qbit_rs::model::Torrent> for TorrentInfo {
             size: t.size.unwrap_or(0),
             uploaded: t.uploaded.unwrap_or(0),
             downloaded: t.downloaded.unwrap_or(0),
+            amount_left: t.amount_left,
+            completed: t.completed,
             progress: t.progress.unwrap_or(0.0),
             upload_speed: t.upspeed.unwrap_or(0),
             download_speed: t.dlspeed.unwrap_or(0),
@@ -497,6 +501,8 @@ impl From<TolerantTorrent> for TorrentInfo {
             size: t.size.unwrap_or(0),
             uploaded: t.uploaded.unwrap_or(0),
             downloaded: t.downloaded.unwrap_or(0),
+            amount_left: t.amount_left,
+            completed: t.completed,
             progress: t.progress.unwrap_or(0.0),
             upload_speed: t.upspeed.unwrap_or(0),
             download_speed: t.dlspeed.unwrap_or(0),
@@ -722,6 +728,28 @@ mod tests {
         .unwrap();
 
         assert_eq!(TorrentInfo::from(torrent).progress, 0.625);
+    }
+
+    #[test]
+    fn remaining_space_uses_current_files_not_lifetime_download_traffic() {
+        for (payload, pending, incomplete, completed) in [
+            (serde_json::json!({"size": 1000, "downloaded": 0, "amount_left": 0, "progress": 1.0}), 0, false, 1000),
+            (serde_json::json!({"size": 1000, "downloaded": 2000, "amount_left": 600, "progress": 0.4, "completion_on": 12345}), 600, true, 400),
+            (serde_json::json!({"size": 200, "downloaded": 1000, "completed": 50, "progress": 0.25}), 150, true, 50),
+            (serde_json::json!({"size": 1000, "downloaded": 0, "progress": 1.0}), 0, false, 1000),
+            (serde_json::json!({"size": 1000, "downloaded": 2000, "progress": 0.4}), 600, true, 400),
+            (serde_json::json!({"size": 1000, "amount_left": -1, "completed": -1, "progress": 0.4}), 600, true, 400),
+            (serde_json::json!({"size": 0, "amount_left": 0, "progress": 0.0, "state": "metaDL"}), 0, true, 0),
+        ] {
+            let torrent = TorrentInfo::from(serde_json::from_value::<TolerantTorrent>(payload.clone()).unwrap());
+            assert_eq!(torrent.pending_download_bytes(), pending, "{payload}");
+            assert_eq!(torrent.is_download_incomplete(), incomplete, "{payload}");
+            assert_eq!(torrent.completed_bytes(), completed, "{payload}");
+            assert_eq!(super::super::calculate_pending_download_bytes(&[torrent]), pending);
+            let typed = TorrentInfo::from(serde_json::from_value::<qbit_rs::model::Torrent>(payload.clone()).unwrap());
+            assert_eq!(typed.pending_download_bytes(), pending, "typed: {payload}");
+            assert_eq!(typed.is_download_incomplete(), incomplete, "typed: {payload}");
+        }
     }
 
     #[test]

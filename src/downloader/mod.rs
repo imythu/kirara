@@ -64,6 +64,10 @@ pub struct TorrentInfo {
     pub uploaded: i64,
     pub downloaded: i64,
     #[serde(default)]
+    pub amount_left: Option<i64>,
+    #[serde(default)]
+    pub completed: Option<i64>,
+    #[serde(default)]
     pub progress: f64,
     pub upload_speed: i64,
     pub download_speed: i64,
@@ -80,6 +84,32 @@ pub struct TorrentInfo {
     pub category: String,
     pub time_active: i64,
     pub last_activity: i64,
+}
+
+impl TorrentInfo {
+    pub fn pending_download_bytes(&self) -> u64 {
+        if let Some(left) = self.amount_left.filter(|left| *left >= 0) {
+            return left as u64;
+        }
+        let size = self.size.max(0) as u64;
+        if let Some(completed) = self.completed.filter(|completed| *completed >= 0) {
+            return size.saturating_sub(completed as u64);
+        }
+        // Older responses may lack byte counts. Progress describes the selected
+        // files; downloaded is lifetime traffic and must never stand in for it.
+        if self.progress.is_finite() {
+            return (size as f64 * (1.0 - self.progress.clamp(0.0, 1.0))).round() as u64;
+        }
+        size
+    }
+
+    pub fn is_download_incomplete(&self) -> bool {
+        self.pending_download_bytes() > 0 || (self.size <= 0 && self.progress < 1.0)
+    }
+
+    pub fn completed_bytes(&self) -> u64 {
+        (self.size.max(0) as u64).saturating_sub(self.pending_download_bytes())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -179,7 +209,7 @@ pub trait DownloaderClient: Send + Sync {
             let pending_download_bytes = calculate_pending_download_bytes(torrents);
             let incomplete_count = torrents
                 .iter()
-                .filter(|torrent| torrent.completion_on <= 0 && torrent.downloaded < torrent.size)
+                .filter(|torrent| torrent.is_download_incomplete())
                 .count();
 
             Ok(DownloaderSpaceStats {
@@ -251,14 +281,8 @@ pub trait DownloaderClient: Send + Sync {
 pub fn calculate_pending_download_bytes(torrents: &[TorrentInfo]) -> u64 {
     torrents
         .iter()
-        .map(|torrent| {
-            if torrent.completion_on > 0 || torrent.downloaded >= torrent.size {
-                return 0;
-            }
-
-            (torrent.size - torrent.downloaded).max(0) as u64
-        })
-        .sum()
+        .map(TorrentInfo::pending_download_bytes)
+        .fold(0, u64::saturating_add)
 }
 
 struct CachedClient {

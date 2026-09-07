@@ -384,6 +384,8 @@ mod tests {
             size,
             uploaded: 0,
             downloaded,
+            amount_left: None,
+            completed: None,
             progress: if size > 0 {
                 downloaded as f64 / size as f64
             } else {

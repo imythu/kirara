@@ -42,14 +42,18 @@ async fn save_path_analysis_lists_all_torrents_without_self_use() {
             post(|| async { ([("set-cookie", "SID=test-session; path=/")], "Ok.") }),
         )
         .route(
+            "/api/v2/sync/maindata",
+            get(|| async { Json(json!({"rid": 1, "server_state": {"free_space_on_disk": 1000}})) }),
+        )
+        .route(
             "/api/v2/torrents/info",
             get(|| async {
                 Json(json!([
                     {"hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Complete",
-                     "size": 100, "downloaded": 100, "progress": 1.0,
+                     "size": 100, "downloaded": 0, "progress": 1.0, "amount_left": 0,
                      "state": "stalledUP", "save_path": "/downloads/movies", "added_on": 1},
                     {"hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Partial",
-                     "size": 200, "downloaded": 50, "progress": 0.25,
+                     "size": 200, "downloaded": 500, "progress": 0.25, "amount_left": 150,
                      "state": "downloading", "save_path": "/downloads/tv", "added_on": 2}
                 ]))
             }),
@@ -98,9 +102,15 @@ async fn save_path_analysis_lists_all_torrents_without_self_use() {
         .unwrap();
     assert_eq!(torrents.len(), 2);
     assert_eq!(torrents[0]["save_path"], "/downloads/tv");
-    assert_eq!(torrents[0]["downloaded"], 50);
+    assert_eq!(torrents[0]["downloaded"], 500);
+    assert_eq!(torrents[0]["completed"], 50);
+    assert_eq!(torrents[0]["amount_left"], 150);
+    assert_eq!(torrents[0]["incomplete"], true);
     assert_eq!(torrents[0]["size"], 200);
     assert_eq!(torrents[1]["save_path"], "/downloads/movies");
+    assert_eq!(torrents[1]["completed"], 100);
+    assert_eq!(torrents[1]["amount_left"], 0);
+    assert_eq!(torrents[1]["incomplete"], false);
     let completed: Vec<Value> = client
         .get(&url)
         .send()
@@ -113,6 +123,12 @@ async fn save_path_analysis_lists_all_torrents_without_self_use() {
         .unwrap();
     assert_eq!(completed.len(), 1);
     assert_eq!(completed[0]["name"], "Complete");
+    let space: Value = client
+        .get(format!("{base}/api/downloaders/{}/space", created["id"]))
+        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(space["pending_download_bytes"], 150);
+    assert_eq!(space["incomplete_count"], 1);
+    assert_eq!(space["effective_free_space"], 850);
     server.shutdown().await.unwrap();
     qb_server.abort();
 }
