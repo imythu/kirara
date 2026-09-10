@@ -340,7 +340,7 @@ impl DownloaderClient for QBittorrentClient {
                     // serde_value::Value -> u64
                     serde_json::to_value(v).ok()?.as_u64()
                 })
-                .unwrap_or(0);
+                .ok_or_else(|| "下载器尚未报告有效的剩余空间".to_string())?;
 
             Ok(free)
         })

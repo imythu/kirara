@@ -1,3 +1,4 @@
+mod rss;
 mod search;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -69,6 +70,7 @@ pub struct AppState {
     pool: Arc<DownloaderClientPool>,
     media: Arc<MediaService>,
     media_scheduler: Arc<MediaScheduler>,
+    rss: Arc<crate::rss_download::service::RssService>,
     monitor: Arc<SystemMonitor>,
     tag_rule_scheduler: Arc<TagRuleScheduler>,
     relocation_scheduler: Arc<RelocationScheduler>,
@@ -106,6 +108,7 @@ impl AppState {
         pool: Arc<DownloaderClientPool>,
         media: Arc<MediaService>,
         media_scheduler: Arc<MediaScheduler>,
+        rss: Arc<crate::rss_download::service::RssService>,
         monitor: Arc<SystemMonitor>,
         tag_rule_scheduler: Arc<TagRuleScheduler>,
         relocation_scheduler: Arc<RelocationScheduler>,
@@ -120,6 +123,7 @@ impl AppState {
             pool,
             media,
             media_scheduler,
+            rss,
             monitor,
             tag_rule_scheduler,
             relocation_scheduler,
@@ -139,6 +143,7 @@ pub async fn serve(
     pool: Arc<DownloaderClientPool>,
     media: Arc<MediaService>,
     media_scheduler: Arc<MediaScheduler>,
+    rss: Arc<crate::rss_download::service::RssService>,
     monitor: Arc<SystemMonitor>,
     tag_rule_scheduler: Arc<TagRuleScheduler>,
     relocation_scheduler: Arc<RelocationScheduler>,
@@ -157,6 +162,7 @@ pub async fn serve(
         pool,
         media,
         media_scheduler,
+        rss,
         monitor,
         tag_rule_scheduler,
         Arc::clone(&relocation_scheduler),
@@ -196,6 +202,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
     let dav_router = crate::webdav::receiver_router(dav_db.clone(), state.shutdown.clone());
     let media = Arc::clone(&state.media);
     let media_scheduler = Arc::clone(&state.media_scheduler);
+    let rss = Arc::clone(&state.rss);
     let self_use = state.self_use;
     Router::new()
         .route("/api/sites/search", get(search::sites))
@@ -332,6 +339,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
             media_router(media, media_scheduler, relocation_scheduler, self_use),
         )
         .merge(crate::webdav::management_router(dav_db))
+        .nest("/api/rss", rss::router(rss))
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
                 info_span!(

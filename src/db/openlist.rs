@@ -392,7 +392,11 @@ impl Database {
                         |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
                     )
                     .map_err(sql_error)?;
-                if active_relocation || active_download {
+                let active_rss:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM rss_download_jobs
+                    WHERE downloader_id IN (?1,?2) AND status IN ('fetching','submitting','reconciling')
+                    AND (infohash IS NULL OR lower(infohash)=lower(?3)))",
+                    params![downloader_id,target_downloader_id,infohash],|row|row.get(0)).map_err(sql_error)?;
+                if active_relocation || active_download || active_rss {
                     skipped += 1;
                     continue;
                 }
@@ -588,7 +592,10 @@ impl Database {
                                       WHERE (active.downloader_id = m.downloader_id
                                              OR active.target_downloader_id = m.downloader_id)
                                       AND lower(active.infohash) = lower(m.infohash)
-                                      AND active.stage NOT IN ('completed', 'cancelled'))",
+                                      AND active.stage NOT IN ('completed', 'cancelled'))
+                    AND NOT EXISTS (SELECT 1 FROM rss_download_jobs rss
+                        WHERE rss.downloader_id=m.downloader_id AND rss.status IN ('fetching','submitting','reconciling')
+                        AND (rss.infohash IS NULL OR lower(rss.infohash)=lower(m.infohash)))",
                     params![processing_enabled, now, now, now, now],
                 )
                 .map_err(sql_error)?;
@@ -636,7 +643,7 @@ impl Database {
             tx.execute(
                 "UPDATE media_relocation_jobs SET lease_owner = ?, lease_until = ?,
                      version = version + 1, updated_at = ?
-                 WHERE id IN (SELECT id FROM media_relocation_jobs
+                 WHERE id IN (SELECT id FROM media_relocation_jobs relocation
                      WHERE stage NOT IN ('completed', 'cancelled', 'planning_manual_review',
                                          'copy_manual_review', 'qb_manual_review',
                                          'source_remove_manual_review', 'manifest_required')
@@ -644,6 +651,10 @@ impl Database {
                             OR stage NOT IN ('waiting_download', 'auto_copy_paused'))
                        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
                        AND (lease_until IS NULL OR lease_until < ?)
+                       AND NOT EXISTS(SELECT 1 FROM rss_download_jobs rss
+                           WHERE rss.downloader_id IN (relocation.downloader_id,relocation.target_downloader_id)
+                           AND rss.status IN ('fetching','submitting','reconciling')
+                           AND (rss.infohash IS NULL OR lower(rss.infohash)=lower(relocation.infohash)))
                      ORDER BY id LIMIT ?)",
                 params![
                     claim_owner,
@@ -740,7 +751,11 @@ impl Database {
                      AND (? IS NULL OR EXISTS (
                          SELECT 1 FROM openlist_settings
                          WHERE id=1 AND updated_at=?
-                     ))",
+                     ))
+                     AND NOT EXISTS(SELECT 1 FROM rss_download_jobs rss
+                         WHERE rss.downloader_id IN (media_relocation_jobs.downloader_id,?)
+                         AND rss.status IN ('fetching','submitting','reconciling')
+                         AND (rss.infohash IS NULL OR lower(rss.infohash)=lower(media_relocation_jobs.infohash)))",
                     params![
                         job.source_qb_path,
                         job.source_openlist_path,
@@ -774,6 +789,7 @@ impl Database {
                         Utc::now().to_rfc3339(),
                         expected_openlist_config_updated_at.as_deref(),
                         expected_openlist_config_updated_at.as_deref(),
+                        job.target_downloader_id,
                     ],
                 )
                 .map_err(sql_error)?;

@@ -157,6 +157,12 @@ impl IndexerPool {
             .clone()
     }
 
+    /// RSS requests share the exact origin gates used by search and torrent retrieval.
+    pub(crate) async fn access_gate_for_url(&self, url: &reqwest::Url) -> Arc<OriginAccessGate> {
+        self.get_or_create_access_gate(&url.origin().ascii_serialization())
+            .await
+    }
+
     #[cfg(test)]
     pub(crate) async fn insert_for_test(
         &self,

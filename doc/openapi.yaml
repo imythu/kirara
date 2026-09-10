@@ -248,7 +248,7 @@ paths:
               additionalProperties: false
               required: [content_base64, existing_policy, auto_create]
               properties:
-                content_base64: {type: string, format: byte, description: Unencrypted PTD ZIP or cookies.json, decoded limit 8 MiB}
+                content_base64: {type: string, format: byte, description: 'Unencrypted PTD ZIP or cookies.json, decoded limit 8 MiB'}
                 existing_policy: {type: string, enum: [update, skip]}
                 auto_create: {type: boolean}
       responses:
@@ -905,6 +905,60 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
         default: {$ref: '#/components/responses/Error'}
+
+  /api/rss/summary:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1summary'
+
+  /api/rss/feeds:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1feeds'
+
+  /api/rss/feeds/test:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1feeds~1test'
+
+  /api/rss/feeds/{id}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1feeds~1{id}'
+
+  /api/rss/feeds/{id}/check:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1feeds~1{id}~1check'
+
+  /api/rss/feeds/{id}/{action}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1feeds~1{id}~1{action}'
+
+  /api/rss/rules:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1rules'
+
+  /api/rss/rules/preview:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1rules~1preview'
+
+  /api/rss/rules/{id}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1rules~1{id}'
+
+  /api/rss/rules/{id}/{action}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1rules~1{id}~1{action}'
+
+  /api/rss/items:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1items'
+
+  /api/rss/items/{id}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1items~1{id}'
+
+  /api/rss/backfills:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1backfills'
+
+  /api/rss/downloads:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1downloads'
+
+  /api/rss/downloads/{id}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1downloads~1{id}'
+
+  /api/rss/downloads/{id}/{action}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1downloads~1{id}~1{action}'
+
+  /api/rss/runs:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1runs'
+
+  /api/rss/runs/{id}:
+    $ref: './rss-openapi.yaml#/paths/~1api~1rss~1runs~1{id}'
 
 components:
   parameters:

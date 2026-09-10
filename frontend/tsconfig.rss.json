@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client"]
+  },
+  "include": [
+    "src/pages/rss-page.tsx",
+    "src/components/rss/**/*.tsx",
+    "src/lib/rss-api.ts"
+  ]
+}

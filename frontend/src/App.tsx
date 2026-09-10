@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Menu,
   CalendarCheck,
+  Rss,
   Settings,
   Tag,
   Tv,
@@ -40,6 +41,7 @@ const LOG_LEVELS: LogLevel[] = ["trace", "debug", "info", "warn", "error"];
 type AppPage =
   | "system-overview"
   | "media"
+  | "rss"
   | "sites"
   | "downloaders"
   | "torrent-transfer"
@@ -71,6 +73,7 @@ const SystemOverviewPage = lazy(() =>
   import("@/pages/system-overview-page").then((module) => ({ default: module.SystemOverviewPage })),
 );
 const MediaPage = lazy(() => import("@/pages/media-page").then((module) => ({ default: module.MediaPage })));
+const RssPage = lazy(() => import("@/pages/rss-page").then((module) => ({ default: module.RssPage })));
 
 const navItems: Array<{
   key: AppPage;
@@ -93,6 +96,13 @@ const navItems: Array<{
     description: "PT站点配置、连接测试与上传下载统计",
     icon: Database,
     group: "connections",
+  },
+  {
+    key: "rss",
+    label: "RSS 下载",
+    description: "按规则收取 RSS 中的新种子",
+    icon: Rss,
+    group: "resources",
   },
   {
     key: "downloaders",
@@ -150,6 +160,7 @@ function readPageFromHash(): AppPage {
   const valid: AppPage[] = [
     "system-overview",
     "media",
+    "rss",
     "sites",
     "downloaders",
     "torrent-transfer",
@@ -584,6 +595,7 @@ export default function App() {
             <div className="mt-4">
               {page === "system-overview" ? <SystemOverviewPage /> : null}
               {page === "media" ? <MediaPage /> : null}
+              {page === "rss" ? <RssPage /> : null}
               {page === "sites" ? <SitesPage /> : null}
               {page === "downloaders" ? <DownloadersPage /> : null}
               {page === "torrent-transfer" && selfUse ? <TorrentTransferPage /> : null}

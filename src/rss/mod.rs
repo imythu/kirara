@@ -6,6 +6,8 @@ use quick_xml::events::{BytesStart, Event};
 use serde::Serialize;
 use tracing::warn;
 
+pub mod download;
+
 #[derive(Debug, thiserror::Error)]
 pub enum RssParseError {
     #[error("xml error: {0}")]

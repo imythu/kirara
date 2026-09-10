@@ -17,6 +17,7 @@ mod ptd_site_catalog;
 mod ptd_sites;
 mod relocation;
 mod rss;
+mod rss_download;
 mod search;
 mod sign_in;
 mod site;
@@ -187,6 +188,13 @@ async fn run(
     ));
     let stats_db = db.clone();
     let stats_rx = collector.subscribe();
+    let rss_service = rss_download::service::RssService::new(
+        db.clone(),
+        pool.clone(),
+        media_service.indexer_pool(),
+        collector.clone(),
+    );
+    let rss_scheduler = rss_download::scheduler::RssScheduler::new(rss_service.clone());
 
     // 构建共享 HTTP 客户端（代理 + 限流），供刷流调度器使用
     let proxy = settings.proxy.as_deref();
@@ -223,6 +231,10 @@ async fn run(
         relocation::RelocationScheduler::new(db.clone(), pool.clone(), self_use);
 
     let _ = ready.send(endpoint);
+    let rss_scheduler_ref = rss_scheduler.clone();
+    let mut rss_scheduler_handle = tokio::spawn(async move {
+        rss_scheduler_ref.start().await;
+    });
     let media_scheduler_ref = media_scheduler.clone();
     let mut media_scheduler_handle = tokio::spawn(async move {
         media_scheduler_ref.start().await;
@@ -281,6 +293,7 @@ async fn run(
         pool,
         media_service,
         media_scheduler.clone(),
+        rss_service,
         monitor,
         tag_rule_scheduler,
         relocation_scheduler.clone(),
@@ -293,6 +306,7 @@ async fn run(
     let _ = dav_handle.await;
 
     media_scheduler.stop();
+    rss_scheduler.stop();
     relocation_scheduler.stop();
     collector_handle.abort();
     stats_handle.abort();
@@ -322,6 +336,17 @@ async fn run(
         Err(error) => {
             tracing::error!(%error, "failed to release media leases during shutdown")
         }
+    }
+
+    if tokio::time::timeout(Duration::from_secs(10), &mut rss_scheduler_handle)
+        .await
+        .is_err()
+    {
+        rss_scheduler_handle.abort();
+        let _ = rss_scheduler_handle.await;
+    }
+    if let Err(error) = rss_scheduler.release_owned_leases().await {
+        tracing::error!(%error, "failed to release interrupted RSS leases during shutdown");
     }
 
     let _ = collector_handle.await;

@@ -18,6 +18,7 @@ use crate::stats::{DownloaderSpeedSnapshot, TaskStatsSnapshot};
 mod media;
 mod openlist;
 mod ptd_backup;
+pub mod rss;
 pub mod search;
 mod webdav;
 
@@ -91,6 +92,7 @@ impl Database {
         let db = Self { path };
         db.init().await?;
         db.init_webdav().await?;
+        db.init_rss().await?;
         Ok(db)
     }
 
@@ -400,12 +402,24 @@ impl Database {
             request_headers.to_string(),
         );
         tokio::task::spawn_blocking(move || {
-            let conn = open_connection(&path)?;
-            conn.execute(
+            let mut conn = open_connection(&path)?;
+            let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(sql_error)?;
+            if site_has_rss_reference(&tx, id)? {
+                let current: Option<(String,String)> = tx.query_row("SELECT site_type,base_url FROM sites WHERE id=?",[id],|row|Ok((row.get(0)?,row.get(1)?))).optional().map_err(sql_error)?;
+                if current.is_some_and(|(kind,url)| kind != site_type || !same_downloader_url(&url,&base_url)) {
+                    return Err(AppError::InvalidConfig {message:"站点正在被启用的 RSS 规则或活动任务引用，不能更换站点类型或地址；请先解除引用".into()});
+                }
+                if matches!(auth_config.trim(),""|"{}"|"null") {
+                    let old:String=tx.query_row("SELECT auth_config FROM sites WHERE id=?",[id],|row|row.get(0)).map_err(sql_error)?;
+                    if !matches!(old.trim(),""|"{}"|"null") { return Err(AppError::InvalidConfig {message:"站点仍被 RSS 引用，不能清空凭据；可以更新有效凭据".into()}); }
+                }
+            }
+            tx.execute(
                 "UPDATE sites SET name = ?, site_type = ?, base_url = ?, auth_config = ?, request_headers = ?, use_proxy = ?, updated_at = ? WHERE id = ?",
                 params![name, site_type, base_url, auth_config, request_headers, use_proxy as i32, now, id],
             )
             .map_err(sql_error)?;
+            tx.commit().map_err(sql_error)?;
             Ok(())
         })
         .await
@@ -415,9 +429,15 @@ impl Database {
     pub async fn delete_site(&self, id: i64) -> Result<(), AppError> {
         let path = self.path.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = open_connection(&path)?;
-            conn.execute("DELETE FROM sites WHERE id = ?", params![id])
+            let mut conn = open_connection(&path)?;
+            let tx=conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(sql_error)?;
+            if site_has_rss_reference(&tx,id)? {
+                return Err(AppError::InvalidConfig {message:"站点仍被启用的 RSS 规则或活动任务引用，请先解除或替换引用".into()});
+            }
+            tx.execute("UPDATE rss_feeds SET enabled=0,last_error='关联站点已删除，请检查来源认证配置',version=version+1,lease_owner=NULL,lease_until=NULL,lease_version=lease_version+1 WHERE site_id=? AND archived_at IS NULL",[id]).map_err(sql_error)?;
+            tx.execute("DELETE FROM sites WHERE id = ?", params![id])
                 .map_err(sql_error)?;
+            tx.commit().map_err(sql_error)?;
             Ok(())
         })
         .await
@@ -1029,6 +1049,7 @@ impl Database {
                         .to_string(),
                 });
             }
+            tx.execute("UPDATE rss_rules SET enabled=0,last_error='目标下载器已删除，请重新选择下载器',version=version+1 WHERE downloader_id=? AND archived_at IS NULL",[id]).map_err(sql_error)?;
             tx.execute("DELETE FROM downloaders WHERE id = ?", params![id])
                 .map_err(sql_error)?;
             tx.commit().map_err(sql_error)?;
@@ -3606,6 +3627,12 @@ fn downloader_has_active_qb_work(conn: &Connection, id: i64, now: &str) -> Resul
     if downloader_has_active_relocation(conn, id, now)? {
         return Ok(true);
     }
+    let rss_reference:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM rss_download_jobs WHERE downloader_id=?1
+        AND (status NOT IN ('submitted','already_present','failed','cancelled') OR reserved_bytes>0 OR lease_until>=?2))
+        OR EXISTS(SELECT 1 FROM rss_rules WHERE downloader_id=?1 AND enabled=1 AND archived_at IS NULL)",params![id,now],|row|row.get(0)).map_err(sql_error)?;
+    if rss_reference {
+        return Ok(true);
+    }
     conn.query_row(
         "SELECT EXISTS(
              SELECT 1
@@ -3631,6 +3658,14 @@ fn downloader_has_active_qb_work(conn: &Connection, id: i64, now: &str) -> Resul
         |row| row.get(0),
     )
     .map_err(sql_error)
+}
+
+fn site_has_rss_reference(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    conn.query_row("SELECT EXISTS(SELECT 1 FROM rss_feeds f JOIN rss_rule_feeds rf ON rf.feed_id=f.id
+        JOIN rss_rules r ON r.id=rf.rule_id WHERE f.site_id=?1 AND f.archived_at IS NULL AND r.archived_at IS NULL AND r.enabled=1)
+        OR EXISTS(SELECT 1 FROM rss_download_jobs j JOIN rss_feeds f ON f.id=j.feed_id WHERE f.site_id=?1
+        AND (j.status NOT IN ('submitted','already_present','failed','cancelled') OR j.reserved_bytes>0 OR j.lease_until>=?2))",
+        params![id,Utc::now().to_rfc3339()],|row|row.get(0)).map_err(sql_error)
 }
 
 fn same_downloader_type(current: &str, next: &str) -> bool {

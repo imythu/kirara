@@ -1,0 +1,485 @@
+openapi: 3.0.3
+info:
+  title: Kirara RSS Downloader API
+  version: 1.0.0
+  description: |
+    RSS 2.0/Torznab torrent subscriptions. Shared by Web and the desktop JSON bridge.
+    First successful fetch establishes a baseline. Preview never changes persistent
+    state. Check and backfill return a Run object (use its id to poll), not a job.
+    All timestamps are UTC RFC3339. Stored addresses are never returned unmasked.
+    Source/rule deletion archives configuration and cancels confirmed unsent work;
+    it never removes torrents or files from qBittorrent. Unknown submissions reconcile.
+servers:
+  - url: http://127.0.0.1:3000
+paths:
+  /api/rss/summary:
+    get:
+      summary: Counts across feeds, rules and downloads
+      responses:
+        '200': {description: Summary, content: {application/json: {schema: {$ref: '#/components/schemas/Summary'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/feeds:
+    get:
+      summary: List active and paused, non-archived sources
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Keyword'}, {$ref: '#/components/parameters/Status'}, {$ref: '#/components/parameters/SiteId'}]
+      responses:
+        '200': {description: Source page, content: {application/json: {schema: {$ref: '#/components/schemas/FeedPage'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Create a source; optional request_id makes creation idempotent for 30 days
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeedInput'}}}}
+      responses:
+        '201': {description: Source (also returned on a matching replay), content: {application/json: {schema: {$ref: '#/components/schemas/Feed'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/feeds/test:
+    post:
+      summary: Fetch draft or saved source without changing baseline, history, or queue
+      description: At most 20 samples. Omitted site_id/use_proxy keep saved settings; explicit null clears them. Blank or missing URL retains the saved URL. An unsaved source requires URL.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeedTestInput'}}}}
+      responses:
+        '200': {description: Connection and parsed samples, content: {application/json: {schema: {$ref: '#/components/schemas/FeedTest'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/feeds/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Get source with masked URL
+      responses:
+        '200': {description: Source, content: {application/json: {schema: {$ref: '#/components/schemas/Feed'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      summary: Save source with expected_version
+      description: Replacing URL starts a new generation and holds old unsent work. Null/blank URL keeps it. Replacing site credentials in site settings does not reset the baseline.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeedInput'}}}}
+      responses:
+        '200': {description: Source, content: {application/json: {schema: {$ref: '#/components/schemas/Feed'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      summary: Archive source, cancel unsent work, keep submission reconciliation
+      requestBody: {$ref: '#/components/requestBodies/Action'}
+      responses:
+        '204': {description: Archived}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/feeds/{id}/check:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      summary: Request a persistent fetch and matching cycle
+      description: Requires an enabled source. Reuses an in-flight run. Respects origin cooldown. This operation can enqueue downloads; feeds/test cannot.
+      requestBody: {$ref: '#/components/requestBodies/Action'}
+      responses:
+        '202': {description: 'Run accepted; poll /api/rss/runs/{id}', content: {application/json: {schema: {$ref: '#/components/schemas/Run'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/feeds/{id}/{action}:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/EnableAction'}]
+    post:
+      summary: Pause or resume source
+      description: Resume continues held jobs, treats the next successful response as a baseline, then processes subsequent new items.
+      requestBody: {$ref: '#/components/requestBodies/Action'}
+      responses:
+        '200': {description: Source, content: {application/json: {schema: {$ref: '#/components/schemas/Feed'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/rules:
+    get:
+      summary: List non-archived rules
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Keyword'}, {$ref: '#/components/parameters/Status'}, {$ref: '#/components/parameters/FeedId'}, {$ref: '#/components/parameters/DownloaderId'}]
+      responses:
+        '200': {description: Rule page, content: {application/json: {schema: {$ref: '#/components/schemas/RulePage'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Create rule with activation boundaries at each source's current sequence
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RuleInput'}}}}
+      responses:
+        '201': {description: Rule, content: {application/json: {schema: {$ref: '#/components/schemas/Rule'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/rules/preview:
+    post:
+      summary: Apply draft filters to at most 200 samples without persistence or downloads
+      description: Defaults to local items. refresh_samples fetches sources without changing history. Explicit item_ids cannot be combined with refresh_samples. Missing attributes remain unknown; preview does not run detail enrichment. sample_time is the latest sample time, not proof all samples are fresh.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PreviewInput'}}}}
+      responses:
+        '200': {description: Counts and explanations, content: {application/json: {schema: {$ref: '#/components/schemas/Preview'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/rules/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Get rule
+      responses:
+        '200': {description: Rule, content: {application/json: {schema: {$ref: '#/components/schemas/Rule'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      summary: Save rule using expected_version; queued jobs keep their original options and filters
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RuleInput'}}}}
+      responses:
+        '200': {description: Rule, content: {application/json: {schema: {$ref: '#/components/schemas/Rule'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      summary: Archive rule and cancel unsent jobs; keep delivery history
+      requestBody: {$ref: '#/components/requestBodies/Action'}
+      responses:
+        '204': {description: Archived}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/rules/{id}/{action}:
+    parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/EnableAction'}]
+    post:
+      summary: Pause or resume rule
+      description: Resume continues held jobs and establishes new activation boundaries for automatic matching.
+      requestBody: {$ref: '#/components/requestBodies/Action'}
+      responses:
+        '200': {description: Rule, content: {application/json: {schema: {$ref: '#/components/schemas/Rule'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/items:
+    get:
+      summary: List saved items with rule decisions
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Keyword'}, {$ref: '#/components/parameters/Status'}, {$ref: '#/components/parameters/FeedId'}, {$ref: '#/components/parameters/RuleId'}, {$ref: '#/components/parameters/SiteId'}]
+      responses:
+        '200': {description: Item page, content: {application/json: {schema: {$ref: '#/components/schemas/ItemPage'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/items/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Get item and decision evidence; no raw download locator
+      responses:
+        '200': {description: Item, content: {application/json: {schema: {$ref: '#/components/schemas/Item'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/backfills:
+    post:
+      summary: Evaluate explicitly selected historical items with a saved enabled rule
+      description: Bypasses only activation boundaries, never matching, quotas, duplicate detection or submission checks. request_id is required; same key and different payload returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule_id, expected_version, item_ids, request_id]
+              properties:
+                rule_id: {type: integer, format: int64}
+                expected_version: {type: integer, format: int64}
+                item_ids: {type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: {type: integer, format: int64}}
+                request_id: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        '202': {description: Backfill run, content: {application/json: {schema: {$ref: '#/components/schemas/Run'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/downloads:
+    get:
+      summary: List persistent deliveries and separately sampled downloader state
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Keyword'}, {$ref: '#/components/parameters/Status'}, {$ref: '#/components/parameters/FeedId'}, {$ref: '#/components/parameters/RuleId'}, {$ref: '#/components/parameters/SiteId'}, {$ref: '#/components/parameters/DownloaderId'}]
+      responses:
+        '200': {description: Download page, content: {application/json: {schema: {$ref: '#/components/schemas/JobPage'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/downloads/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Get original rule/options snapshot and delivery state
+      responses:
+        '200': {description: Download, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/downloads/{id}/{action}:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+      - {name: action, in: path, required: true, schema: {type: string, enum: [retry, reconcile, cancel]}}
+    post:
+      summary: Retry failed work, request reconciliation, or cancel confirmed unsent work
+      description: State and version checks are authoritative. submitting/reconciling cannot be cancelled until the remote outcome is known. A successful delivery is never automatically replayed after it disappears from qBittorrent.
+      requestBody: {$ref: '#/components/requestBodies/Action'}
+      responses:
+        '200': {description: Download, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/runs:
+    get:
+      summary: List fetch, backfill and operation records
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Status'}, {$ref: '#/components/parameters/FeedId'}]
+      responses:
+        '200': {description: Run page, content: {application/json: {schema: {$ref: '#/components/schemas/RunPage'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/runs/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Poll accepted work; processing means matching or quota work remains
+      responses:
+        '200': {description: Run, content: {application/json: {schema: {$ref: '#/components/schemas/Run'}}}}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    Id: {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+    Page: {name: page, in: query, schema: {type: integer, default: 1, minimum: 1}}
+    PageSize: {name: page_size, in: query, schema: {type: integer, default: 50, minimum: 1, maximum: 200}}
+    Keyword: {name: keyword, in: query, schema: {type: string, maxLength: 200}}
+    Status: {name: status, in: query, description: 'Exact object state or needs_attention; feeds/rules also accept enabled and paused.', schema: {type: string}}
+    SiteId: {name: site_id, in: query, schema: {type: integer, format: int64}}
+    FeedId: {name: feed_id, in: query, schema: {type: integer, format: int64}}
+    RuleId: {name: rule_id, in: query, schema: {type: integer, format: int64}}
+    DownloaderId: {name: downloader_id, in: query, schema: {type: integer, format: int64}}
+    EnableAction: {name: action, in: path, required: true, schema: {type: string, enum: [pause, resume]}}
+  requestBodies:
+    Action: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Action'}}}}
+  responses:
+    Error:
+      description: '400 malformed JSON/query, 413 body over 128 KiB, 415 non-JSON body, 422 invalid configuration, 404 missing object, 409 version/state/idempotency conflict, 429 origin cooldown, 502 upstream failure, or 500 persistence failure. Messages omit private URLs and credentials.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  schemas:
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: {type: string}
+        code: {type: string, enum: [invalid_config, not_found, state_changed, rate_limited, authentication_expired, upstream_unavailable, database_error]}
+        retry_at: {type: string, format: date-time, nullable: true}
+    Action:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, format: int64}
+        request_id: {type: string, nullable: true, maxLength: 128}
+    FeedInput:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, maxLength: 100}
+        url: {type: string, nullable: true, maxLength: 8192, description: 'HTTP/HTTPS without URL userinfo. Required on create; empty retains current address on update.'}
+        site_id: {type: integer, format: int64, nullable: true}
+        use_proxy: {type: boolean, nullable: true, description: 'Null inherits site proxy choice; without a site, no proxy.'}
+        enabled: {type: boolean, default: true}
+        interval_minutes: {type: integer, minimum: 5, maximum: 1440, default: 15}
+        expected_version: {type: integer, format: int64, nullable: true, description: Required for updates}
+        request_id: {type: string, nullable: true, maxLength: 128}
+    FeedTestInput:
+      type: object
+      properties:
+        feed_id: {type: integer, format: int64, nullable: true}
+        url: {type: string, nullable: true, maxLength: 8192}
+        site_id: {type: integer, format: int64, nullable: true}
+        use_proxy: {type: boolean, nullable: true}
+    Feed:
+      type: object
+      required: [id, name, url_display, enabled, version, generation, last_status]
+      properties:
+        id: {type: integer, format: int64}
+        name: {type: string}
+        url_display: {type: string, description: Origin and masked path only; never submit as a real URL}
+        site_id: {type: integer, format: int64, nullable: true}
+        site_name: {type: string, nullable: true}
+        use_proxy: {type: boolean, nullable: true}
+        enabled: {type: boolean}
+        interval_minutes: {type: integer}
+        generation: {type: integer}
+        version: {type: integer}
+        initialized_at: {type: string, format: date-time, nullable: true}
+        last_sequence: {type: integer}
+        last_checked_at: {type: string, format: date-time, nullable: true}
+        next_run_at: {type: string, format: date-time, nullable: true}
+        last_status: {type: string}
+        last_error: {type: string, nullable: true}
+        item_count: {type: integer}
+        pending_count: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    Filters:
+      type: object
+      properties:
+        include: {type: array, maxItems: 50, items: {type: string, maxLength: 100}}
+        include_mode: {type: string, enum: [all, any], default: all}
+        exclude: {type: array, maxItems: 50, items: {type: string, maxLength: 100}}
+        include_regex: {type: string, maxLength: 512, nullable: true, description: Rust regex; no lookaround or backreferences}
+        exclude_regex: {type: string, maxLength: 512, nullable: true}
+        match_all: {type: boolean, default: false, description: Must be explicit when no title condition is supplied}
+        min_size_bytes: {type: integer, format: int64, minimum: 0, nullable: true}
+        max_size_bytes: {type: integer, format: int64, minimum: 0, nullable: true}
+        min_seeders: {type: integer, minimum: 0, nullable: true}
+        free_only: {type: boolean, default: false}
+        hr_policy: {type: string, enum: [require_clear, any], default: require_clear}
+    Options:
+      type: object
+      properties:
+        save_path: {type: string, nullable: true}
+        category: {type: string, nullable: true}
+        tags: {type: array, items: {type: string}}
+        paused: {type: boolean, default: false}
+        reserve_space_bytes: {type: integer, format: int64, minimum: 0, default: 0, description: 'Additional minimum free space using downloader-reported disk, not verification of a custom path volume.'}
+    RuleInput:
+      type: object
+      required: [name, feed_ids]
+      properties:
+        name: {type: string, maxLength: 100}
+        enabled: {type: boolean, default: true}
+        priority: {type: integer, default: 100, description: Lower number wins; rule ID breaks ties}
+        feed_ids: {type: array, minItems: 1, maxItems: 200, items: {type: integer, format: int64}}
+        filters: {$ref: '#/components/schemas/Filters'}
+        downloader_id: {type: integer, format: int64, nullable: true, description: Required when enabling rule}
+        options: {$ref: '#/components/schemas/Options'}
+        expected_version: {type: integer, format: int64, nullable: true, description: Required for update}
+        request_id: {type: string, nullable: true, maxLength: 128}
+    Rule:
+      allOf:
+        - {$ref: '#/components/schemas/RuleInput'}
+        - type: object
+          required: [id, version, match_revision, matched_count]
+          properties:
+            id: {type: integer, format: int64}
+            downloader_name: {type: string, nullable: true}
+            version: {type: integer}
+            match_revision: {type: integer}
+            last_error: {type: string, nullable: true}
+            matched_count: {type: integer}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    Attributes:
+      type: object
+      description: Null means unknown; absence is never interpreted as zero, free, or no H&R.
+      properties:
+        size_bytes: {type: integer, format: int64, nullable: true}
+        seeders: {type: integer, nullable: true}
+        leechers: {type: integer, nullable: true}
+        download_volume_factor: {type: number, nullable: true}
+        upload_volume_factor: {type: number, nullable: true}
+        hr: {type: boolean, nullable: true}
+        minimum_ratio: {type: number, nullable: true}
+        minimum_seed_time: {type: integer, format: int64, nullable: true}
+        free_until: {type: integer, format: int64, nullable: true, description: Unix seconds}
+        source: {type: string}
+        observed_at: {type: string}
+        hints: {type: array, items: {type: string}}
+    Evaluation:
+      type: object
+      required: [matched, needs_attributes, reasons]
+      properties:
+        matched: {type: boolean}
+        needs_attributes: {type: boolean}
+        reasons:
+          type: array
+          items:
+            type: object
+            required: [code, message]
+            properties:
+              code: {type: string}
+              message: {type: string}
+              field: {type: string, nullable: true}
+              actual: {type: string, nullable: true}
+              expected: {type: string, nullable: true}
+    Decision:
+      type: object
+      properties:
+        id: {type: integer}
+        item_id: {type: integer}
+        rule_id: {type: integer}
+        rule_name: {type: string}
+        match_revision: {type: integer}
+        status: {type: string}
+        evaluation: {$ref: '#/components/schemas/Evaluation'}
+        checked_at: {type: string, format: date-time, nullable: true}
+        next_evaluate_at: {type: string, format: date-time, nullable: true}
+        job_id: {type: integer, nullable: true}
+    Item:
+      type: object
+      properties:
+        id: {type: integer, description: Temporary preview items may have negative IDs; backfill requires saved positive IDs}
+        feed_id: {type: integer}
+        feed_name: {type: string}
+        generation: {type: integer}
+        item_key: {type: string, description: Opaque identity digest}
+        sequence: {type: integer}
+        title: {type: string}
+        detail_url: {type: string, nullable: true, description: Masked; not a navigable private address}
+        site_torrent_id: {type: string, nullable: true}
+        published_at: {type: string, format: date-time, nullable: true}
+        categories: {type: array, items: {type: string}}
+        attributes: {$ref: '#/components/schemas/Attributes'}
+        downloadable: {type: boolean}
+        content_revision: {type: integer}
+        first_seen_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        status: {type: string}
+        decisions: {type: array, items: {$ref: '#/components/schemas/Decision'}}
+    Job:
+      type: object
+      properties:
+        id: {type: integer}
+        item_id: {type: integer}
+        feed_id: {type: integer}
+        feed_generation: {type: integer}
+        feed_name: {type: string}
+        rule_id: {type: integer}
+        rule_name: {type: string}
+        downloader_id: {type: integer}
+        downloader_name: {type: string}
+        title: {type: string}
+        size_bytes: {type: integer, format: int64, nullable: true}
+        filters_snapshot: {$ref: '#/components/schemas/Filters'}
+        options_snapshot: {$ref: '#/components/schemas/Options'}
+        decision_snapshot: {$ref: '#/components/schemas/Evaluation'}
+        status: {type: string, enum: [queued, held, fetching, waiting, submitting, reconciling, retry_wait, submitted, already_present, failed, cancelled]}
+        infohash: {type: string, nullable: true}
+        reserved_bytes: {type: integer, format: int64}
+        attempts: {type: integer}
+        next_attempt_at: {type: string, format: date-time, nullable: true}
+        version: {type: integer}
+        last_error: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        submitted_at: {type: string, format: date-time, nullable: true}
+        download_state: {type: string, nullable: true, description: 'Raw qBittorrent state or not_found; separate from successful delivery. May be stale; consult sampled_at.'}
+        progress: {type: number, minimum: 0, maximum: 1, nullable: true}
+        sampled_at: {type: string, format: date-time, nullable: true}
+    Run:
+      type: object
+      required: [id, kind, status]
+      properties:
+        id: {type: integer, format: int64}
+        feed_id: {type: integer, nullable: true}
+        kind: {type: string}
+        status: {type: string}
+        item_count: {type: integer}
+        new_count: {type: integer}
+        queued_count: {type: integer}
+        pending_count: {type: integer}
+        message: {type: string, nullable: true}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time, nullable: true}
+    Summary:
+      type: object
+      properties:
+        feeds_total: {type: integer}
+        running: {type: integer}
+        paused: {type: integer}
+        needs_attention: {type: integer, description: Combined feed/rule/job count}
+        rules_enabled: {type: integer}
+        queued: {type: integer}
+        submitted: {type: integer}
+        failed: {type: integer}
+    PreviewInput:
+      type: object
+      required: [rule]
+      properties:
+        rule: {$ref: '#/components/schemas/RuleInput'}
+        item_ids: {type: array, maxItems: 200, items: {type: integer}}
+        refresh_samples: {type: boolean, default: false}
+    Preview:
+      type: object
+      properties:
+        rule_version: {type: integer, nullable: true}
+        total: {type: integer}
+        matched: {type: integer}
+        rejected: {type: integer}
+        unknown: {type: integer}
+        sample_limited: {type: boolean}
+        sample_time: {type: string, format: date-time}
+        items: {type: array, items: {type: object, properties: {item: {$ref: '#/components/schemas/Item'}, evaluation: {$ref: '#/components/schemas/Evaluation'}}}}
+    FeedTest:
+      type: object
+      properties:
+        title: {type: string, nullable: true}
+        item_count: {type: integer}
+        items: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/Item'}}
+        warnings: {type: array, items: {type: string}}
+        sample_time: {type: string, format: date-time}
+    Page:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        total: {type: integer}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 200}
+    FeedPage: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Feed'}}}}]}
+    RulePage: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Rule'}}}}]}
+    ItemPage: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Item'}}}}]}
+    JobPage: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Job'}}}}]}
+    RunPage: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Run'}}}}]}

@@ -245,6 +245,10 @@ impl MediaService {
         &self.db
     }
 
+    pub(crate) fn indexer_pool(&self) -> Arc<IndexerPool> {
+        Arc::clone(&self.indexers)
+    }
+
     pub async fn tmdb_search(
         &self,
         query: &str,
