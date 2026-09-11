@@ -206,6 +206,8 @@ Dialogs are bottom-aligned on phones and centered from 640px, capped at 90dvh an
 
 Keep operational settings in the existing dialog and shared controls. A compact group of primary/outline buttons identifies the selected mode with `aria-pressed`; labels describe each operation. Use thin dividers to separate configuration, connection instructions and result records. At narrow widths, stack fields and let actions wrap; preserve the path from configuration to its save action before connection instructions and history.
 
+RSS configuration places one-sentence explanations beside fields and uses inline disclosures for longer help. Optional filters and execution settings start collapsed for new rules and open when already configured; editing values does not change their expanded state. Saved RSS addresses are displayed as masked text, not editable inputs.
+
 **The Local Feedback Rule.** Keep an operation’s failure message beside its affected record and retry action; keep configuration feedback beside the save controls. Use explicit text for service and processing states, and expandable detail for longer result explanations.
 
 ### Brand and empty states

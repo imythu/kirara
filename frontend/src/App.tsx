@@ -100,7 +100,7 @@ const navItems: Array<{
   {
     key: "rss",
     label: "RSS 下载",
-    description: "按规则收取 RSS 中的新种子",
+    description: "订阅站点更新，自动下载符合条件的新资源",
     icon: Rss,
     group: "resources",
   },

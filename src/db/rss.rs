@@ -411,38 +411,26 @@ impl Database {
             if let Some(current)=&current { check_version(current.record.version,input.expected_version)?; }
             let url=input.url.as_deref().map(str::trim).filter(|s|!s.is_empty()).map(str::to_owned)
                 .or_else(||current.as_ref().map(|c|c.url.clone())).ok_or_else(||RssError::Invalid("请输入 RSS 地址".into()))?;
+            if current.as_ref().is_some_and(|feed| feed.url != url) {
+                return Err(RssError::Invalid("RSS 地址保存后不可修改，请添加新的订阅源".into()));
+            }
             let parsed=reqwest::Url::parse(&url).map_err(|_|RssError::Invalid("RSS 地址格式无效".into()))?;
             if !matches!(parsed.scheme(),"http"|"https") || parsed.host_str().is_none() || !parsed.username().is_empty() || parsed.password().is_some() || url.len()>8192 || url.contains('•') {
                 return Err(RssError::Invalid("RSS 地址必须是有效的 HTTP/HTTPS 地址，不能包含用户信息或脱敏占位符".into()));
             }
-            if let Some(site_id)=input.site_id {
-                let base:String=tx.query_row("SELECT base_url FROM sites WHERE id=?",[site_id],|r|r.get(0)).map_err(sql_error)?;
-                let base=reqwest::Url::parse(&base).map_err(|_|RssError::Invalid("关联站点地址无效".into()))?;
-                if base.origin()!=parsed.origin() { return Err(RssError::Invalid("RSS 地址必须与关联站点同源，避免泄露站点凭据".into())); }
-            }
+            // A site's API may use a different origin from its RSS feed.
+            // The fetcher scopes credentials to the configured site origin per request.
             let time=now();
             let feed_id=if let Some(current)=current {
-                let changed=current.url!=url;
                 let resume=!current.record.enabled && input.enabled;
-                tx.execute("UPDATE rss_feeds SET name=?,url_display=?,site_id=?,use_proxy=?,enabled=?,interval_minutes=?,
-                    generation=generation+?,version=version+1,
-                    initialized_at=CASE WHEN ? THEN NULL ELSE initialized_at END,
-                    last_sequence=CASE WHEN ? THEN 0 ELSE last_sequence END,
-                    resume_baseline=CASE WHEN ? THEN 0 WHEN ? THEN 1 ELSE resume_baseline END,
-                    etag=CASE WHEN ? THEN NULL ELSE etag END,last_modified=CASE WHEN ? THEN NULL ELSE last_modified END,
+                tx.execute("UPDATE rss_feeds SET name=?,site_id=?,use_proxy=?,enabled=?,interval_minutes=?,
+                    version=version+1,resume_baseline=CASE WHEN ? THEN 1 ELSE resume_baseline END,
                     lease_owner=NULL,lease_until=NULL,lease_version=lease_version+1,current_run_id=NULL,
-                    requires_action=0,last_error=NULL,last_status=CASE WHEN ? THEN 'pending' ELSE last_status END,
-                    quota_used=CASE WHEN ? THEN 0 ELSE quota_used END,next_run_at=?,updated_at=? WHERE id=?",
-                    params![input.name.trim(),masked_url(&url),input.site_id,input.use_proxy,input.enabled,input.interval_minutes,changed,
-                        changed,changed,changed,resume,changed,changed,changed,changed,time,time,current.record.id]).map_err(sql_error)?;
+                    requires_action=0,last_error=NULL,next_run_at=?,updated_at=? WHERE id=?",
+                    params![input.name.trim(),input.site_id,input.use_proxy,input.enabled,input.interval_minutes,
+                        resume,time,time,current.record.id]).map_err(sql_error)?;
                 if let Some(run_id)=tx.query_row("SELECT id FROM rss_runs WHERE feed_id=? AND kind='check' AND status IN ('queued','running') ORDER BY id DESC LIMIT 1",[current.record.id],|r|r.get::<_,i64>(0)).optional().map_err(sql_error)? {
                     tx.execute("UPDATE rss_runs SET status='superseded',message='源配置已更新，旧响应已丢弃',finished_at=? WHERE id=?",params![time,run_id]).map_err(sql_error)?;
-                }
-                if changed {
-                    let generation=current.record.generation+1;
-                    tx.execute("INSERT INTO rss_feed_secrets(feed_id,generation,url,url_digest) VALUES(?,?,?,?)",params![current.record.id,generation,url,digest(&url)]).map_err(sql_error)?;
-                    tx.execute("UPDATE rss_rule_feeds SET generation=?,activation_sequence=0,baseline_pending=1 WHERE feed_id=?",params![generation,current.record.id]).map_err(sql_error)?;
-                    tx.execute("UPDATE rss_decisions SET status='superseded',next_evaluate_at=NULL,version=version+1 WHERE job_id IS NULL AND item_id IN (SELECT id FROM rss_items WHERE feed_id=?)",[current.record.id]).map_err(sql_error)?;
                 }
                 synchronize_jobs(&tx,&time)?;
                 current.record.id
@@ -2132,10 +2120,11 @@ mod tests {
         assert!(f.db.rss_claim_feed("two", 120).await.unwrap().is_none());
         assert!(f.db.rss_renew_feed(&claim, 120).await.unwrap());
         let mut input = feed_input(Some(f.site));
-        input.url = Some("https://tracker.test/new-token/rss".into());
+        input.url = None;
+        input.name = "重命名的订阅源".into();
         input.expected_version = Some(f.feed.version);
         let new = f.db.rss_save_feed(Some(f.feed.id), input).await.unwrap();
-        assert_eq!(new.generation, 2);
+        assert_eq!(new.generation, f.feed.generation);
         assert!(matches!(
             f.db.rss_commit_scan(
                 &claim,
@@ -2697,7 +2686,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pause_cancel_and_source_replacement_fence_submission() {
+    async fn address_changes_are_rejected_without_disrupting_jobs_and_pauses_fence_submission() {
         let f = fixture().await;
         let (rule, job) = queue_one(&f).await;
         let claim = f.db.rss_claim_job("worker", 300).await.unwrap().unwrap();
@@ -2719,10 +2708,25 @@ mod tests {
         let mut input = feed_input(Some(f.site));
         input.url = Some("https://tracker.test/replacement".into());
         input.expected_version = Some(feed.version);
-        f.db.rss_save_feed(Some(feed.id), input).await.unwrap();
+        let before = f.db.rss_get_feed(feed.id).await.unwrap();
+        let active_job = f.db.rss_get_job(job.id).await.unwrap();
+        let error = f.db.rss_save_feed(Some(feed.id), input).await.unwrap_err();
+        assert!(matches!(error, RssError::Invalid(_)));
+        assert!(error.to_string().contains("RSS 地址保存后不可修改"));
+        let after = f.db.rss_get_feed(feed.id).await.unwrap();
+        assert_eq!(after.url, before.url);
+        assert_eq!(after.record.version, before.record.version);
+        assert_eq!(after.record.generation, before.record.generation);
+        assert_eq!(after.record.initialized_at, before.record.initialized_at);
+        assert_eq!(after.record.last_sequence, before.record.last_sequence);
+        let unchanged_job = f.db.rss_get_job(job.id).await.unwrap();
+        assert_eq!(unchanged_job.status, active_job.status);
+        assert_eq!(unchanged_job.version, active_job.version);
+        f.db.rss_set_feed_enabled(feed.id, false, action(feed.version))
+            .await
+            .unwrap();
         let held = f.db.rss_get_job(job.id).await.unwrap();
         assert_eq!(held.status, "held");
-        assert!(held.last_error.unwrap().contains("来源已更换"));
         assert!(f.db.rss_claim_job("other", 300).await.unwrap().is_none());
         assert!(matches!(
             f.db.rss_prepare_submission(&claim, &"a".repeat(40), 1024, None)

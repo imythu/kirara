@@ -378,6 +378,138 @@ async fn test_draft_can_clear_credentials_and_cross_origin_never_receives_them()
 }
 
 #[tokio::test]
+async fn separate_rss_and_site_api_origins_support_saved_feeds_enrichment_and_torrents() {
+    type ApiRequests = Arc<Mutex<Vec<(&'static str, HeaderMap)>>>;
+    async fn detail(State(requests): State<ApiRequests>, headers: HeaderMap) -> Json<Value> {
+        requests.lock().unwrap().push(("detail", headers));
+        Json(json!({"code":"0","data":{"size":12,"status":{"discount":"FREE","hr":false}}}))
+    }
+    async fn token(State(requests): State<ApiRequests>, headers: HeaderMap) -> Json<Value> {
+        requests.lock().unwrap().push(("token", headers));
+        Json(json!({"code":"0","data":"/file.torrent"}))
+    }
+    async fn torrent(State(requests): State<ApiRequests>, headers: HeaderMap) -> Response {
+        requests.lock().unwrap().push(("torrent", headers));
+        ([("content-type", "application/x-bittorrent")], TORRENT).into_response()
+    }
+    let harness = Harness::new().await;
+    let requests: ApiRequests = Arc::new(Mutex::new(Vec::new()));
+    let api = Router::new()
+        .route("/api/torrent/detail", post(detail))
+        .route("/api/torrent/genDlToken", post(token))
+        .route("/file.torrent", get(torrent))
+        .with_state(requests.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let api_url = format!("http://localhost:{}", listener.local_addr().unwrap().port());
+    let server = tokio::spawn(async move { axum::serve(listener, api).await.unwrap() });
+    let site = harness.service.db.create_site(
+        "Separate API", "mteam", &api_url,
+        r#"{"auth_type":"api_key","api_key":"api-private-key"}"#,
+        r#"[{"name":"Authorization","value":"Bearer custom-secret"},{"name":"Cookie","value":"session=private-cookie"},{"name":"User-Agent","value":"RSS-Test"}]"#,
+        false,
+    ).await.unwrap();
+    harness.state.lock().unwrap().feed = xml(&format!(
+        "<item><guid>42</guid><title>Documentary 42</title><link>{}/details.php?id=42</link></item>",
+        harness.endpoint,
+    ));
+    let input = FeedInput {
+        name: "RSS with separate API".into(),
+        url: Some(format!("{}/rss?passkey=rss-own-token", harness.endpoint)),
+        site_id: Some(site),
+        use_proxy: Some(false),
+        enabled: true,
+        interval_minutes: 15,
+        expected_version: None,
+        request_id: None,
+    };
+    let preview = harness
+        .service
+        .test_feed(FeedTestRequest {
+            feed_id: None,
+            url: input.url.clone(),
+            site_id: Some(Some(site)),
+            use_proxy: Some(Some(false)),
+        })
+        .await
+        .unwrap();
+    assert_eq!(preview.item_count, 1);
+    assert!(preview.items[0].downloadable);
+    let feed = harness
+        .service
+        .db
+        .rss_save_feed(None, input.clone())
+        .await
+        .unwrap();
+    // Editing unrelated settings also works when the linked API has another origin.
+    let feed = harness
+        .service
+        .db
+        .rss_save_feed(
+            Some(feed.id),
+            FeedInput {
+                url: None,
+                interval_minutes: 30,
+                expected_version: Some(feed.version),
+                ..input
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(feed.site_id, Some(site));
+    harness.scan(feed.id).await;
+    let stored = harness.service.db.rss_get_feed(feed.id).await.unwrap();
+    let item = harness
+        .service
+        .db
+        .rss_list_items(ListQuery::default())
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    assert_eq!(item.site_torrent_id.as_deref(), Some("42"));
+    let locator = harness
+        .service
+        .db
+        .rss_get_item_locator(item.id)
+        .await
+        .unwrap();
+    let fetcher = super::fetcher::RssFetcher::new(harness.service.db.clone(), IndexerPool::new());
+    let attributes = fetcher.enrich(&stored, &item, &locator).await.unwrap();
+    assert_eq!(attributes.hr, Some(false));
+    assert_eq!(attributes.download_volume_factor, Some(0.0));
+    assert_eq!(
+        fetcher.torrent(&stored, &item, &locator).await.unwrap(),
+        TORRENT
+    );
+    {
+        let rss = harness.state.lock().unwrap();
+        assert_eq!(rss.requests.len(), 2);
+        for headers in &rss.requests {
+            assert!(!headers.contains_key("x-api-key"));
+            assert!(!headers.contains_key("authorization"));
+            assert!(!headers.contains_key("cookie"));
+            assert_eq!(headers.get("user-agent").unwrap(), "RSS-Test");
+        }
+    }
+    {
+        let api = requests.lock().unwrap();
+        assert_eq!(
+            api.iter().map(|(kind, _)| *kind).collect::<Vec<_>>(),
+            ["detail", "token", "torrent"]
+        );
+        for (_, headers) in api.iter() {
+            assert_eq!(headers.get("x-api-key").unwrap(), "api-private-key");
+            assert_eq!(
+                headers.get("authorization").unwrap(),
+                "Bearer custom-secret"
+            );
+            assert_eq!(headers.get("cookie").unwrap(), "session=private-cookie");
+        }
+    }
+    server.abort();
+}
+
+#[tokio::test]
 async fn baseline_then_new_item_is_delivered_once_with_saved_options() {
     let harness = Harness::new().await;
     let job = harness.queued().await;

@@ -195,6 +195,21 @@ impl RssFetcher {
         item: &ItemRecord,
         locator: &ItemLocator,
     ) -> RssResult<Vec<u8>> {
+        // Prefer the feed's link. Expired links can be recovered through the linked
+        // site's stable torrent ID; transient failures keep the normal retry policy.
+        let direct_error = if let Some(url) = locator.download_url.as_deref() {
+            match self.direct_torrent(feed, url).await {
+                Ok(bytes) => return Ok(bytes),
+                Err(
+                    error @ (RssError::Authentication(_)
+                    | RssError::NotFound(_)
+                    | RssError::Invalid(_)),
+                ) => Some(error),
+                Err(error) => return Err(error),
+            }
+        } else {
+            None
+        };
         if let (Some(site_id), Some(torrent_id)) =
             (locator.site_id, locator.site_torrent_id.as_ref())
         {
@@ -244,23 +259,19 @@ impl RssFetcher {
                     .map_err(public_indexer_error);
             }
         }
-        let raw = locator.download_url.as_deref().ok_or_else(|| {
-            RssError::Invalid("条目没有可用的种子下载地址，关联站点也无法生成取种请求".into())
-        })?;
-        match self.direct_torrent(feed, raw).await {
-            Ok(bytes) => Ok(bytes),
-            Err(error @ (RssError::Authentication(_) | RssError::NotFound(_))) => {
-                let latest = self.fetch(feed, false).await?;
-                let replacement = latest
-                    .items
-                    .iter()
-                    .find(|entry| entry.item_key == item.item_key);
-                match replacement.and_then(|entry| entry.download_url.as_deref()) {
-                    Some(url) if url != raw => self.direct_torrent(feed, url).await,
-                    _ => Err(error),
-                }
-            }
-            Err(error) => Err(error),
+        let (Some(raw), Some(error)) = (locator.download_url.as_deref(), direct_error) else {
+            return Err(RssError::Invalid(
+                "条目没有可用的种子下载地址，关联站点也无法生成取种请求".into(),
+            ));
+        };
+        let latest = self.fetch(feed, false).await?;
+        let replacement = latest
+            .items
+            .iter()
+            .find(|entry| entry.item_key == item.item_key);
+        match replacement.and_then(|entry| entry.download_url.as_deref()) {
+            Some(url) if url != raw => self.direct_torrent(feed, url).await,
+            _ => Err(error),
         }
     }
 
@@ -282,7 +293,7 @@ impl RssFetcher {
         let bytes = bounded_body(response, MAX_TORRENT_BYTES).await?;
         if response_is_authentication_page(&final_url, std::str::from_utf8(&bytes).unwrap_or("")) {
             return Err(RssError::Authentication(
-                "种子下载需要重新登录或更新 RSS 地址".into(),
+                "种子链接已失效或需要登录，请检查关联站点的登录信息".into(),
             ));
         }
         crate::media::torrent::torrent_infohash(&bytes).map_err(|_| {
@@ -1066,6 +1077,69 @@ mod tests {
             .unwrap();
         assert_eq!(bytes, TEST_TORRENT);
         assert_eq!(*fixture.requests.lock().unwrap(), vec!["/file.torrent"]);
+    }
+
+    #[tokio::test]
+    async fn expired_links_fall_back_to_authenticated_site_but_transient_errors_do_not() {
+        let fixture = TorrentFixture::new(
+            "nexusphp",
+            r#"{"auth_type":"cookie","cookie":"session=1"}"#,
+            false,
+        )
+        .await;
+        let item = fixture.item("43").await;
+        let mut locator = fixture.db.rss_get_item_locator(item.id).await.unwrap();
+        assert_eq!(
+            fixture
+                .fetcher
+                .torrent(&fixture.feed, &item, &locator)
+                .await
+                .unwrap(),
+            TEST_TORRENT
+        );
+        assert_eq!(*fixture.requests.lock().unwrap(), vec!["/file.torrent"]);
+        fixture.requests.lock().unwrap().clear();
+
+        for status in [401, 403, 404, 410, 200, 503, 429] {
+            let app = Router::new().route(
+                "/expired",
+                get(move |headers: HeaderMap| async move {
+                    for name in ["cookie", "authorization", "x-api-key"] {
+                        assert!(
+                            !headers.contains_key(name),
+                            "credentials leaked to RSS link"
+                        );
+                    }
+                    (
+                        axum::http::StatusCode::from_u16(status).unwrap(),
+                        "<html>expired link</html>",
+                    )
+                }),
+            );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            locator.download_url =
+                Some(format!("http://{}/expired", listener.local_addr().unwrap()));
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let result = fixture
+                .fetcher
+                .torrent(&fixture.feed, &item, &locator)
+                .await;
+            server.abort();
+            if status == 503 {
+                assert!(matches!(result, Err(RssError::Unavailable(_))));
+                assert!(fixture.requests.lock().unwrap().is_empty());
+            } else if status == 429 {
+                assert!(matches!(result, Err(RssError::RateLimited { .. })));
+                assert!(fixture.requests.lock().unwrap().is_empty());
+            } else {
+                assert_eq!(result.unwrap(), TEST_TORRENT);
+                assert_eq!(
+                    *fixture.requests.lock().unwrap(),
+                    vec!["/download.php?id=43"]
+                );
+            }
+            fixture.requests.lock().unwrap().clear();
+        }
     }
 
     #[tokio::test]

@@ -117,9 +117,9 @@ export function rssSize(bytes?: number | null): string {
 
 export const rssStatusLabels: Record<string, string> = {
   active: "运行中", enabled: "运行中", paused: "已暂停", disabled: "已暂停", uninitialized: "等待首次检查", idle: "等待检查",
-  pending: "待处理", pending_attributes: "待补充属性", attribute_unknown: "属性待确认", baseline: "历史基线", skipped: "已跳过", rejected: "未符合",
-  matched: "符合规则", queued: "已加入队列", held: "已挂起", fetching: "正在准备种子", waiting: "等待条件", retry_wait: "等待重试",
-  submitting: "正在提交", reconciling: "正在确认投递", submitted: "已提交", already_present: "下载器已存在", failed: "需处理",
+  pending: "待处理", pending_attributes: "待补充属性", attribute_unknown: "属性待确认", baseline: "已有资源", skipped: "已跳过", rejected: "未符合",
+  matched: "符合规则", queued: "已加入队列", held: "已暂停等待", fetching: "正在准备种子", waiting: "等待条件", retry_wait: "等待重试",
+  submitting: "正在提交", reconciling: "正在确认添加结果", submitted: "已添加到下载器", already_present: "下载器已存在", failed: "需处理",
   cancelled: "已取消", source_changed: "来源已更换", lower_priority: "低优先级规则", already_queued: "已加入队列",
   observed: "已收集", ready: "待入队", priority_wait: "等待优先规则", unavailable: "无法下载", ignored: "未命中规则", processing: "正在处理", scheduled: "等待检查",
   running: "检查中", completed: "处理完成", success: "检查成功", ok: "检查成功", not_modified: "内容未更新", error: "检查失败", archived: "已归档",

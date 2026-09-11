@@ -235,6 +235,50 @@ async fn rss_public_api_baseline_delivery_idempotency_and_restart() {
         .unwrap();
     assert_eq!(replay["id"], run["id"]);
     let current = read(&client, &base, &feed_path).await;
+    let mut edit = json!({
+        "name": "Renamed RSS source",
+        "url": format!("{upstream}/different-rss?passkey=unwanted-token"),
+        "interval_minutes": 30,
+        "expected_version": current["version"],
+    });
+    let rejected = client
+        .put(format!("{base}{feed_path}"))
+        .json(&edit)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = rejected.json().await.unwrap();
+    assert_eq!(error["code"], "invalid_config");
+    assert!(
+        error["error"]
+            .as_str()
+            .unwrap()
+            .contains("地址保存后不可修改")
+    );
+    assert!(!error.to_string().contains("unwanted-token"));
+    let unchanged = read(&client, &base, &feed_path).await;
+    assert_eq!(unchanged["version"], current["version"]);
+    assert_eq!(unchanged["generation"], current["generation"]);
+    assert_eq!(unchanged["name"], current["name"]);
+    edit["url"] = Value::Null;
+    let updated: Value = client
+        .put(format!("{base}{feed_path}"))
+        .json(&edit)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(updated["name"], "Renamed RSS source");
+    assert_eq!(updated["interval_minutes"], 30);
+    assert_eq!(updated["generation"], current["generation"]);
+    assert_eq!(updated["initialized_at"], current["initialized_at"]);
+    assert_eq!(updated["last_sequence"], current["last_sequence"]);
+    let current = read(&client, &base, &feed_path).await;
     let response = client
         .post(format!("{base}{feed_path}/pause"))
         .json(&json!({"expected_version":-1}))

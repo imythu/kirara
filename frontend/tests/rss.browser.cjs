@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const url = process.env.RSS_TEST_URL || 'http://127.0.0.1:4189';
-const output = path.resolve(__dirname, '../../.impeccable/review/rss');
+const output = path.resolve(process.env.RSS_CAPTURE_DIR || path.join(__dirname, '../../.impeccable/review/rss'));
 const time = '2026-09-09T10:20:00Z';
 const GiB = 1024 ** 3;
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -172,7 +172,8 @@ async function localFeedback(page, scope, message, action, name) {
       // Saved addresses are never put back into the input; testing credentials uses POST.
       await page.getByRole('button', { name: `编辑${state.feeds[0].name}`, exact: true }).click();
       const dialog = page.getByRole('dialog', { name: '编辑订阅源', exact: true });
-      assert.equal(await dialog.getByLabel('替换 RSS 地址（留空保留）', { exact: true }).inputValue(), '');
+      assert.equal(await dialog.locator('input[type="url"]').count(), 0, 'saved RSS addresses must not be editable');
+      assert(await dialog.getByText('地址保存后不可修改。如需使用其他地址，请添加订阅源。', { exact: true }).isVisible());
       await dialog.getByLabel('订阅源名称', { exact: true }).fill('纪录片订阅（测试数据）');
       await dialog.getByRole('button', { name: '测试并预览', exact: true }).click();
       await dialog.getByText('源返回了登录页面，请更新站点凭据后重试', { exact: true }).waitFor();
@@ -181,7 +182,33 @@ async function localFeedback(page, scope, message, action, name) {
       await dialog.getByText('测试 RSS 来源 · 3 条', { exact: true }).waitFor();
       assert.equal(state.writes.filter(r => r.path.endsWith('/feeds/test')).at(-1).body.url, null);
       await capture(page, `feed-dialog-${width}`);
-      await dialog.getByRole('button', { name: '取消', exact: true }).click();
+      await dialog.getByRole('button', { name: '保存订阅源', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      const edit = state.writes.find(request => request.path === '/api/rss/feeds/1' && request.method === 'PUT');
+      assert.equal(edit.body.url, null, 'editing other settings must never resend the masked URL');
+      await page.goto(`${url}/#/rss`);
+      await page.getByRole('button', { name: state.feeds[0].name, exact: true }).waitFor();
+
+      // Discard confirmation stays beside Cancel even after scrolling to the bottom.
+      await page.getByRole('button', { name: '添加订阅源', exact: true }).click();
+      const unsaved = page.getByRole('dialog', { name: '添加订阅源', exact: true });
+      await unsaved.getByLabel('订阅源名称', { exact: true }).fill('未保存的草稿');
+      await unsaved.getByLabel('RSS 地址', { exact: true }).fill('https://draft.example/rss');
+      await unsaved.locator('.overflow-auto').evaluate(node => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
+      const beforeDiscard = state.writes.length;
+      await unsaved.getByRole('button', { name: '取消', exact: true }).click();
+      const keepEditing = unsaved.getByRole('button', { name: '继续编辑', exact: true });
+      await localFeedback(page, unsaved, '当前有未保存的修改', keepEditing, `discard-confirmation-${width}`);
+      await localFeedback(page, unsaved, '当前有未保存的修改', unsaved.getByRole('button', { name: '丢弃修改并关闭', exact: true }), `discard-confirmation-${width}`);
+      assert(await keepEditing.evaluate(node => node === document.activeElement));
+      await keepEditing.click();
+      assert.equal(await unsaved.getByLabel('订阅源名称', { exact: true }).inputValue(), '未保存的草稿');
+      await unsaved.getByRole('button', { name: '关闭添加订阅源', exact: true }).click();
+      await page.keyboard.press('Escape');
+      assert(await unsaved.isVisible(), 'Escape must not discard an unsaved draft');
+      await unsaved.getByRole('button', { name: '丢弃修改并关闭', exact: true }).click();
+      await unsaved.waitFor({ state: 'hidden' });
+      assert.equal(state.writes.length, beforeDiscard, 'closing must not save or download');
 
       // Create: an HTTP failure preserves both the draft and its idempotency key.
       await page.getByRole('button', { name: '添加订阅源', exact: true }).click();
@@ -207,7 +234,7 @@ async function localFeedback(page, scope, message, action, name) {
 
       await page.goto(`${url}/#/rss?tab=feeds&feed=1`);
       await page.getByRole('heading', { name: '纪录片订阅（测试数据）', exact: true }).waitFor();
-      await page.getByText('查看判定与属性', { exact: true }).nth(1).click();
+      await page.getByText('查看筛选结果与资源信息', { exact: true }).nth(1).click();
       await page.getByText('源未提供 H&R 信息，等待站点补充查询', { exact: true }).waitFor();
       await capture(page, `items-${width}`);
       await page.getByLabel(`选择 ${state.items[0].title}`, { exact: true }).check();
@@ -215,7 +242,7 @@ async function localFeedback(page, scope, message, action, name) {
       const backfill = page.getByRole('dialog', { name: '补下已有条目', exact: true });
       const submit = backfill.getByRole('button', { name: '确认补下所选条目', exact: true });
       assert(await submit.isDisabled());
-      await backfill.getByRole('button', { name: '预览已收集条目', exact: true }).click();
+      await backfill.getByRole('button', { name: '查看匹配结果', exact: true }).click();
       await backfill.getByText('符合 1', { exact: true }).waitFor();
       await backfill.locator('summary').filter({ hasText: state.items[0].title }).click();
       await backfill.locator('.overflow-auto').evaluate(node => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
@@ -237,17 +264,28 @@ async function localFeedback(page, scope, message, action, name) {
       await page.getByLabel('规则名称', { exact: true }).waitFor();
       assert.equal(await page.getByLabel('规则名称', { exact: true }).inputValue(), '纪录片 WEB-DL');
       if (width < 1280) await page.getByRole('tab', { name: '匹配预览', exact: true }).click();
-      await page.getByRole('button', { name: '预览已收集条目', exact: true }).click();
+      await page.getByRole('button', { name: '查看匹配结果', exact: true }).click();
       await page.getByText('信息不足 1', { exact: true }).waitFor();
       await page.locator('summary').filter({ hasText: state.items[1].title }).click();
       await page.getByText('源未提供 H&R 信息，等待站点补充查询', { exact: true }).waitFor();
       await capture(page, `rule-preview-${width}`);
-      await page.getByRole('button', { name: '重新抓取样例', exact: true }).click();
-      await page.getByRole('button', { name: '预览已收集条目', exact: true }).waitFor();
+      await page.getByRole('button', { name: '读取最新资源', exact: true }).click();
+      await page.getByRole('button', { name: '查看匹配结果', exact: true }).waitFor();
       assert.equal(state.writes.filter(r => r.path.endsWith('/rules/preview')).at(-1).body.refresh_samples, true);
       if (width < 1280) await page.getByRole('tab', { name: '规则配置', exact: true }).click();
+      const hrHelp = page.locator('summary').filter({ hasText: 'H&R 是什么？' });
+      await hrHelp.focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await hrHelp.evaluate(node => node.parentElement.open), true);
+      assert(await page.getByText('有些资源要求下载后继续上传分享', { exact: false }).isVisible());
+      await hrHelp.scrollIntoViewIfNeeded();
+      if (process.env.RSS_CAPTURE !== '0') await page.screenshot({ path: path.join(output, `rule-help-${width}.png`), animations: 'disabled' });
+      await hrHelp.click();
       await page.getByLabel('规则名称', { exact: true }).fill('纪录片规则改名（测试数据）');
       await capture(page, `rule-config-${width}`);
+      await page.getByLabel('规则优先级', { exact: true }).scrollIntoViewIfNeeded();
+      if (process.env.RSS_CAPTURE !== '0') await page.screenshot({ path: path.join(output, `rule-destination-${width}.png`), animations: 'disabled' });
+      await noOverflow(page);
       const ruleSaveArea = page.getByRole('region', { name: '保存规则', exact: true });
       const ruleSave = ruleSaveArea.getByRole('button', { name: '保存并启用', exact: true });
       await page.getByLabel('规则名称', { exact: true }).fill('');
@@ -274,7 +312,7 @@ async function localFeedback(page, scope, message, action, name) {
       await jobDialog.getByText('下载中', { exact: true }).waitFor();
       assert.equal(await jobDialog.getByRole('button', { name: '重试任务', exact: true }).count(), 0);
       assert.equal(await jobDialog.getByRole('button', { name: '取消未提交任务', exact: true }).count(), 0);
-      await jobDialog.getByText('下载选项与条件快照', { exact: true }).click();
+      await jobDialog.getByText('查看此任务使用的设置', { exact: true }).click();
       await capture(page, `job-${width}`);
       await page.getByRole('button', { name: '关闭下载任务详情', exact: true }).click();
       await page.getByRole('button', { name: '重试', exact: true }).click();
@@ -284,7 +322,7 @@ async function localFeedback(page, scope, message, action, name) {
       await page.getByRole('button', { name: '确认取消任务', exact: true }).click();
       await page.getByText('未提交任务已取消。', { exact: true }).waitFor();
       assert.equal(state.jobs[1].status, 'cancelled');
-      await page.getByRole('button', { name: '对账', exact: true }).click();
+      await page.getByRole('button', { name: '确认添加结果', exact: true }).click();
       assert(state.writes.some(r => r.path === '/api/rss/downloads/3/reconcile'));
       await page.getByLabel('搜索资源', { exact: true }).fill('Deep Ocean');
       await page.waitForURL(/q=Deep/);
@@ -321,11 +359,31 @@ async function localFeedback(page, scope, message, action, name) {
     await install(desktop, desktopState, true);
     await desktop.goto(`${url}/#/rss?tab=rules&edit=new&feed=1`);
     await desktop.getByLabel('规则名称', { exact: true }).fill('待配置规则（测试数据）');
-    await desktop.getByLabel('包含词（每行一个）', { exact: true }).fill('Documentary');
+    await desktop.getByLabel('标题包含', { exact: true }).fill('Documentary');
+    for (const title of ['文件大小与做种人数（选填）', '高级标题匹配（正则）', '分类、标签与添加方式（选填）', '更多执行设置（优先级、磁盘空间）']) {
+      assert.equal(await desktop.locator('summary').filter({ hasText: title }).evaluate(node => node.parentElement.open), false);
+    }
+    const executionSettings = desktop.locator('summary').filter({ hasText: '更多执行设置（优先级、磁盘空间）' });
+    await executionSettings.click();
+    await desktop.getByLabel('至少保留可用空间（GiB）', { exact: true }).fill('10');
+    await desktop.getByLabel('至少保留可用空间（GiB）', { exact: true }).fill('0');
+    assert.equal(await executionSettings.evaluate(node => node.parentElement.open), true, 'clearing an optional value must not close its section');
+    await executionSettings.click();
+    await desktop.getByLabel('标题不能包含（选填）', { exact: true }).fill('CAMRip');
+    await desktop.getByRole('checkbox', { name: '接收所有标题', exact: true }).check();
+    assert.equal(await desktop.getByLabel('标题包含', { exact: true }).count(), 0);
+    await desktop.getByRole('button', { name: '查看匹配结果', exact: true }).click();
+    const allPreview = desktopState.writes.filter(r => r.path.endsWith('/rules/preview')).at(-1).body.rule;
+    assert.equal(allPreview.filters.match_all, true);
+    assert.deepEqual(allPreview.filters.include, []);
+    assert.equal(allPreview.filters.include_regex, null);
+    assert.deepEqual(allPreview.filters.exclude, ['CAMRip']);
+    await desktop.getByRole('checkbox', { name: '接收所有标题', exact: true }).uncheck();
+    assert.equal(await desktop.getByLabel('标题包含', { exact: true }).inputValue(), 'Documentary', 'switching title mode must preserve the draft');
     assert(await desktop.getByRole('button', { name: '保存并启用', exact: true }).isDisabled());
-    await desktop.getByRole('button', { name: '预览已收集条目', exact: true }).click();
+    await desktop.getByRole('button', { name: '查看匹配结果', exact: true }).click();
     await desktop.getByText('信息不足 1', { exact: true }).waitFor();
-    await desktop.getByRole('button', { name: '保存为停用规则', exact: true }).click();
+    await desktop.getByRole('button', { name: '仅保存，暂不启用', exact: true }).click();
     await desktop.getByRole('button', { name: '待配置规则（测试数据）', exact: true }).waitFor();
     const disabledSave = desktopState.writes.find(r => r.path === '/api/rss/rules');
     assert.equal(disabledSave.body.enabled, false); assert.equal(disabledSave.body.downloader_id, null);

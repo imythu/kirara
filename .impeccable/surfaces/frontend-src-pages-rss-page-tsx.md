@@ -31,3 +31,13 @@ This surface applies the existing Task Accent, Bordered Surface and Local Feedba
 ## Finish evidence
 
 The [full review](../review/rss/finish-review.md) identified one form-feedback fix. The [bounded verdict](../review/rss/finish-verdict.md) scores that fix resolved with disposition `ship`; it is not a new whole-surface review. [Verification](../review/rss/fix-verification.md) records passed RSS type checks, production build and synthetic 1440px/390px browser flows, including desktop IPC coverage. No shipping raster was added; screenshots are test evidence. See the [documentation handoff](../review/rss/documentation-handoff.md) for the exact scope and limits.
+
+## Configuration clarity update
+
+The RSS configuration is intended to be understandable to first-time users. Each field explains its purpose and useful defaults; longer explanations use keyboard- and touch-accessible inline disclosures. The rule editor follows source → resource conditions → download destination. Optional filters, regex, classification and execution controls are collapsed for new rules and expanded when already configured. Title filtering can be turned off without discarding the current draft; exclusions and resource requirements still apply.
+
+RSS URLs are supplied only when creating a source. Editing shows a masked address as text and sends no replacement URL. The persistence layer rejects address changes atomically, retaining existing history and queued work. Another address requires a new source. User-facing configuration removes release-stage restrictions, source generations and rule revisions; adding a download and checking its result use direct action labels.
+
+The [configuration clarity verification](../review/rss-clarity/verification.md) records the current review and tests, including the final desktop and phone captures.
+
+Unsaved source changes are confirmed in the fixed dialog footer, replacing the normal save/cancel actions so the decision stays visible at every scroll position.

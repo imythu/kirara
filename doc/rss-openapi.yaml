@@ -48,7 +48,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     put:
       summary: Save source with expected_version
-      description: Replacing URL starts a new generation and holds old unsent work. Null/blank URL keeps it. Replacing site credentials in site settings does not reset the baseline.
+      description: The RSS URL is immutable after creation. Omit URL or send null/blank to keep it; a different URL returns 422 without changing the feed or its jobs. Create another feed to use a different address. Updating site credentials does not reset history.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeedInput'}}}}
       responses:
         '200': {description: Source, content: {application/json: {schema: {$ref: '#/components/schemas/Feed'}}}}
@@ -235,8 +235,8 @@ components:
       required: [name]
       properties:
         name: {type: string, maxLength: 100}
-        url: {type: string, nullable: true, maxLength: 8192, description: 'HTTP/HTTPS without URL userinfo. Required on create; empty retains current address on update.'}
-        site_id: {type: integer, format: int64, nullable: true}
+        url: {type: string, nullable: true, maxLength: 8192, description: 'HTTP/HTTPS without URL userinfo. Required on create. Immutable thereafter: omit or send null/blank on update; a different address is rejected with 422.'}
+        site_id: {type: integer, format: int64, nullable: true, description: Linked site API may use a different origin from the RSS URL.}
         use_proxy: {type: boolean, nullable: true, description: 'Null inherits site proxy choice; without a site, no proxy.'}
         enabled: {type: boolean, default: true}
         interval_minutes: {type: integer, minimum: 5, maximum: 1440, default: 15}
