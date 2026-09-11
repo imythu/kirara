@@ -334,6 +334,8 @@ jobs:
   docker-linux:
     name: Docker linux ${{ matrix.platform }}
     needs: [prepare, build]
+    # Snapshot skips search-assets; do not let that skip propagate past a successful build.
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -399,6 +401,7 @@ jobs:
   docker-linux-manifest:
     name: Docker linux manifest
     needs: [prepare, docker-linux]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.docker-linux.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Set up Docker Buildx
