@@ -2459,19 +2459,36 @@ async fn get_features(State(state): State<AppState>) -> Json<serde_json::Value> 
 }
 
 async fn get_settings(State(state): State<AppState>) -> Result<Json<GlobalConfig>, ApiError> {
-    Ok(Json(state.db.get_settings().await?))
+    Ok(Json(public_settings(state.db.get_settings().await?)))
 }
 
 async fn update_settings(
     State(state): State<AppState>,
     Json(mut settings): Json<GlobalConfig>,
 ) -> Result<Json<GlobalConfig>, ApiError> {
+    settings.vision_llm.base_url = settings
+        .vision_llm
+        .base_url
+        .trim()
+        .trim_end_matches('/')
+        .to_string();
+    settings.vision_llm.model = settings.vision_llm.model.trim().to_string();
+    settings
+        .vision_llm
+        .validate()
+        .map_err(ApiError::bad_request)?;
     normalize_sign_in_settings(&mut settings);
     validate_settings(&settings)?;
     state.db.update_settings(&settings).await?;
     let saved = state.db.get_settings().await?;
     crate::logging::update_log_filter(saved.log_level.as_deref())?;
-    Ok(Json(saved))
+    Ok(Json(public_settings(saved)))
+}
+
+fn public_settings(mut settings: GlobalConfig) -> GlobalConfig {
+    settings.vision_llm.api_key_configured = settings.vision_llm.api_key.is_some();
+    settings.vision_llm.api_key = None;
+    settings
 }
 
 async fn index() -> impl IntoResponse {
@@ -3515,6 +3532,11 @@ async fn validate_sign_in_task(
     }
     let settings = state.db.get_settings().await?;
     validate_sign_in_browser_config(browser, &settings)?;
+    if body.sign_in_method.as_deref() == Some("u2") && !settings.vision_llm.ready() {
+        return Err(ApiError::bad_request(
+            "请先在配置签到工具中填写视觉 LLM 模型和 API Key",
+        ));
+    }
     Ok(())
 }
 
@@ -4855,15 +4877,22 @@ async fn list_brush_task_torrents(
 async fn stream_logs(
     State(state): State<AppState>,
 ) -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>> {
-    let receiver = crate::logging::subscribe_logs();
+    let (history, receiver) = crate::logging::subscribe_logs();
     let stream = stream::unfold(
-        (receiver, state.shutdown),
-        |(mut receiver, shutdown)| async move {
+        (history, receiver, state.shutdown),
+        |(mut history, mut receiver, shutdown)| async move {
             loop {
-                let received = tokio::select! {
-                    biased;
-                    _ = shutdown.cancelled() => return None,
-                    result = receiver.recv() => result,
+                if shutdown.is_cancelled() {
+                    return None;
+                }
+                let received = if let Some(line) = history.pop_front() {
+                    Ok(line)
+                } else {
+                    tokio::select! {
+                        biased;
+                        _ = shutdown.cancelled() => return None,
+                        result = receiver.recv() => result,
+                    }
                 };
                 match received {
                     Ok(line) => {
@@ -4872,7 +4901,7 @@ async fn stream_logs(
                         })
                         .to_string();
                         let event = Event::default().event("log").data(payload);
-                        return Some((Ok(event), (receiver, shutdown)));
+                        return Some((Ok(event), (history, receiver, shutdown)));
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         continue;
@@ -5929,6 +5958,25 @@ mod media_api_tests {
                 .records
                 .iter()
                 .any(|record| record.id == oldest_review_id)
+        );
+    }
+
+    #[test]
+    fn vision_llm_api_masks_key() {
+        let mut settings = GlobalConfig::default();
+        settings.vision_llm.api_key = Some("vision-secret".into());
+        let public = public_settings(settings);
+        assert!(public.vision_llm.api_key.is_none());
+        assert!(public.vision_llm.api_key_configured);
+        assert!(
+            !serde_json::to_string(&public)
+                .unwrap()
+                .contains("vision-secret")
+        );
+        assert!(
+            !public_settings(GlobalConfig::default())
+                .vision_llm
+                .api_key_configured
         );
     }
 

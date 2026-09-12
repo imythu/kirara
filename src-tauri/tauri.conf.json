@@ -1,10 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kirara",
-  "version": "2.4.5",
+  "version": "2.4.6",
   "identifier": "io.github.imythu.kirara",
   "build": {
-    "beforeDevCommand": "npm --prefix frontend run dev -- --host 127.0.0.1 --strictPort",
+    "beforeDevCommand": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort",
     "devUrl": "http://127.0.0.1:5173",
     "beforeBuildCommand": "npm --prefix frontend run build",
     "frontendDist": "../frontend/dist"

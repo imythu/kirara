@@ -111,6 +111,7 @@ function displayStatus(status: string | null | undefined) {
 }
 
 function signInMethodLabel(method: string | null | undefined) {
+  if (method === "u2") return "U2 视觉识别签到";
   if (method === "cloudflare") return "CF 签到";
   if (method === "ocr_captcha") return "图片验证码签到";
   return "打开页面签到";
@@ -166,7 +167,7 @@ export function SignInPage() {
   const [siteFilter, setSiteFilter] = useState(0);
   const [searchPollUntil, setSearchPollUntil] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsBrowser, setSettingsBrowser] = useState<SignInBrowser>("lightpanda");
+  const [settingsBrowser, setSettingsBrowser] = useState<SignInBrowser | "vision_llm">("lightpanda");
   const [configFeedback, setConfigFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [savingBrowser, setSavingBrowser] = useState(false);
   const [probingBrowser, setProbingBrowser] = useState(false);
@@ -410,7 +411,7 @@ export function SignInPage() {
         browserless: { ...saved.browserless },
       });
       if (!probe) {
-        setConfigFeedback({ tone: "success", text: `${browserLabel(settingsBrowser)} 公共配置已保存` });
+        setConfigFeedback({ tone: "success", text: "签到工具配置已保存" });
         return;
       }
 
@@ -426,12 +427,17 @@ export function SignInPage() {
     } catch (error) {
       setConfigFeedback({
         tone: "error",
-        text: (error as Error).message || `${browserLabel(settingsBrowser)} 配置保存失败`,
+        text: (error as Error).message || "签到工具配置保存失败",
       });
     } finally {
       setSavingBrowser(false);
       setProbingBrowser(false);
     }
+  }
+
+  function setVisionField<K extends keyof GlobalConfig["vision_llm"]>(key: K, value: GlobalConfig["vision_llm"][K]) {
+    setSettingsDraft(current => current ? { ...current, vision_llm: { ...current.vision_llm, [key]: value } } : current);
+    setConfigFeedback(null);
   }
 
   async function handleSubmit() {
@@ -524,6 +530,7 @@ export function SignInPage() {
     const reason = tasks.some(task => task.site_id === site.id) ? "已有任务"
       : !site.auth_configured ? "缺少登录凭据"
       : !profile ? "需手动配置"
+      : profile.sign_in_method === "u2" && (!settings?.vision_llm.model || !settings?.vision_llm.api_key_configured) ? "请先配置视觉 LLM"
       : !isBrowserConfigured(settings, profile.browser) ? `请先配置 ${browserLabel(profile.browser)}` : "";
     return { site, reason, request: profile ? {
       name: site.name, site_id: site.id, cron_expression: intervalToCron(8),
@@ -563,7 +570,7 @@ export function SignInPage() {
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" disabled={!settings || loading} onClick={openSettings}>
                 <Settings2 className="mr-2 h-4 w-4" />
-                浏览器配置
+                配置签到工具
               </Button>
               <Button variant="outline" onClick={loadData}>
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -737,7 +744,7 @@ export function SignInPage() {
                         <div className="truncate"><span className="font-medium text-foreground">间隔: </span>每 {cronToInterval(task.cron_expression)} 小时</div>
                         <div className="truncate"><span className="font-medium text-foreground">方式: </span>{task.browser === "browserless" && task.sign_in_method !== "ocr_captcha" ? `CF ${browserlessCfModeLabel(task.browserless.cf_mode)}` : signInMethodLabel(task.sign_in_method)}</div>
                         <div className="truncate"><span className="font-medium text-foreground">最近时间: </span>{formatDate(task.last_run_at)}</div>
-                        <div className="truncate sm:col-span-2 xl:col-span-5"><span className="font-medium text-foreground">最近消息: </span>{task.last_message || "-"}</div>
+                        <div className="break-words whitespace-pre-wrap sm:col-span-2 xl:col-span-5"><span className="font-medium text-foreground">最近消息: </span>{task.last_message || "-"}</div>
                       </div>
                     </div>
                   ))}
@@ -799,27 +806,29 @@ export function SignInPage() {
       <Dialog
         open={settingsOpen}
         onClose={closeSettings}
-        title="签到浏览器配置"
-        description="所有自动签到任务共用以下浏览器连接配置。"
+        title="配置签到工具"
+        description="配置自动签到共用的浏览器连接和视觉 LLM。"
         escMode="double"
         panelClassName="max-w-3xl"
       >
         <div className="space-y-5 p-4 sm:p-6">
-          <div className="space-y-2 text-sm leading-relaxed">
+          {settingsBrowser !== "vision_llm" ? <div className="space-y-2 text-sm leading-relaxed">
             <p className="font-medium">为什么需要云浏览器？</p>
             <p className="text-muted-foreground">部分站点需要在浏览器中加载页面、运行脚本或完成验证后才能签到。云浏览器为 Kirara 提供所需的浏览器环境，代为处理这些步骤，无需在运行 Kirara 的设备上额外安装和维护浏览器。</p>
             <p className="text-muted-foreground">选择站点后，Kirara 会自动匹配对应的服务。你只需配置该站点需要的 Lightpanda 或 Browserless，连接信息可供所有签到任务共用。</p>
-          </div>
+          </div> : null}
           {settingsDraft ? (
             <>
               <div
-                className="grid h-11 w-full grid-cols-2 rounded-2xl border border-border bg-surface-container p-1 sm:w-[360px]"
+                className="grid h-11 w-full grid-cols-3 rounded-2xl border border-border bg-surface-container p-1"
                 role="tablist"
-                aria-label="签到浏览器配置"
+                aria-label="配置签到工具"
               >
-                {(["lightpanda", "browserless"] as const).map((browser) => {
+                {(["lightpanda", "browserless", "vision_llm"] as const).map((browser) => {
                   const selected = settingsBrowser === browser;
-                  const configured = isBrowserConfigured(settingsDraft, browser);
+                  const configured = browser === "vision_llm"
+                    ? Boolean(settingsDraft.vision_llm.model.trim() && settingsDraft.vision_llm.api_key_configured)
+                    : isBrowserConfigured(settingsDraft, browser);
                   return (
                     <button
                       key={browser}
@@ -827,6 +836,20 @@ export function SignInPage() {
                       type="button"
                       role="tab"
                       aria-selected={selected}
+                      tabIndex={selected ? 0 : -1}
+                      disabled={savingBrowser}
+                      onKeyDown={(event) => {
+                        const tabs = ["lightpanda", "browserless", "vision_llm"] as const;
+                        const index = tabs.indexOf(browser);
+                        const next = event.key === "ArrowRight" ? (index + 1) % tabs.length
+                          : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length
+                          : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
+                        if (next === null) return;
+                        event.preventDefault();
+                        setSettingsBrowser(tabs[next]);
+                        setConfigFeedback(null);
+                        document.getElementById(`sign-in-browser-settings-tab-${tabs[next]}`)?.focus();
+                      }}
                       aria-controls={`sign-in-browser-settings-panel-${browser}`}
                       onClick={() => {
                         setSettingsBrowser(browser);
@@ -837,8 +860,8 @@ export function SignInPage() {
                         selected ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground",
                       )}
                     >
-                      {browser === "lightpanda" ? <Zap className="h-4 w-4 shrink-0" /> : <Cloud className="h-4 w-4 shrink-0" />}
-                      <span className="truncate">{browserLabel(browser)}</span>
+                      {browser === "lightpanda" ? <Zap className="h-4 w-4 shrink-0" /> : browser === "browserless" ? <Cloud className="h-4 w-4 shrink-0" /> : <Sparkles className="h-4 w-4 shrink-0" />}
+                      <span className="truncate">{browser === "vision_llm" ? "视觉 LLM" : browserLabel(browser)}</span>
                       <span className={cn("hidden text-[10px] sm:inline", configured ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
                         {configured ? "已配置" : "未配置"}
                       </span>
@@ -933,7 +956,7 @@ export function SignInPage() {
                     使用 Lightpanda 代理
                   </label>
                 </div>
-              ) : (
+              ) : settingsBrowser === "browserless" ? (
                 <div
                   id="sign-in-browser-settings-panel-browserless"
                   role="tabpanel"
@@ -966,6 +989,15 @@ export function SignInPage() {
                     />
                   </div>
                 </div>
+              ) : (
+              <fieldset id="sign-in-browser-settings-panel-vision_llm" role="tabpanel" aria-labelledby="sign-in-browser-settings-tab-vision_llm" disabled={savingBrowser} className="grid gap-4 sm:grid-cols-2">
+                <p className="text-sm leading-relaxed text-muted sm:col-span-2">用于 U2 签到图片识别。请选择支持图片输入和结构化输出的模型；无法确定作品时不会提交答案。</p>
+                <div className="space-y-2 sm:col-span-2"><Label htmlFor="vision-base-url">baseUrl</Label><Input id="vision-base-url" type="url" value={settingsDraft.vision_llm.base_url} onChange={e => setVisionField("base_url", e.target.value)} placeholder="https://openrouter.ai/api/v1" /></div>
+                <div className="space-y-2"><Label htmlFor="vision-model">模型</Label><Input id="vision-model" value={settingsDraft.vision_llm.model} onChange={e => setVisionField("model", e.target.value)} placeholder="填写服务商提供的视觉模型 ID" /></div>
+                <div className="space-y-2"><Label htmlFor="vision-standard">接口标准</Label><Select id="vision-standard" value={settingsDraft.vision_llm.api_standard} onChange={value => setVisionField("api_standard", value as GlobalConfig["vision_llm"]["api_standard"])} options={[{ value: "claude", label: "Claude" }, { value: "openai_compatible", label: "OpenAI 兼容" }, { value: "openai_responses", label: "OpenAI Responses" }]} /></div>
+                <div className="space-y-2 sm:col-span-2"><Label htmlFor="vision-api-key">API Key</Label><Input id="vision-api-key" type="password" autoComplete="off" disabled={settingsDraft.vision_llm.clear_api_key} value={settingsDraft.vision_llm.api_key ?? ""} onChange={e => setVisionField("api_key", e.target.value || null)} placeholder={settingsDraft.vision_llm.api_key_configured ? "已配置，留空保留原值" : "填写视觉模型服务的 API Key"} /></div>
+                {settingsDraft.vision_llm.api_key_configured ? <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="size-4 accent-primary" checked={settingsDraft.vision_llm.clear_api_key} onChange={e => setVisionField("clear_api_key", e.target.checked)} />清除已保存的视觉 LLM API Key</label> : null}
+              </fieldset>
               )}
             </>
           ) : (
@@ -994,10 +1026,10 @@ export function SignInPage() {
               {savingBrowser && !probingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               保存配置
             </Button>
-            <Button variant="outline" disabled={!settingsDraft || savingBrowser} onClick={() => void persistBrowserSettings(true)}>
+            {settingsBrowser !== "vision_llm" ? <Button variant="outline" disabled={!settingsDraft || savingBrowser} onClick={() => void persistBrowserSettings(true)}>
               {probingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4" />}
               {probingBrowser ? "测试中..." : "保存并测试"}
-            </Button>
+            </Button> : null}
             <Button variant="outline" disabled={savingBrowser} onClick={closeSettings}>
               <X className="mr-2 h-4 w-4" />
               关闭

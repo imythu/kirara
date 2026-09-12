@@ -36,7 +36,7 @@ function responder(state) {
     const fail = (error, status = 422) => ok({ error }, status);
     if (method !== 'GET') state.writes.push({ path: route, method, body: clone(body) }); else state.reads.push(requestPath);
     if (route === '/api/features') return ok({ self_use: false });
-    if (route === '/api/settings') return ok({ log_level: 'info', proxy: null, use_proxy_for_lightpanda: false, lightpanda: {}, browserless: {}, ocr_api_key: null });
+    if (route === '/api/settings') return ok({ log_level: 'info', proxy: null, use_proxy_for_lightpanda: false, lightpanda: {}, browserless: {}, vision_llm: { base_url: "https://openrouter.ai/api/v1", model: "", api_key: null, api_standard: "openai_responses", api_key_configured: false, clear_api_key: false } });
     if (route === '/api/sites') return ok([{ id: 1, name: '测试站点', site_type: 'nexusphp', base_url: 'https://tracker.example', auth_configured: true, use_proxy: false }]);
     if (route === '/api/downloaders') return ok(state.noDownloaders ? [] : [{ id: 1, name: '家中 qBittorrent', downloader_type: 'qbittorrent', url: 'http://qb.local', username: 'test', password_configured: true }]);
     if (route === '/api/rss/summary') return ok({ feeds_total: state.feeds.length, running: state.feeds.filter(f => f.enabled).length, paused: state.feeds.filter(f => !f.enabled).length, needs_attention: 2, rules_enabled: state.rules.filter(r => r.enabled).length, queued: 0, submitted: 1, failed: 1 });

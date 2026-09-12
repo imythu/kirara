@@ -1047,7 +1047,7 @@ components:
 
     GlobalConfig:
       type: object
-      required: [log_level, proxy, use_proxy_for_lightpanda, lightpanda, browserless, tag_rule_scan_interval_mins, ocr_api_key]
+      required: [log_level, proxy, use_proxy_for_lightpanda, lightpanda, browserless, tag_rule_scan_interval_mins, vision_llm]
       properties:
         log_level: {type: string, nullable: true, enum: [trace, debug, info, warn, error, null]}
         proxy: {type: string, nullable: true}
@@ -1055,7 +1055,15 @@ components:
         lightpanda: {$ref: '#/components/schemas/LightpandaConfig'}
         browserless: {$ref: '#/components/schemas/BrowserlessConfig'}
         tag_rule_scan_interval_mins: {type: integer, format: int64}
-        ocr_api_key: {type: string, nullable: true, format: password}
+        vision_llm:
+          type: object
+          properties:
+            base_url: {type: string, default: 'https://openrouter.ai/api/v1'}
+            model: {type: string}
+            api_key: {type: string, nullable: true, format: password, description: '响应始终为 null；更新时留空保留原值'}
+            api_standard: {type: string, enum: [claude, openai_compatible, openai_responses], default: openai_responses}
+            api_key_configured: {type: boolean, readOnly: true}
+            clear_api_key: {type: boolean, default: false}
 
     LightpandaConfig:
       type: object
@@ -1117,7 +1125,7 @@ components:
         site_id: {type: integer, format: int64}
         cron_expression: {type: string}
         browser: {type: string, enum: [lightpanda, browserless], default: lightpanda}
-        sign_in_method: {type: string, enum: [open_page, cloudflare, ocr_captcha], default: open_page}
+        sign_in_method: {type: string, enum: [open_page, cloudflare, ocr_captcha, u2], default: open_page}
         browserless: {$ref: '#/components/schemas/BrowserlessTaskConfig'}
 
     SignInTask:

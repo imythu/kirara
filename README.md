@@ -311,6 +311,19 @@ Linux 命令行服务默认路径：
 
 ## 开发
 
+Linux 下可在项目根目录统一管理开发服务（需要 Rust、Node.js、npm 和 Python 3）：
+
+```bash
+./dev.sh start
+./dev.sh stop
+./dev.sh restart
+./dev.sh status
+```
+
+脚本启动前构建后端，首次使用自动安装前端依赖，后台启动 Web `0.0.0.0:1234` 和后端 `127.0.0.1:3000`，验证任意 Host、跨域 Origin 和 `/api` 代理。端口冲突会报错；停止时只终止脚本管理的进程。日志保存在 `.dev/frontend.log` 和 `.dev/backend.log`。
+
+默认数据目录为 `data/`，也可使用 `KIRARA_DATA_DIR=/path/to/data ./dev.sh start` 指定；之后重启沿用该目录，停止服务不会删除数据。
+
 Web 服务后端：
 
 ```bash
@@ -325,7 +338,7 @@ npm ci
 npm run dev
 ```
 
-前端开发服务器默认监听 `0.0.0.0:31234`，允许任意 Host 和跨域来源访问。本机访问 `http://localhost:31234`，其他设备使用运行机器的地址；`/api` 请求代理到 `http://127.0.0.1:3000`。
+前端开发服务器默认监听 `0.0.0.0:1234`，允许任意 Host 和跨域来源访问。本机访问 `http://localhost:1234`，其他设备使用运行机器的地址；`/api` 请求代理到 `http://127.0.0.1:3000`。
 
 本地构建命令行服务：
 

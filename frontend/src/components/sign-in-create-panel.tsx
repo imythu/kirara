@@ -99,7 +99,7 @@ export function SignInCreatePanel({ mode, options, tasks, onClose, onCreated, on
           {mode === "single" ? <div className="space-y-2"><Label htmlFor="sign-in-create-name">任务名称</Label><Input id="sign-in-create-name" value={name} onChange={e => setName(e.target.value)} placeholder="选择站点后自动填写" /></div> : null}
           <div className="space-y-2"><Label htmlFor="sign-in-create-interval">执行间隔</Label><Select id="sign-in-create-interval" disabled={busy} value={hours} onChange={setHours} options={[6, 8, 12, 16, 20, 24].map(value => ({ value: String(value), label: `每 ${value} 小时${value === 8 ? "（默认）" : ""}` }))} /><p className="text-xs leading-relaxed text-muted">按设定间隔尝试签到，执行结果可在日志中查看。</p></div>
           <div className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-jade" /><div><p className="text-sm font-medium">签到方式，自动匹配</p><p className="mt-1 text-sm leading-relaxed text-muted">沿用各站点已适配的配置，无需逐个填写参数。</p></div></div>
-          <details className="text-xs leading-relaxed text-muted"><summary className="cursor-pointer py-2">有些站点为什么不能选择？</summary><p>已有任务的站点无需重复创建；缺少登录凭据请前往站点管理更新。浏览器未配置时，请使用页面上方的“浏览器配置”。尚未适配的站点可单独配置。</p></details>
+          <details className="text-xs leading-relaxed text-muted"><summary className="cursor-pointer py-2">有些站点为什么不能选择？</summary><p>已有任务的站点无需重复创建；缺少登录凭据请前往站点管理更新。浏览器未配置时，请使用页面上方的“配置签到工具”。尚未适配的站点可单独配置。</p></details>
           <div className="space-y-2 border-t border-border pt-5"><h3 className="text-sm font-semibold">创建后会怎样？</h3><p className="text-sm" aria-live="polite">{chosen.length ? `创建 ${chosen.length} 个任务，每 ${hours} 小时尝试签到一次。` : "选择站点后，这里会显示创建内容。"}</p><p className="text-sm leading-relaxed text-muted">任务将自动启用。你可以随时暂停，也可以手动执行一次。</p></div>
         </div>
       </div>

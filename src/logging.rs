@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::io::{self, Write};
+use std::sync::Mutex;
 use std::sync::OnceLock;
 
 use tokio::sync::broadcast;
@@ -117,8 +119,37 @@ pub fn update_log_filter(log_level: Option<&str>) -> Result<(), AppError> {
     })
 }
 
-pub fn subscribe_logs() -> broadcast::Receiver<String> {
-    log_sender().subscribe()
+#[derive(Default)]
+struct RecentLogs {
+    lines: VecDeque<String>,
+    bytes: usize,
+}
+impl RecentLogs {
+    fn push(&mut self, line: String) {
+        // Bound both count and memory. Only already-redacted lines enter history.
+        if line.len() > 1024 * 1024 {
+            return;
+        }
+        self.bytes += line.len();
+        self.lines.push_back(line);
+        while self.lines.len() > 500 || self.bytes > 1024 * 1024 {
+            self.bytes -= self.lines.pop_front().unwrap().len();
+        }
+    }
+}
+fn recent_logs() -> &'static Mutex<RecentLogs> {
+    static RECENT: OnceLock<Mutex<RecentLogs>> = OnceLock::new();
+    RECENT.get_or_init(|| Mutex::new(RecentLogs::default()))
+}
+
+pub fn subscribe_logs() -> (VecDeque<String>, broadcast::Receiver<String>) {
+    // Subscribe and snapshot under the same lock used by publishers: no gaps
+    // or duplicate events at the history/live boundary.
+    let recent = recent_logs()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let receiver = log_sender().subscribe();
+    (recent.lines.clone(), receiver)
 }
 
 pub fn current_task_context() -> String {
@@ -169,6 +200,10 @@ impl BroadcastWriter {
 
         let redacted = redact_sensitive_values(&strip_ansi_sequences(&text));
         let _ = writeln!(io::stdout(), "{redacted}");
+        let mut recent = recent_logs()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        recent.push(redacted.clone());
         let _ = self.sender.send(redacted);
     }
 }
@@ -247,6 +282,44 @@ fn redact_query_value(input: &str, key: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn log_subscription_replays_redacted_history_then_live_lines() {
+        let writer = BroadcastWriter {
+            sender: log_sender().clone(),
+            pending: Vec::new(),
+        };
+        writer.emit_line(b"history-boundary-test token=private-token");
+        let (history, mut receiver) = subscribe_logs();
+        let line = history
+            .iter()
+            .find(|line| line.contains("history-boundary-test"))
+            .unwrap();
+        assert!(!line.contains("private-token"));
+        assert!(line.contains("[REDACTED]"));
+        assert!(receiver.try_recv().is_err());
+        writer.emit_line(b"live-boundary-test");
+        assert_eq!(receiver.try_recv().unwrap(), "live-boundary-test");
+    }
+
+    #[test]
+    fn recent_logs_are_bounded_and_keep_latest_lines() {
+        let mut recent = RecentLogs::default();
+        for i in 0..600 {
+            recent.push(format!("line {i}"));
+        }
+        assert_eq!(recent.lines.len(), 500);
+        assert_eq!(recent.lines.front().unwrap(), "line 100");
+        assert_eq!(recent.lines.back().unwrap(), "line 599");
+        for _ in 0..20 {
+            recent.push("x".repeat(100_000));
+        }
+        assert!(recent.bytes <= 1024 * 1024);
+        assert_eq!(
+            recent.bytes,
+            recent.lines.iter().map(String::len).sum::<usize>()
+        );
+    }
 
     #[test]
     fn dependency_debug_noise_is_capped_for_simple_and_custom_filters() {

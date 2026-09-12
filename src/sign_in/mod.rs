@@ -1,3 +1,4 @@
+mod cdp_proxy;
 pub mod scheduler;
 pub mod signers;
 
@@ -171,8 +172,9 @@ pub async fn probe_browser_1_1_1_1(
         SIGN_IN_BROWSER_LIGHTPANDA => {
             let endpoint =
                 build_lightpanda_endpoint(&settings.lightpanda, settings.use_proxy_for_lightpanda)?;
+            let proxy = settings.proxy.clone();
             tokio::task::spawn_blocking(move || {
-                run_cdp_probe(endpoint, "https://1.1.1.1", "Lightpanda")
+                run_cdp_probe(endpoint, "https://1.1.1.1", "Lightpanda", proxy.as_deref())
             })
             .await
             .map_err(|e| format!("Lightpanda 探测任务 join 失败: {}", e))?
@@ -239,8 +241,9 @@ fn run_cdp_probe(
     endpoint: String,
     url: &str,
     browser_name: &str,
+    proxy: Option<&str>,
 ) -> Result<BrowserProbeResult, String> {
-    let mut client = CdpClient::connect(endpoint)?;
+    let mut client = CdpClient::connect_with_proxy(endpoint, proxy)?;
     let session_id = create_target_session(&mut client)?;
 
     let _ = client.call("Page.enable", json!({}), Some(&session_id));
@@ -1192,12 +1195,21 @@ fn cdp_block_on<T>(
 }
 
 impl CdpClient {
-    fn connect(endpoint: String) -> Result<Self, String> {
-        Self::connect_with_shutdown(endpoint, crate::runtime_shutdown_token())
+    fn connect_with_proxy(endpoint: String, proxy: Option<&str>) -> Result<Self, String> {
+        Self::connect_with_proxy_and_shutdown(endpoint, proxy, crate::runtime_shutdown_token())
     }
 
+    #[cfg(test)]
     fn connect_with_shutdown(
+        endpoint: String,
+        shutdown: CancellationToken,
+    ) -> Result<Self, String> {
+        Self::connect_with_proxy_and_shutdown(endpoint, None, shutdown)
+    }
+
+    fn connect_with_proxy_and_shutdown(
         mut endpoint: String,
+        proxy: Option<&str>,
         shutdown: CancellationToken,
     ) -> Result<Self, String> {
         // Retain tungstenite::connect's limit of three redirects.
@@ -1221,15 +1233,12 @@ impl CdpClient {
                 .trim_start_matches('[')
                 .trim_end_matches(']');
             let stream = cdp_block_on(&shutdown, async {
-                tokio::time::timeout(
-                    CDP_CONNECT_TIMEOUT,
-                    tokio::net::TcpStream::connect((host, port)),
-                )
-                .await
-                .map_err(|_| "连接浏览器 CDP 超时".to_string())?
-                .map_err(|error| format!("连接浏览器 CDP 失败: {error}"))?
-                .into_std()
-                .map_err(|error| error.to_string())
+                tokio::time::timeout(CDP_CONNECT_TIMEOUT, cdp_proxy::connect(host, port, proxy))
+                    .await
+                    .map_err(|_| "连接浏览器 CDP 超时".to_string())?
+                    .map_err(|error| format!("连接浏览器 CDP 失败: {error}"))?
+                    .into_std()
+                    .map_err(|error| error.to_string())
             })?;
             stream
                 .set_nonblocking(true)
@@ -1345,10 +1354,10 @@ async fn run_cdp_sign_in(
     base_url: String,
     cookie: String,
     sign_in_method: String,
-    ocr_api_key: Option<String>,
+    proxy: Option<String>,
 ) -> Result<SignInOutput, String> {
     tokio::task::spawn_blocking(move || {
-        run_cdp_sign_in_blocking(endpoint, base_url, cookie, sign_in_method, ocr_api_key)
+        run_cdp_sign_in_blocking(endpoint, base_url, cookie, sign_in_method, proxy)
     })
     .await
     .map_err(|e| format!("签到任务 join 失败: {}", e))?
@@ -1359,9 +1368,9 @@ fn run_cdp_sign_in_blocking(
     base_url: String,
     cookie: String,
     sign_in_method: String,
-    ocr_api_key: Option<String>,
+    proxy: Option<String>,
 ) -> Result<SignInOutput, String> {
-    let mut client = CdpClient::connect(endpoint)?;
+    let mut client = CdpClient::connect_with_proxy(endpoint, proxy.as_deref())?;
     let session_id = create_target_session(&mut client)?;
 
     client.call("Page.enable", json!({}), Some(&session_id))?;
@@ -1384,9 +1393,6 @@ fn run_cdp_sign_in_blocking(
     match sign_in_method.as_str() {
         SIGN_IN_METHOD_OPEN_PAGE => run_open_page_sign_in(&mut client, &session_id),
         SIGN_IN_METHOD_CLOUDFLARE => run_cloudflare_sign_in(&mut client, &session_id, &base_url),
-        SIGN_IN_METHOD_OCR_CAPTCHA => {
-            run_ocr_captcha_sign_in(&mut client, &session_id, &base_url, ocr_api_key.as_deref())
-        }
         other => Err(format!("未知签到方式: {}", other)),
     }
 }
@@ -1428,58 +1434,6 @@ fn run_cloudflare_sign_in(
                 let text = page_text_via_cdp(client, session_id)?;
                 if let Some(result) = classify_sign_in_text(&text) {
                     return Ok(result);
-                }
-            }
-        }
-    }
-
-    let text = page_text_via_cdp(client, session_id)?;
-    if let Some(result) = classify_sign_in_text(&text) {
-        return Ok(result);
-    }
-
-    Ok(SignInOutput {
-        status: if clicked { "success" } else { "failed" }.to_string(),
-        message: if clicked {
-            compact_text(&text).unwrap_or_else(|| "已尝试点击签到按钮".to_string())
-        } else {
-            "未找到 NexusPHP 签到入口".to_string()
-        },
-    })
-}
-
-fn run_ocr_captcha_sign_in(
-    client: &mut CdpClient,
-    session_id: &str,
-    base_url: &str,
-    ocr_api_key: Option<&str>,
-) -> Result<SignInOutput, String> {
-    let text = page_text_via_cdp(client, session_id)?;
-    if let Some(result) = classify_sign_in_text(&text) {
-        return Ok(result);
-    }
-
-    let clicked = evaluate_bool_via_cdp(client, session_id, CLICK_SIGN_IN_SCRIPT)?;
-    if clicked {
-        client.wait(Duration::from_millis(2500))?;
-        if handle_captcha_if_present(client, session_id, ocr_api_key)? {
-            client.wait(Duration::from_millis(2500))?;
-        }
-    } else {
-        for url in [
-            format!("{}/attendance.php?action=sign", base_url),
-            format!("{}/attendance.php?do=sign", base_url),
-            format!("{}/attendance.php?sign=1", base_url),
-        ] {
-            if navigate_via_cdp(client, session_id, &url, "尝试备用签到地址失败").is_ok()
-                && wait_for_cloudflare(client, session_id).is_ok()
-            {
-                let text = page_text_via_cdp(client, session_id)?;
-                if let Some(result) = classify_sign_in_text(&text) {
-                    return Ok(result);
-                }
-                if handle_captcha_if_present(client, session_id, ocr_api_key)? {
-                    client.wait(Duration::from_millis(2500))?;
                 }
             }
         }
@@ -1628,83 +1582,6 @@ fn try_click_turnstile(client: &mut CdpClient, session_id: &str) {
     );
 }
 
-fn handle_captcha_if_present(
-    client: &mut CdpClient,
-    session_id: &str,
-    ocr_api_key: Option<&str>,
-) -> Result<bool, String> {
-    let data_url = evaluate_string_await_via_cdp(
-        client,
-        session_id,
-        EXTRACT_CAPTCHA_IMAGE_SCRIPT,
-        Duration::from_secs(5),
-    )?;
-    if data_url.trim().is_empty() {
-        return Ok(false);
-    }
-
-    let api_key = match ocr_api_key.map(str::trim).filter(|v| !v.is_empty()) {
-        Some(key) => key.to_string(),
-        None => return Err("页面要求图片验证码，但未配置 OCR API key".to_string()),
-    };
-
-    let code = ocr_space_recognize(&api_key, &data_url)?;
-    let code = code.trim().to_string();
-    if code.is_empty() {
-        return Err("OCR 识别结果为空".to_string());
-    }
-
-    let filled = evaluate_bool_via_cdp(client, session_id, &fill_captcha_script(&code))?;
-    if !filled {
-        return Err("验证码识别成功但未找到输入框".to_string());
-    }
-    Ok(true)
-}
-
-fn ocr_space_recognize(api_key: &str, data_url: &str) -> Result<String, String> {
-    cdp_block_on(&crate::runtime_shutdown_token(), async {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .build()
-            .map_err(|e| format!("构建 OCR HTTP 客户端失败: {}", e))?;
-        let form = reqwest::multipart::Form::new()
-            .text("apikey", api_key.to_string())
-            .text("language", "auto".to_string())
-            .text("scale", "true".to_string())
-            .text("base64Image", data_url.to_string());
-        let resp = client
-            .post("https://api.ocr.space/parse/image")
-            .multipart(form)
-            .send()
-            .await
-            .map_err(|e| format!("OCR 请求失败: {}", e))?;
-        let value: Value = resp
-            .json()
-            .await
-            .map_err(|e| format!("解析 OCR 响应失败: {}", e))?;
-        if value
-            .get("IsErroredOnProcessing")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            let msg = value
-                .get("ErrorMessage")
-                .and_then(Value::as_str)
-                .unwrap_or("未知错误");
-            return Err(format!("OCR 处理出错: {}", msg));
-        }
-        let text = value
-            .get("ParsedResults")
-            .and_then(|v| v.get(0))
-            .and_then(|v| v.get("ParsedText"))
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        Ok(text)
-    })
-    .map_err(|e| format!("OCR 任务失败: {}", e))
-}
-
 fn evaluate_string_await_via_cdp(
     client: &mut CdpClient,
     session_id: &str,
@@ -1727,80 +1604,6 @@ fn evaluate_string_await_via_cdp(
         .unwrap_or_default()
         .to_string())
 }
-
-fn fill_captcha_script(code: &str) -> String {
-    let escaped = code
-        .replace('\\', "\\\\")
-        .replace('\'', "\\'")
-        .replace('\n', "\\n");
-    format!(
-        r#"
-(() => {{
-  const code = '{}';
-  const visible = (el) => {{
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && el.offsetParent !== null;
-  }};
-  const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'))
-    .filter(visible)
-    .filter((el) => !/search|搜索|username|user|password|email/i.test(el.name + ' ' + (el.placeholder || '') + ' ' + (el.id || '')));
-  if (inputs.length === 0) return false;
-  const input = inputs[0];
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-  if (setter) setter.call(input, code); else input.value = code;
-  input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-  input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-  const form = input.form;
-  const submitBtn = form
-    ? form.querySelector('input[type="submit"], button[type="submit"], button')
-    : null;
-  if (submitBtn) {{
-    submitBtn.click();
-  }} else if (form) {{
-    form.submit();
-  }} else {{
-    const btns = Array.from(document.querySelectorAll('button, input[type="button"], a'))
-      .filter(visible)
-      .filter((el) => /签到|簽到|打卡|确认|確認|submit|ok|verify/i.test([el.innerText, el.value, el.title].filter(Boolean).join(' ')));
-    if (btns.length > 0) btns[0].click(); else return false;
-  }}
-  return true;
-}})()
-"#,
-        escaped
-    )
-}
-
-const EXTRACT_CAPTCHA_IMAGE_SCRIPT: &str = r#"
-(async () => {
-  const visible = (el) => {
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && el.offsetParent !== null;
-  };
-  const selectors = [
-    'img[src*="code" i]', 'img[src*="captcha" i]', 'img[src*="verify" i]',
-    'img[src*="image_code" i]', 'img[id*="code" i]', 'img[alt*="captcha" i]',
-    'img[alt*="code" i]', 'img[alt*="verify" i]'
-  ];
-  const imgs = Array.from(document.querySelectorAll(selectors.join(','))).filter(visible);
-  if (imgs.length === 0) return '';
-  const img = imgs[0];
-  if (!img.src) return '';
-  try {
-    const resp = await fetch(img.src, { credentials: 'include' });
-    const blob = await resp.blob();
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    return dataUrl || '';
-  } catch (e) {
-    return '';
-  }
-})()
-"#;
 
 fn evaluate_string_via_cdp(
     client: &mut CdpClient,
@@ -2000,6 +1803,7 @@ pub const SIGN_IN_METHOD_CLOUDFLARE: &str = "cloudflare";
 pub const SIGN_IN_METHOD_OCR_CAPTCHA: &str = "ocr_captcha";
 
 pub const SIGN_IN_METHODS: &[&str] = &[
+    "u2",
     SIGN_IN_METHOD_OPEN_PAGE,
     SIGN_IN_METHOD_CLOUDFLARE,
     SIGN_IN_METHOD_OCR_CAPTCHA,

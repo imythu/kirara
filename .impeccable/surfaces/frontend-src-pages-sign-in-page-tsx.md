@@ -27,9 +27,15 @@ FINISH: Parent-reported reviewer disposition: ship, with no material findings. T
 - Completion reports actual successful and failed request counts, refreshes tasks, and keeps the panel open. Successful sites become unavailable; failures retain selection and show site-specific errors, so retry submits only remaining eligible selections. Selection and attempt feedback are panel memory, while created tasks persist on the server.
 - Closing returns focus to the originating action. Labeled native selection controls, an indeterminate select-all state, live counts/status and inline error alerts communicate progress and outcomes.
 - The one-task-per-site requirement also constrains the existing create/edit form. Parent-reported backend integration enforces unique `site_id` on create/update; legacy duplicate configurations are archived and their histories reassigned to the earliest task.
+- The shared settings entry and dialog are named “配置签到工具”, covering browser connection and vision LLM settings. The vision form exposes base URL, model, API standard and API Key; fresh defaults use `https://openrouter.ai/api/v1` with OpenAI Responses, with Claude and OpenAI compatible alternatives available.
+- A blank vision API Key preserves the saved value; an explicit clear checkbox removes it. Saving includes browser and model settings, while “保存并测试” tests only the browser connection.
+- U2 creation requires a configured vision model and API Key in addition to browser and login prerequisites. Recent task messages preserve line breaks and wrap within the task layout.
+- Parent-reported review of this narrow tools/U2 update: ship, no material findings; detector returned no findings. Desktop and mobile evidence: `.impeccable/review/u2-desktop.png` and `.impeccable/review/u2-mobile.png`.
 
 ## Boundaries
 
 Reference implementation: `frontend/src/components/sign-in-create-panel.tsx` and `frontend/src/pages/sign-in-page.tsx`. The approved static demo remains a separate artifact; its local colors and breakpoint are not production design authority. DESIGN.md and the global sidecar remain unchanged.
 
 Do not canonize the inherited interval wording as rolling scheduling semantics: the existing hour-field cron expression resets daily, so the 16/20 choices differ from true rolling intervals. This is a parent-reported nonblocking inherited limitation, not a new scheduling contract.
+
+- Lightpanda、Browserless、视觉 LLM 使用同级标签页，切换保留草稿，支持方向键及 Home/End 切换。视觉 LLM 页只显示模型字段和保存操作，不显示浏览器连接测试按钮。

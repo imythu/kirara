@@ -15,7 +15,7 @@ export type GlobalConfig = {
     token: string | null;
   };
   tag_rule_scan_interval_mins?: number;
-  ocr_api_key: string | null;
+  vision_llm: { base_url: string; model: string; api_key: string | null; api_standard: "claude" | "openai_compatible" | "openai_responses"; api_key_configured: boolean; clear_api_key: boolean };
 };
 
 export type ProxyTestRequest = {

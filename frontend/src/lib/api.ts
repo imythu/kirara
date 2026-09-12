@@ -20,7 +20,7 @@ export const defaultSettings: GlobalConfig = {
     token: null,
   },
   tag_rule_scan_interval_mins: 7,
-  ocr_api_key: null,
+  vision_llm: { base_url: "https://openrouter.ai/api/v1", model: "", api_key: null, api_standard: "openai_responses", api_key_configured: false, clear_api_key: false },
 };
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

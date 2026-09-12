@@ -16,3 +16,6 @@ __pycache__/
 
 # Local PTD backups may contain account credentials
 /PTD_backup_*.zip
+
+# Local development service state and logs
+/.dev/

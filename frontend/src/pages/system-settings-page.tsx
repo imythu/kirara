@@ -215,19 +215,6 @@ export function SystemSettingsPage({
           )}
         </div>
 
-        {/* ---- OCR API key ---- */}
-        <div className="space-y-2 sm:col-span-2 xl:col-span-3">
-          <Label>OCR API key（可选）</Label>
-          <Input
-            value={settings.ocr_api_key ?? ""}
-            onChange={(e) => setSettings((prev) => ({ ...prev, ocr_api_key: e.target.value || null }))}
-            placeholder="ocr.space 免费 API key，用于图片验证码签到"
-          />
-          <p className="text-xs text-muted-foreground">
-            全局公用。在 ocr.space 注册免费获取，每月 25000 次。配置后遇到需要图片验证码的签到站点会自动识别填入。
-          </p>
-        </div>
-
         <div className="sm:col-span-2 xl:col-span-3">
           <Button onClick={() => void onSave()} disabled={saving}>
             {saving ? "保存中..." : "保存系统设置"}

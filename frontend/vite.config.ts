@@ -30,7 +30,7 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     cors: true,
-    port: 31234,
+    port: 1234,
     strictPort: true,
     proxy: {
       "/dav/ptd": {
@@ -45,10 +45,14 @@ export default defineConfig({
   },
   preview: {
     host: "0.0.0.0",
-    port: 31234,
+    port: 1234,
     strictPort: true,
     allowedHosts: true,
     cors: true,
+    proxy: {
+      "/api": { target: "http://127.0.0.1:3000", changeOrigin: true },
+      "/dav/ptd": { target: "http://127.0.0.1:3000", changeOrigin: true },
+    },
   },
   build: {
     outDir: "dist",

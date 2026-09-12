@@ -103,9 +103,9 @@ impl Database {
             let settings = conn
                 .query_row(
                     "SELECT log_level, proxy, use_proxy_for_lightpanda, tag_rule_scan_interval_mins,
-                            ocr_api_key, lightpanda_endpoint, lightpanda_token, lightpanda_region,
+                            lightpanda_endpoint, lightpanda_token, lightpanda_region,
                             lightpanda_browser, lightpanda_proxy, lightpanda_country,
-                            browserless_address, browserless_token
+                            browserless_address, browserless_token, vision_llm
                      FROM global_settings WHERE id = 1",
                     [],
                     |row| {
@@ -114,19 +114,19 @@ impl Database {
                             proxy: row.get(1)?,
                             use_proxy_for_lightpanda: row.get::<_, i32>(2).unwrap_or(1) != 0,
                             lightpanda: crate::config::LightpandaConfig {
-                                endpoint: row.get(5)?,
-                                token: row.get(6)?,
-                                region: row.get(7)?,
-                                browser: row.get(8)?,
-                                proxy: row.get(9)?,
-                                country: row.get(10)?,
+                                endpoint: row.get(4)?,
+                                token: row.get(5)?,
+                                region: row.get(6)?,
+                                browser: row.get(7)?,
+                                proxy: row.get(8)?,
+                                country: row.get(9)?,
                             },
                             browserless: crate::config::BrowserlessConfig {
-                                address: row.get(11)?,
-                                token: row.get(12)?,
+                                address: row.get(10)?,
+                                token: row.get(11)?,
                             },
                             tag_rule_scan_interval_mins: row.get::<_, i64>(3).unwrap_or(7) as u64,
-                            ocr_api_key: row.get(4)?,
+                            vision_llm: serde_json::from_str(&row.get::<_, String>(12)?).map_err(|e| rusqlite::Error::FromSqlConversionFailure(12, rusqlite::types::Type::Text, Box::new(e)))?,
                         })
                     },
                 )
@@ -139,16 +139,30 @@ impl Database {
 
     pub async fn update_settings(&self, settings: &GlobalConfig) -> Result<(), AppError> {
         let path = self.path.clone();
-        let settings = settings.clone();
+        let mut settings = settings.clone();
+        let previous = self.get_settings().await?;
+        settings.vision_llm.api_key = if settings.vision_llm.clear_api_key {
+            None
+        } else {
+            settings
+                .vision_llm
+                .api_key
+                .as_deref()
+                .and_then(non_empty_trimmed)
+                .map(str::to_string)
+                .or(previous.vision_llm.api_key)
+        };
+        settings.vision_llm.clear_api_key = false;
+        settings.vision_llm.api_key_configured = settings.vision_llm.api_key.is_some();
         tokio::task::spawn_blocking(move || -> Result<(), AppError> {
             let conn = open_connection(&path)?;
             conn.execute(
                 "UPDATE global_settings SET
                     log_level = ?, proxy = ?,
-                    use_proxy_for_lightpanda = ?, tag_rule_scan_interval_mins = ?, ocr_api_key = ?,
+                    use_proxy_for_lightpanda = ?, tag_rule_scan_interval_mins = ?,
                     lightpanda_endpoint = ?, lightpanda_token = ?, lightpanda_region = ?,
                     lightpanda_browser = ?, lightpanda_proxy = ?, lightpanda_country = ?,
-                    browserless_address = ?, browserless_token = ?
+                    browserless_address = ?, browserless_token = ?, vision_llm = ?
                  WHERE id = 1",
                 params![
                     settings.log_level,
@@ -158,10 +172,6 @@ impl Database {
                     }),
                     settings.use_proxy_for_lightpanda as i32,
                     settings.tag_rule_scan_interval_mins as i64,
-                    settings.ocr_api_key.as_deref().and_then(|value| {
-                        let value = value.trim();
-                        (!value.is_empty()).then_some(value)
-                    }),
                     settings
                         .lightpanda
                         .endpoint
@@ -194,6 +204,11 @@ impl Database {
                         .token
                         .as_deref()
                         .and_then(non_empty_trimmed),
+                    serde_json::to_string(&settings.vision_llm).map_err(|e| {
+                        AppError::InvalidConfig {
+                            message: e.to_string(),
+                        }
+                    })?,
                 ],
             )
             .map_err(sql_error)?;
@@ -2310,7 +2325,6 @@ impl Database {
                     proxy TEXT,
                     use_proxy_for_lightpanda INTEGER NOT NULL DEFAULT 1,
                     tag_rule_scan_interval_mins INTEGER NOT NULL DEFAULT 7,
-                    ocr_api_key TEXT,
                     lightpanda_endpoint TEXT,
                     lightpanda_token TEXT,
                     lightpanda_region TEXT NOT NULL DEFAULT 'euwest',
@@ -2667,12 +2681,10 @@ impl Database {
                 "tag_rule_scan_interval_mins",
                 "ALTER TABLE global_settings ADD COLUMN tag_rule_scan_interval_mins INTEGER NOT NULL DEFAULT 7",
             )?;
-            ensure_column(
-                &conn,
-                "global_settings",
-                "ocr_api_key",
-                "ALTER TABLE global_settings ADD COLUMN ocr_api_key TEXT",
-            )?;
+            if column_exists(&conn, "global_settings", "ocr_api_key") {
+                conn.execute("ALTER TABLE global_settings DROP COLUMN ocr_api_key", []).map_err(sql_error)?;
+            }
+            ensure_column(&conn, "global_settings", "vision_llm", "ALTER TABLE global_settings ADD COLUMN vision_llm TEXT NOT NULL DEFAULT '{}'")?;
             for (column, sql) in [
                 (
                     "lightpanda_endpoint",
@@ -3360,17 +3372,16 @@ impl Database {
             conn.execute(
                 "INSERT OR IGNORE INTO global_settings
                  (id, log_level, proxy, use_proxy_for_lightpanda,
-                  tag_rule_scan_interval_mins, ocr_api_key,
+                  tag_rule_scan_interval_mins,
                   lightpanda_endpoint, lightpanda_token, lightpanda_region, lightpanda_browser,
                   lightpanda_proxy, lightpanda_country, browserless_address, browserless_token,
                   sign_in_browser_config_migrated)
-                 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+                 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
                 params![
                     "info",
                     Option::<String>::None,
                     1,
                     7,
-                    Option::<String>::None,
                     Option::<String>::None,
                     Option::<String>::None,
                     "euwest",
@@ -4047,6 +4058,56 @@ mod migration_tests {
     use super::*;
     use rusqlite::Connection;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn vision_llm_settings_preserve_secrets_and_remove_unused_ocr_column() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).await.unwrap();
+        let mut settings = db.get_settings().await.unwrap();
+        assert_eq!(settings.vision_llm.api_standard, "openai_responses");
+        settings.vision_llm.model = "vision-test".into();
+        settings.vision_llm.api_key = Some("secret".into());
+        db.update_settings(&settings).await.unwrap();
+        settings.vision_llm.api_key = None;
+        db.update_settings(&settings).await.unwrap();
+        assert_eq!(
+            db.get_settings()
+                .await
+                .unwrap()
+                .vision_llm
+                .api_key
+                .as_deref(),
+            Some("secret")
+        );
+        let conn = open_connection(&db.path).unwrap();
+        conn.execute(
+            "ALTER TABLE global_settings ADD COLUMN ocr_api_key TEXT",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let reopened = Database::open(dir.path()).await.unwrap();
+        assert_eq!(
+            reopened.get_settings().await.unwrap().vision_llm.model,
+            "vision-test"
+        );
+        assert!(!column_exists(
+            &open_connection(&reopened.path).unwrap(),
+            "global_settings",
+            "ocr_api_key"
+        ));
+        settings.vision_llm.clear_api_key = true;
+        reopened.update_settings(&settings).await.unwrap();
+        assert!(
+            reopened
+                .get_settings()
+                .await
+                .unwrap()
+                .vision_llm
+                .api_key
+                .is_none()
+        );
+    }
 
     #[tokio::test]
     async fn sign_in_site_uniqueness_covers_concurrency_updates_and_paused_tasks() {

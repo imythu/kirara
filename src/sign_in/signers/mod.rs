@@ -6,6 +6,7 @@ mod cf_challenge;
 mod cf_turnstile;
 mod nexus;
 mod opencd;
+mod u2;
 
 use super::*;
 use std::future::Future;
@@ -42,7 +43,7 @@ pub(super) trait Signer: Send + Sync {
                     base_url,
                     cookie,
                     profile.sign_in_method.into(),
-                    settings.ocr_api_key.clone(),
+                    settings.proxy.clone(),
                 )
                 .await
             } else {
@@ -66,6 +67,7 @@ pub(super) fn known(base_url: &str) -> Option<Box<dyn Signer>> {
         return Some(Box::new(opencd::OpenCd));
     }
     match host.strip_prefix("www.").unwrap_or(host) {
+        "u2.dmhy.org" => Some(Box::new(u2::U2)),
         "p.t-baozi.cc" => Some(Box::new(baozi::Baozi)),
         "dstudio.me" => Some(Box::new(cf_challenge::CfChallenge)),
         "mua.xloli.cc" | "share.ilolicon.com" => Some(Box::new(cf_turnstile::CfTurnstile)),
