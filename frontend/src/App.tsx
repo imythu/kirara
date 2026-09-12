@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useId, useRef, useState, type SVGProps } fro
 import {
   BarChart3,
   ChevronDown,
+  Search,
   Database,
   Download,
   FileText,
@@ -211,6 +212,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [currentTime, setCurrentTime] = useState(() => new Date());
+  const [navQuery, setNavQuery] = useState("");
   const [closedGroups, setClosedGroups] = useState<NavGroup[]>([]);
   const menuPanelRef = useRef<HTMLDivElement>(null);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -225,6 +227,9 @@ export default function App() {
     page === "system-overview"
       ? { key: "system-overview" as AppPage, label: "系统总览", description: "CPU、内存使用率实时监控与历史趋势", icon: LayoutDashboard, group: "system" as NavGroup }
       : navItems.find((item) => item.key === page) ?? navItems[0];
+  const visibleNavItems = navItems.filter((item) =>
+    (item.key !== "torrent-transfer" || selfUse) && item.label.toLowerCase().includes(navQuery.trim().toLowerCase()),
+  );
   const effectiveLogLevel = getEffectiveLogLevel(settings);
   const selectableLogLevels = LOG_LEVELS.filter(
     (level) => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[effectiveLogLevel],
@@ -413,6 +418,7 @@ export default function App() {
     setPage(nextPage);
     setHash(nextPage, lastVisited.current.get(nextPage));
     setMenuOpen(false);
+    setNavQuery("");
   }
 
   async function saveSettings() {
@@ -437,18 +443,18 @@ export default function App() {
 
   const sidebar = (
     <aside className={cn(
-      "kirara-sidebar relative flex h-full min-h-0 w-full flex-col gap-5 overflow-hidden rounded-2xl p-4 lg:rounded-none lg:px-5 lg:py-7",
+      "kirara-sidebar relative flex h-full min-h-0 w-full flex-col gap-3 overflow-hidden rounded-2xl p-4 lg:rounded-none lg:px-4 lg:py-5",
     )}>
 
-      <div className="relative shrink-0 border-b border-white/15 pb-6">
+      <div className="relative shrink-0 border-b border-border pb-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate("system-overview")}
             className="kirara-brand flex items-center gap-3 min-w-0 rounded-lg text-left"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center">
-              <img src="/yunmu-icon.svg" alt="云母" className="h-full w-full rounded-lg" />
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center">
+              <span aria-hidden="true" className="kirara-brand-art block h-full w-full rounded-lg" />
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-2xl font-semibold tracking-[0.12em]">云母</h1>
@@ -460,14 +466,14 @@ export default function App() {
               href="https://github.com/imythu/kirara"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg p-2 text-muted transition hover:bg-white/10 hover:text-white"
+              className="rounded-lg p-2 text-muted transition hover:bg-accent hover:text-foreground"
               aria-label="GitHub 源码"
             >
               <GithubIcon className="h-4 w-4" />
             </a>
             <button
               type="button"
-              className="rounded-lg p-2 text-muted transition hover:bg-white/10 hover:text-white lg:hidden"
+              className="rounded-lg p-2 text-muted transition hover:bg-accent hover:text-foreground lg:hidden"
               onClick={() => setMenuOpen(false)}
               aria-label="关闭菜单"
             >
@@ -477,19 +483,27 @@ export default function App() {
         </div>
       </div>
 
+      <div className="kirara-menu-search relative shrink-0">
+        <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted" aria-hidden="true" />
+        <input type="search" value={navQuery} onChange={(event) => setNavQuery(event.target.value)}
+          aria-label="查找菜单" placeholder="查找菜单" className="h-11 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm placeholder:text-muted" />
+      </div>
       <div className="sidebar-scroll relative min-h-0 flex-1">
-        <div className="flex flex-col gap-4 pb-1 pr-1">
-          {navGroups.map((group) => (
+        <div className="flex flex-col gap-2 pb-1 pr-1">
+          {navGroups.filter((group) => visibleNavItems.some((item) => item.group === group.key)).map((group) => (
             <NavSection key={group.key} title={group.label}
-              open={!closedGroups.includes(group.key)}
+              open={!!navQuery.trim() || !closedGroups.includes(group.key)}
               onToggle={() => setClosedGroups((current) => current.includes(group.key)
                 ? current.filter((key) => key !== group.key) : [...current, group.key])}
-              items={navItems.filter((item) => item.group === group.key && (item.key !== "torrent-transfer" || selfUse))}
+              items={visibleNavItems.filter((item) => item.group === group.key)}
+              searching={!!navQuery.trim()}
               page={page} navigate={navigate} />
           ))}
+          {visibleNavItems.length === 0 ? <p className="px-3 py-4 text-sm text-muted" role="status">没有匹配的菜单</p> : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center justify-between border-t border-white/15 pt-4 text-xs text-muted"><span>云母 · 影视与 PT 管理</span><span className="tabular-nums">{APP_VERSION}</span></div>
+      <div className="kirara-companion shrink-0 overflow-hidden rounded-xl" aria-hidden="true" />
+      <div className="flex shrink-0 items-center justify-between border-t border-border pt-3 text-xs text-muted"><span>云母 · 影视与 PT 管理</span><span className="tabular-nums">{APP_VERSION}</span></div>
     </aside>
   );
 
@@ -515,14 +529,14 @@ export default function App() {
         </div>
       </div>
 
-      <div className="app-shell-grid mx-auto grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <div className="app-shell-grid mx-auto grid lg:grid-cols-[256px_minmax(0,1fr)]">
         <div className="hidden h-full min-h-0 lg:block">
           {sidebar}
         </div>
 
         {menuOpen ? createPortal(
           <div
-            className="mobile-viewport fixed inset-0 z-[60] overflow-hidden bg-black/40 backdrop-blur-sm lg:hidden"
+            className="mobile-viewport fixed inset-0 z-[60] overflow-hidden bg-black/40 lg:hidden"
             onClick={() => setMenuOpen(false)}
           >
             <div
@@ -564,6 +578,7 @@ export default function App() {
               </div>
 
               <div className="flex shrink-0 items-center justify-end gap-2">
+                <div aria-hidden="true" className="kirara-header-art hidden xl:block" />
                 <div className="hidden px-3 py-2 text-xs text-muted xl:block">
                   {currentTime.toLocaleString("zh-CN", { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
                 </div>
@@ -686,19 +701,19 @@ export default function App() {
   );
 }
 
-function NavSection({ title, open, onToggle, items, page, navigate }: {
-  title: string; open: boolean; onToggle: () => void;
+function NavSection({ title, open, onToggle, items, page, navigate, searching }: {
+  title: string; open: boolean; searching: boolean; onToggle: () => void;
   items: typeof navItems; page: AppPage; navigate: (page: AppPage) => void;
 }) {
   const id = useId();
   const current = items.find((item) => item.key === page);
   return (
     <div>
-      <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={id}
-        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-xs font-medium text-muted hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+      {searching ? <p className="flex min-h-11 items-center px-3 text-xs font-medium text-muted">{title}</p> : <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={id}
+        className="kirara-nav-group flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-xs font-medium text-muted hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
         <span>{title}{!open && current ? <span className="mt-1 block text-primary">当前：{current.label}</span> : null}</span>
         <ChevronDown aria-hidden="true" className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")} />
-      </button>
+      </button>}
       <nav id={id} aria-label={title} hidden={!open} className="space-y-1">
         {items.map((item) => {
           const Icon = item.icon;

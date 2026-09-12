@@ -1,0 +1,12 @@
+{
+  "tool": "Built-in image_gen",
+  "generated": "2026-09-12",
+  "assets": {
+    "companions.webp": {
+      "prompt": "Create one transparent-background anime illustration of ONLY chibi Inuyasha, Kagome Higurashi and small cat Kirara from Inuyasha together. Full bodies, seated close together as friendly viewing companions: recognizable white-haired dog-eared Inuyasha in red robe arms folded smiling, black-haired Kagome in white and green sailor uniform seated with hands on knees, little cream two-tailed Kirara between them. Cute two-head-tall proportions, exquisite clean dark brown ink outlines, warm hand-painted anime cels, muted vermilion, sage green, warm cream, gentle highlights. Wide compact composition about 3:2, characters fill frame with comfortable 8% clear margin, no lettering, no frame, genuinely transparent background. Intended prominent empty-state illustration in a Chinese media app. No other characters."
+    },
+    "journey.webp": {
+      "prompt": "Generate a wide 3:2 hand painted anime chibi illustration, ONLY Sesshomaru, Rin and Jaken from Inuyasha resting under a cherry tree by a quiet mountain path. Sesshomaru recognizable flowing white hair, crescent forehead mark, white kimono, fluffy shoulder pelt; Rin small girl in yellow orange kimono beside him; Jaken small green imp with staff. Cute full-body two-head-tall chibi proportions, elegant crisp dark brown linework and warm cel shading. Cream paper atmosphere, vermilion flowers, sage foliage, distant muted mountains, restrained detail, beautiful spring afternoon. Characters occupy lower center two thirds, no text, no lettering, no UI or borders. Asset for sidebar companion panel, must read clearly at 220px wide."
+    }
+  }
+}

@@ -2810,7 +2810,7 @@ function LoadingState({ label }: { label: string }) {
 function EmptyState({ icon: Icon, title, action }: { icon: typeof Film; title: string; action?: { label: string; onClick: () => void } }) {
   return (
     <div className="flex min-h-44 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-      {title === "暂无订阅" ? <img src="/kirara-rest.svg" alt="" className="kirara-empty-art" /> : (
+      {title === "暂无订阅" ? <div aria-hidden="true" className="kirara-empty-art" /> : (
         <div className="flex size-11 items-center justify-center rounded-xl bg-surface-container text-muted">
           <Icon className="size-5" aria-hidden="true" />
         </div>

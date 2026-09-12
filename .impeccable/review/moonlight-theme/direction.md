@@ -1,0 +1,6 @@
+# Moonlit violet palette refinement
+User requested a different UI color style after anime asset/menu refinement. Optional palette question received no answer after >60 seconds; builder explicitly proceeded with proposed moonlit violet. No layout, content, asset or behavior redesign.
+
+Mode: Operate. Preserve collection-desk composition and all artwork. Use dark plum rail #30263e, lavender-white workspace #f5f3fa, paper-white card #fefcff, violet primary #7450a3, pale purple borders #ddd6e9 and ink #292438. Violet action/selection, pale lilac focus in dark rail, teal positive and red destructive states. Apply at system level including button hover/active, browser selection/caret, menu fields, graphs and site-export image. Character artwork preserves its original colors.
+
+Production Vite build passes. Mocked browser checks pass: search, no matches, artwork loading, mobile navigation, overflow and no runtime errors. Required screenshots desktop.png (1440x1000), mobile.png and mobile-menu.png (390x844 full page). Browser checked actual production preview at port 5197. All three captures opened and validated by builder. Contrast results contrast.json; body pairs >=4.78:1. No approved comp; palette-only refinement.

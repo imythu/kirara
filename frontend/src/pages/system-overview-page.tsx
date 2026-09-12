@@ -46,7 +46,7 @@ function formatAxisTime(value: string | number, hours: number): string {
 /** 根据百分比返回内存颜色：绿 → 黄 → 橙 → 红 */
 function memoryColor(percent: number): string {
   const p = Math.min(100, Math.max(0, percent));
-  if (p <= 50) return "#477564";       // green
+  if (p <= 50) return "#397968";       // green
   if (p <= 75) return "#926515";       // yellow
   if (p <= 90) return "#ac582e";       // orange
   return "#b63232";                    // red
@@ -293,21 +293,21 @@ export function SystemOverviewPage() {
           label="进程 CPU"
           value={`${(snapshot?.process_cpu_usage ?? 0).toFixed(1)}%`}
           detail="当前进程 CPU 占用"
-          color="#b44332"
+          color="#7450a3"
         />
         <MetricCard
           icon={MemoryStick}
           label="进程内存"
           value={`${processMemMb.toFixed(1)} MB`}
           detail={snapshot ? formatBytes(snapshot.process_memory_bytes) : "-"}
-          color="#aa7143"
+          color="#99651d"
         />
         <MetricCard
           icon={Server}
           label="系统 CPU"
           value={`${(snapshot?.system_cpu_usage ?? 0).toFixed(1)}%`}
           detail="全部核心平均"
-          color="#477564"
+          color="#397968"
         />
         <MetricCard
           icon={Monitor}
@@ -330,7 +330,7 @@ export function SystemOverviewPage() {
           <div className="relative">
             <Gauge
               value={snapshot?.process_cpu_usage ?? 0}
-              color="#b44332"
+              color="#7450a3"
               label="进程 CPU"
               sub={snapshot ? `${snapshot.process_cpu_usage.toFixed(1)}%` : undefined}
             />
@@ -340,7 +340,7 @@ export function SystemOverviewPage() {
               value={snapshot?.system_cpu_usage ?? 0}
               size={140}
               strokeWidth={12}
-              color="#477564"
+              color="#397968"
               label="系统 CPU"
               sub={snapshot ? `${snapshot.system_cpu_usage.toFixed(1)}%` : undefined}
             />
@@ -348,7 +348,7 @@ export function SystemOverviewPage() {
           <div className="relative">
             <Gauge
               value={processMemMb / (sysTotalGb * 1024 || 1) * 100}
-              color="#aa7143"
+              color="#99651d"
               label="进程内存"
               sub={`${processMemMb.toFixed(0)} MB`}
             />
@@ -406,12 +406,12 @@ export function SystemOverviewPage() {
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="gradProcessCpu" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#b44332" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#b44332" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#7450a3" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#7450a3" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradSystemCpu" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#477564" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#477564" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#397968" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#397968" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -444,7 +444,7 @@ export function SystemOverviewPage() {
                       type="monotone"
                       dataKey="systemCpu"
                       name="系统 CPU"
-                      stroke="#477564"
+                      stroke="#397968"
                       fill="url(#gradSystemCpu)"
                       strokeWidth={2}
                       dot={false}
@@ -456,7 +456,7 @@ export function SystemOverviewPage() {
                       type="monotone"
                       dataKey="processCpu"
                       name="进程 CPU"
-                      stroke="#b44332"
+                      stroke="#7450a3"
                       fill="url(#gradProcessCpu)"
                       strokeWidth={2}
                       dot={false}
@@ -479,8 +479,8 @@ export function SystemOverviewPage() {
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="gradProcessMem" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#aa7143" stopOpacity={0.3} />
-                      <stop offset="100%" stopColor="#aa7143" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#99651d" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#99651d" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradSystemMem" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={memoryGradientStops(sysMemPercent).start} stopOpacity={0.3} />
@@ -548,7 +548,7 @@ export function SystemOverviewPage() {
                       type="monotone"
                       dataKey="processMemMb"
                       name="进程内存"
-                      stroke="#aa7143"
+                      stroke="#99651d"
                       fill="url(#gradProcessMem)"
                       strokeWidth={2}
                       dot={false}

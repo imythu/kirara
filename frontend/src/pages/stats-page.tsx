@@ -307,7 +307,7 @@ const REFRESH_OPTIONS = [
 const COLORS = {
   upload: "#10b981",
   download: "#0ea5e9",
-  torrent: "#aa7143",
+  torrent: "#99651d",
   grid: "#e5e7eb",
 } as const;
 
@@ -987,13 +987,13 @@ export function StatsPage() {
                       scale="time"
                       domain={[currentTransferWindow.start, currentTransferWindow.end]}
                       ticks={transferTicks}
-                      tick={{ fontSize: 9, fill: "#746d60" }}
+                      tick={{ fontSize: 9, fill: "#746780" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value: number) => formatAxisTime(value, transferTrendHours)}
                     />
                     <YAxis
-                      tick={{ fontSize: 9, fill: "#746d60" }}
+                      tick={{ fontSize: 9, fill: "#746780" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(v: number) => formatBytes(v)}
@@ -1102,13 +1102,13 @@ export function StatsPage() {
                       scale="time"
                       domain={[currentTorrentWindow.start, currentTorrentWindow.end]}
                       ticks={torrentTicks}
-                      tick={{ fontSize: 9, fill: "#746d60" }}
+                      tick={{ fontSize: 9, fill: "#746780" }}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value: number) => formatAxisTime(value, torrentTrendHours)}
                     />
                     <YAxis
-                      tick={{ fontSize: 9, fill: "#746d60" }}
+                      tick={{ fontSize: 9, fill: "#746780" }}
                       tickLine={false}
                       axisLine={false}
                       width={30}
@@ -1207,13 +1207,13 @@ export function StatsPage() {
                     scale="time"
                     domain={[currentDownloaderWindow.start, currentDownloaderWindow.end]}
                     ticks={downloaderTicks}
-                    tick={{ fontSize: 9, fill: "#746d60" }}
+                    tick={{ fontSize: 9, fill: "#746780" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(value: number) => formatAxisTime(value, downloaderTrendHours)}
                   />
                   <YAxis
-                    tick={{ fontSize: 9, fill: "#746d60" }}
+                    tick={{ fontSize: 9, fill: "#746780" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: number) => formatSpeed(v)}
@@ -1377,7 +1377,7 @@ export function StatsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 9, fill: "#746d60" }}
+                    tick={{ fontSize: 9, fill: "#746780" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: string) => {
@@ -1386,7 +1386,7 @@ export function StatsPage() {
                     }}
                   />
                   <YAxis
-                    tick={{ fontSize: 9, fill: "#746d60" }}
+                    tick={{ fontSize: 9, fill: "#746780" }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: number) => formatBytes(v)}

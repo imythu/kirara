@@ -1,0 +1,3 @@
+Changed four decorative artwork locations from img elements to CSS background-image: brand mark, desktop header, sidebar landscape, subscription empty state. Kept raster sources and image provenance; CSS controls contain/cover and fixed dimensions. Decorative wrappers use aria-hidden, brand button retains text name, media content posters retain img alt and error handling.
+
+Production build passed. Browser verified all four CSS URLs decode, no /art img nodes remain, menu search/navigation and mobile overflow checks pass. Desktop, mobile and mobile-menu screenshots inspected once. Server remains 0.0.0.0:31234.
