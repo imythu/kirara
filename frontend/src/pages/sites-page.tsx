@@ -20,6 +20,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  X,
   CloudCog,
   Server,
   KeyRound,
@@ -700,6 +701,8 @@ export function SitesPage() {
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null);
   const [credentialsTarget, setCredentialsTarget] = useState<SiteRecord | null>(null);
   const [siteQuery, setSiteQuery] = useState("");
+  const [siteSort, setSiteSort] = useState("join_time");
+  const siteSearchInputRef = useRef<HTMLInputElement>(null);
   const [siteStatusFilter, setSiteStatusFilter] = useState<"all" | SiteHealth>("all");
   const [siteTypeFilter, setSiteTypeFilter] = useState("all");
   const [siteComposing, setSiteComposing] = useState(false);
@@ -805,6 +808,7 @@ export function SitesPage() {
     refreshKey: sites,
     pageSize: SITE_PAGE_SIZE,
     filters: {
+      sort: siteSort,
       health: siteStatusFilter === "all" ? undefined : siteStatusFilter,
       type: siteTypeFilter === "all" ? undefined : siteTypeFilter,
     },
@@ -1557,7 +1561,7 @@ export function SitesPage() {
         <CardHeader className="border-0 p-4 pb-0 sm:p-6 sm:pb-0">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <CardDescription>管理站点连接，查看账户数据与刷新状态</CardDescription>
+              <CardDescription>管理站点连接，查看账户数据与同步状态</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
               <Button
@@ -1566,10 +1570,10 @@ export function SitesPage() {
                 onClick={() => void handleRefreshAll()}
                 disabled={loading || sites.length === 0 || refreshAllSubmitting || refreshingAll}
                 aria-busy={refreshAllSubmitting || refreshingAll}
-                title="在后台刷新全部站点统计"
+                title="在后台同步全部站点统计"
               >
                 <RefreshCw className={`mr-2 size-4 ${refreshAllSubmitting || refreshingAll ? "motion-safe:animate-spin" : ""}`} />
-                {refreshAllSubmitting ? "提交中" : refreshingAll ? "刷新中" : "刷新所有"}
+                {refreshAllSubmitting ? "提交中" : refreshingAll ? "同步中" : "同步所有"}
               </Button>
               <Button variant="outline" className="h-11" onClick={handleOverview} disabled={loading || sites.length === 0}>
                 <ListChecks className="mr-2 size-4" />
@@ -1637,18 +1641,31 @@ export function SitesPage() {
           <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" aria-label="筛选站点">
             <div className="relative min-w-0 flex-1 sm:basis-64">
               <Label htmlFor="site-search" className="sr-only">搜索站点</Label>
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
               <Input
+                ref={siteSearchInputRef}
                 id="site-search"
                 value={siteQuery}
                 onChange={(event) => setSiteQuery(event.target.value)}
                 onCompositionStart={() => setSiteComposing(true)}
                 onCompositionEnd={(event) => { setSiteQuery(event.currentTarget.value); setSiteComposing(false); }}
-                className="h-11 rounded-2xl pl-10"
+                onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !siteComposing) siteSearch.reload(); }}
+                className="h-11 rounded-2xl pr-24"
                 placeholder="搜索站点、别名、拼音或特色"
                 title="支持自定义名称、官方别名、拼音、账户和站点特色，可组合状态条件"
               />
+              <div className="absolute inset-y-0 right-1 flex items-center">
+                {siteQuery ? <Button variant="outline" className="h-11 w-11 border-0 bg-transparent p-0" aria-label="清空搜索" title="清空搜索" onClick={() => { setSiteQuery(""); siteSearchInputRef.current?.focus(); }}><X aria-hidden="true" className="size-4" /></Button> : null}
+                <Button variant="outline" className="h-11 w-11 border-0 bg-transparent p-0" aria-label={siteQuery.trim() ? "搜索站点" : "刷新站点列表"} title={siteQuery.trim() ? "搜索站点" : "刷新站点列表"} disabled={loading || siteComposing} onClick={siteSearch.reload}>
+                  {siteSearch.loading ? <Loader2 aria-hidden="true" className="size-4 motion-safe:animate-spin" /> : siteQuery.trim() ? <Search aria-hidden="true" className="size-4" /> : <RefreshCw aria-hidden="true" className="size-4" />}
+                </Button>
+              </div>
             </div>
+            <Label htmlFor="site-sort" className="sr-only">站点排序</Label>
+            <Select id="site-sort" value={siteSort} onChange={setSiteSort} className="w-full sm:w-52" options={[
+              { value: "join_time", label: "入站时间（新到旧）" },
+              { value: "created_at", label: "添加时间（新到旧）" },
+              { value: "name", label: "站点名（升序）" },
+            ]} />
             <Label htmlFor="site-type-filter" className="sr-only">筛选站点类型</Label>
             <Select
               id="site-type-filter"
@@ -1662,7 +1679,7 @@ export function SitesPage() {
                 { value: "gazelle", label: "Gazelle" },
               ]}
             />
-            <Label htmlFor="site-status-filter" className="sr-only">筛选刷新状态</Label>
+            <Label htmlFor="site-status-filter" className="sr-only">筛选同步状态</Label>
             <Select
               id="site-status-filter"
               value={siteStatusFilter}
@@ -2398,6 +2415,8 @@ function siteHomeUrl(site: SiteRecord): string | null {
 
 function SiteAccountIdentity({ site }: { site: SiteRecord }) {
   const href = siteHomeUrl(site);
+  const joinDate = site.stats?.join_time != null ? new Date(site.stats.join_time) : null;
+  const joinTime = joinDate && Number.isFinite(joinDate.getTime()) ? joinDate.toISOString() : null;
   const identity = <>
     <span className="flex items-start gap-1.5 font-semibold">
       <span className="min-w-0 break-words">{site.name}</span>
@@ -2410,6 +2429,9 @@ function SiteAccountIdentity({ site }: { site: SiteRecord }) {
       {href ? <a href={href} target="_blank" rel="noopener noreferrer" aria-label={`打开${site.name}（新窗口）`} className="group block min-h-11 rounded-sm underline-offset-4 hover:text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{identity}</a> : <div>{identity}<p className="mt-1 text-xs text-destructive">站点地址无效</p></div>}
       <p className="mt-1 break-words text-sm">{site.stats?.username ?? "账户待获取"}</p>
       <p className="mt-1 break-words text-xs text-muted">UID {site.stats?.uid ?? "—"} · {site.site_type === "gazelle" ? "Gazelle" : site.site_type}</p>
+      <p className="mt-1 break-words text-xs text-muted">
+        入站时间：{joinTime ? <time dateTime={joinTime} className="tabular-nums">{formatDateTime(joinTime)}</time> : "未获取"}
+      </p>
       <div className="mt-2"><SiteStatusDetail site={site} /></div>
     </div>
   );

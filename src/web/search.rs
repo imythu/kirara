@@ -2,11 +2,21 @@ use super::*;
 use crate::db::search::{SearchBinding, SearchSnapshot};
 use crate::search::{ParsedFilter, SearchDocument, SearchFilters};
 
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum SiteSort {
+    #[default]
+    JoinTime,
+    CreatedAt,
+    Name,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SearchQuery {
     #[serde(default)]
     q: String,
+    sort: Option<SiteSort>,
     page: Option<usize>,
     page_size: Option<usize>,
     site_id: Option<i64>,
@@ -113,7 +123,8 @@ fn validate(query: &SearchQuery, scope: &str) -> Result<(), ApiError> {
     {
         return Err(ApiError::bad_request("type must not be empty"));
     }
-    if (scope != "sites" && (query.health.is_some() || query.site_type.is_some()))
+    if (scope != "sites"
+        && (query.health.is_some() || query.site_type.is_some() || query.sort.is_some()))
         || (scope != "records" && query.task_id.is_some())
         || (matches!(scope, "sites" | "catalog")
             && (query.enabled.is_some() || query.result.is_some() || query.site_id.is_some()))
@@ -466,7 +477,27 @@ fn search_snapshot_results(
         site_type: query.site_type,
         ..Default::default()
     };
-    let output = crate::search::search(&docs, &query.q, &filters).map_err(ApiError::bad_request)?;
+    let mut output =
+        crate::search::search(&docs, &query.q, &filters).map_err(ApiError::bad_request)?;
+    if scope == "sites" {
+        let sites: HashMap<_, _> = snapshot.sites.iter().map(|site| (site.id, site)).collect();
+        output.hits.sort_by(|a, b| {
+            let a = sites[&a.id];
+            let b = sites[&b.id];
+            match query.sort.unwrap_or_default() {
+                SiteSort::JoinTime => b
+                    .stats
+                    .as_ref()
+                    .and_then(|s| s.details.join_time)
+                    .cmp(&a.stats.as_ref().and_then(|s| s.details.join_time)),
+                SiteSort::CreatedAt => b.created_at.cmp(&a.created_at),
+                SiteSort::Name => {
+                    crate::search::normalize(&a.name).cmp(&crate::search::normalize(&b.name))
+                }
+            }
+            .then_with(|| a.id.cmp(&b.id))
+        });
+    }
     validate_parsed_scope(&output.parsed_filters, scope)?;
     let total = output.hits.len();
     let page_size = query.page_size.unwrap_or(20);
@@ -515,6 +546,65 @@ endpoint!(catalog, "catalog");
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn site_sorting_precedes_pagination_and_puts_unknown_join_times_last() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Database::open(dir.path()).await.unwrap();
+        let conn = rusqlite::Connection::open(dir.path().join("kirara.db")).unwrap();
+        for (id, name, created) in [
+            (1, "Charlie", "2026-01-01"),
+            (2, "Alpha", "2026-03-01"),
+            (3, "Bravo", "2026-02-01"),
+        ] {
+            conn.execute("INSERT INTO sites(id,name,site_type,base_url,auth_config,created_at,updated_at) VALUES(?1,?2,'nexusphp','https://unknown.invalid','{}',?3,?3)", rusqlite::params![id, name, created]).unwrap();
+        }
+        for (sort, expected) in [
+            (None, vec![3, 2, 1]),
+            (Some(SiteSort::CreatedAt), vec![2, 3, 1]),
+            (Some(SiteSort::Name), vec![2, 3, 1]),
+        ] {
+            for (index, expected_id) in expected.into_iter().enumerate() {
+                let mut snapshot = db.search_snapshot("sites", None, None).await.unwrap();
+                for site in &mut snapshot.sites {
+                    if site.id != 1 {
+                        let mut stats = crate::site::SiteStatsRecord::default();
+                        stats.details.join_time = Some(site.id * 1000);
+                        site.stats = Some(stats);
+                    }
+                }
+                let response = search_snapshot_results(
+                    snapshot,
+                    SearchQuery {
+                        sort,
+                        page: Some(index + 1),
+                        page_size: Some(1),
+                        q: "type:nexusphp".into(),
+                        ..Default::default()
+                    },
+                    "sites",
+                )
+                .unwrap()
+                .0;
+                assert_eq!(response.total, 3);
+                assert_eq!(response.items[0].record["id"], expected_id);
+            }
+        }
+        assert!(
+            validate(
+                &SearchQuery {
+                    sort: Some(SiteSort::Name),
+                    ..Default::default()
+                },
+                "sign"
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<SearchQuery>(serde_json::json!({"sort": "unsupported"}))
+                .is_err()
+        );
+    }
+
     #[test]
     fn params_and_real_statuses_are_conservative() {
         assert!(
