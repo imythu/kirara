@@ -2936,7 +2936,7 @@ dependencies = [
 
 [[package]]
 name = "kirara"
-version = "2.4.6"
+version = "2.4.7"
 dependencies = [
  "axum",
  "base64 0.22.1",
