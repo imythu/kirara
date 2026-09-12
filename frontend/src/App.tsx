@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useId, useRef, useState, type SVGProps } from "react";
 import {
   BarChart3,
+  BookOpen,
   ChevronDown,
   Search,
   Database,
@@ -462,6 +463,16 @@ export default function App() {
             </div>
           </button>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <a
+              href="./docs/index.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg p-2 text-muted transition hover:bg-accent hover:text-foreground"
+              aria-label="使用文档（新标签页打开）"
+              title="使用文档（新标签页打开）"
+            >
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
+            </a>
             <a
               href="https://github.com/imythu/kirara"
               target="_blank"
