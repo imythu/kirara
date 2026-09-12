@@ -1,6 +1,6 @@
 # Validation
 
-- Existing navigation.browser.cjs passed: history, refresh, query drafts, settings targeting, keyboard tabs, mobile labels, modal focus, resize, overflow, SELF_USE on/off/missing/invalid/unavailable.
+- Existing navigation.browser.cjs passed: history, refresh, query drafts, settings targeting, keyboard tabs, mobile labels, modal focus, resize, overflow.
 - Impeccable detector: [] for App.tsx, index.css, media-page.tsx.
 - Final asset-inclusive Vite production build passed.
 - Full TypeScript check is blocked by errors in untouched api.ts, brush-tasks-page.tsx, stats-page.tsx, system-overview-page.tsx and Vite configuration (see /tmp/anime-shell-types.log). No diagnostics name App.tsx or media-page.tsx.
