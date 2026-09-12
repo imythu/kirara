@@ -157,6 +157,14 @@ jobs:
           import tomllib
 
           expected = os.environ["BASE_VERSION"]
+          lock_packages = tomllib.loads(Path("Cargo.lock").read_text())["package"]
+          for name in ("kirara", "kirara-desktop"):
+              locked = [p["version"] for p in lock_packages if p["name"] == name and "source" not in p]
+              if locked != [expected]:
+                  raise SystemExit(
+                      f"Cargo.lock: {name} versions {locked} do not match {expected}; "
+                      "run cargo generate-lockfile --offline and commit Cargo.lock"
+                  )
           versions = {
               "src-tauri/Cargo.toml": tomllib.loads(Path("src-tauri/Cargo.toml").read_text())["package"]["version"],
               "src-tauri/tauri.conf.json": json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"],
