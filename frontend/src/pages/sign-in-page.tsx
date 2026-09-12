@@ -870,6 +870,19 @@ export function SignInPage() {
                 })}
               </div>
 
+              <div className="space-y-1">
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium">
+                  <input type="checkbox" className="size-4 accent-primary" disabled={savingBrowser}
+                    checked={settingsDraft[settingsBrowser === "vision_llm" ? "use_global_proxy_for_llm" : settingsBrowser === "lightpanda" ? "use_global_proxy_for_lightpanda" : "use_global_proxy_for_browserless"] ?? true}
+                    onChange={(event) => {
+                      const key = settingsBrowser === "vision_llm" ? "use_global_proxy_for_llm" : settingsBrowser === "lightpanda" ? "use_global_proxy_for_lightpanda" : "use_global_proxy_for_browserless";
+                      setSettingsDraft(current => current ? { ...current, [key]: event.target.checked } : current);
+                      setConfigFeedback(null);
+                    }} />
+                  使用全局代理访问 {settingsBrowser === "vision_llm" ? "LLM" : settingsBrowser === "lightpanda" ? "Lightpanda" : "Browserless"}
+                </label>
+                <p className="text-xs leading-relaxed text-muted-foreground">使用系统设置中的代理地址；未配置代理地址或关闭此选项时直接连接。</p>
+              </div>
               {settingsBrowser === "lightpanda" ? (
                 <div
                   id="sign-in-browser-settings-panel-lightpanda"

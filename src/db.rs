@@ -105,11 +105,14 @@ impl Database {
                     "SELECT log_level, proxy, use_proxy_for_lightpanda, tag_rule_scan_interval_mins,
                             lightpanda_endpoint, lightpanda_token, lightpanda_region,
                             lightpanda_browser, lightpanda_proxy, lightpanda_country,
-                            browserless_address, browserless_token, vision_llm
+                            browserless_address, browserless_token, vision_llm, use_global_proxy_for_lightpanda, use_global_proxy_for_browserless, use_global_proxy_for_llm
                      FROM global_settings WHERE id = 1",
                     [],
                     |row| {
                         Ok(GlobalConfig {
+                            use_global_proxy_for_lightpanda: row.get::<_, i32>(13)? != 0,
+                            use_global_proxy_for_browserless: row.get::<_, i32>(14)? != 0,
+                            use_global_proxy_for_llm: row.get::<_, i32>(15)? != 0,
                             log_level: row.get(0)?,
                             proxy: row.get(1)?,
                             use_proxy_for_lightpanda: row.get::<_, i32>(2).unwrap_or(1) != 0,
@@ -162,7 +165,7 @@ impl Database {
                     use_proxy_for_lightpanda = ?, tag_rule_scan_interval_mins = ?,
                     lightpanda_endpoint = ?, lightpanda_token = ?, lightpanda_region = ?,
                     lightpanda_browser = ?, lightpanda_proxy = ?, lightpanda_country = ?,
-                    browserless_address = ?, browserless_token = ?, vision_llm = ?
+                    browserless_address = ?, browserless_token = ?, vision_llm = ?, use_global_proxy_for_lightpanda = ?, use_global_proxy_for_browserless = ?, use_global_proxy_for_llm = ?
                  WHERE id = 1",
                 params![
                     settings.log_level,
@@ -209,6 +212,9 @@ impl Database {
                             message: e.to_string(),
                         }
                     })?,
+                    settings.use_global_proxy_for_lightpanda as i32,
+                    settings.use_global_proxy_for_browserless as i32,
+                    settings.use_global_proxy_for_llm as i32,
                 ],
             )
             .map_err(sql_error)?;
@@ -2681,6 +2687,9 @@ impl Database {
                 "tag_rule_scan_interval_mins",
                 "ALTER TABLE global_settings ADD COLUMN tag_rule_scan_interval_mins INTEGER NOT NULL DEFAULT 7",
             )?;
+            ensure_column(&conn, "global_settings", "use_global_proxy_for_lightpanda", "ALTER TABLE global_settings ADD COLUMN use_global_proxy_for_lightpanda INTEGER NOT NULL DEFAULT 1")?;
+            ensure_column(&conn, "global_settings", "use_global_proxy_for_browserless", "ALTER TABLE global_settings ADD COLUMN use_global_proxy_for_browserless INTEGER NOT NULL DEFAULT 1")?;
+            ensure_column(&conn, "global_settings", "use_global_proxy_for_llm", "ALTER TABLE global_settings ADD COLUMN use_global_proxy_for_llm INTEGER NOT NULL DEFAULT 1")?;
             if column_exists(&conn, "global_settings", "ocr_api_key") {
                 conn.execute("ALTER TABLE global_settings DROP COLUMN ocr_api_key", []).map_err(sql_error)?;
             }
@@ -4058,6 +4067,35 @@ mod migration_tests {
     use super::*;
     use rusqlite::Connection;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn service_proxy_switches_migrate_and_persist() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(dir.path()).await.unwrap();
+        let conn = open_connection(&db.path).unwrap();
+        for name in ["lightpanda", "browserless", "llm"] {
+            conn.execute(
+                &format!("ALTER TABLE global_settings DROP COLUMN use_global_proxy_for_{name}"),
+                [],
+            )
+            .unwrap();
+        }
+        drop(conn);
+        let db = Database::open(dir.path()).await.unwrap();
+        let mut settings = db.get_settings().await.unwrap();
+        assert!(settings.use_global_proxy_for_lightpanda);
+        assert!(settings.use_global_proxy_for_browserless);
+        assert!(settings.use_global_proxy_for_llm);
+        settings.use_global_proxy_for_lightpanda = false;
+        settings.use_global_proxy_for_browserless = false;
+        settings.use_global_proxy_for_llm = false;
+        db.update_settings(&settings).await.unwrap();
+        let db = Database::open(dir.path()).await.unwrap();
+        let settings = db.get_settings().await.unwrap();
+        assert!(!settings.use_global_proxy_for_lightpanda);
+        assert!(!settings.use_global_proxy_for_browserless);
+        assert!(!settings.use_global_proxy_for_llm);
+    }
 
     #[tokio::test]
     async fn vision_llm_settings_preserve_secrets_and_remove_unused_ocr_column() {

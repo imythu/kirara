@@ -43,12 +43,15 @@ pub(super) trait Signer: Send + Sync {
                     base_url,
                     cookie,
                     profile.sign_in_method.into(),
-                    settings.proxy.clone(),
+                    settings
+                        .effective_proxy(settings.use_global_proxy_for_lightpanda)
+                        .map(str::to_owned),
                 )
                 .await
             } else {
                 run_browserless_sign_in(
                     &settings.browserless,
+                    settings.effective_proxy(settings.use_global_proxy_for_browserless),
                     base_url,
                     cookie,
                     profile.browserless,

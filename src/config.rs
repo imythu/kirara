@@ -7,6 +7,13 @@ pub struct GlobalConfig {
     pub proxy: Option<String>,
     #[serde(default = "default_true")]
     pub use_proxy_for_lightpanda: bool,
+    #[serde(default = "default_true")]
+    pub use_global_proxy_for_lightpanda: bool,
+    #[serde(default = "default_true")]
+    pub use_global_proxy_for_browserless: bool,
+    #[serde(default = "default_true")]
+    pub use_global_proxy_for_llm: bool,
+
     #[serde(default)]
     pub lightpanda: LightpandaConfig,
     #[serde(default)]
@@ -23,6 +30,10 @@ impl Default for GlobalConfig {
             log_level: Some("info".to_string()),
             proxy: None,
             use_proxy_for_lightpanda: true,
+            use_global_proxy_for_lightpanda: true,
+            use_global_proxy_for_browserless: true,
+            use_global_proxy_for_llm: true,
+
             lightpanda: LightpandaConfig::default(),
             browserless: BrowserlessConfig::default(),
             tag_rule_scan_interval_mins: default_tag_rule_scan_interval_mins(),
@@ -136,5 +147,37 @@ impl VisionLlmConfig {
                 .api_key
                 .as_deref()
                 .is_some_and(|key| !key.trim().is_empty())
+    }
+}
+
+impl GlobalConfig {
+    pub fn effective_proxy(&self, enabled: bool) -> Option<&str> {
+        enabled
+            .then_some(self.proxy.as_deref())
+            .flatten()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+    }
+}
+
+#[cfg(test)]
+mod proxy_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_settings_default_to_proxy_but_require_an_address() {
+        let mut settings: GlobalConfig = serde_json::from_str(r#"{"log_level":"info"}"#).unwrap();
+        assert!(settings.use_global_proxy_for_lightpanda);
+        assert!(settings.use_global_proxy_for_browserless);
+        assert!(settings.use_global_proxy_for_llm);
+        assert_eq!(settings.effective_proxy(true), None);
+        settings.proxy = Some("  ".into());
+        assert_eq!(settings.effective_proxy(true), None);
+        settings.proxy = Some(" http://127.0.0.1:7890 ".into());
+        assert_eq!(
+            settings.effective_proxy(true),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(settings.effective_proxy(false), None);
     }
 }

@@ -2,6 +2,10 @@ export type GlobalConfig = {
   log_level: string | null;
   proxy: string | null;
   use_proxy_for_lightpanda: boolean;
+  use_global_proxy_for_lightpanda: boolean;
+  use_global_proxy_for_browserless: boolean;
+  use_global_proxy_for_llm: boolean;
+
   lightpanda: {
     endpoint: string | null;
     token: string | null;

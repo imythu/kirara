@@ -7,6 +7,10 @@ export const defaultSettings: GlobalConfig = {
   log_level: "info",
   proxy: null,
   use_proxy_for_lightpanda: true,
+  use_global_proxy_for_lightpanda: true,
+  use_global_proxy_for_browserless: true,
+  use_global_proxy_for_llm: true,
+
   lightpanda: {
     endpoint: null,
     token: null,

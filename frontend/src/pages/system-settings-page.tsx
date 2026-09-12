@@ -118,7 +118,7 @@ export function SystemSettingsPage({
         <div className="space-y-3 sm:col-span-2 xl:col-span-3">
           <Label>全局代理</Label>
           <p className="text-xs text-muted">
-            配置后所有 HTTP 请求（站点抓取、RSS 拉取等）都会走此代理。不需要代理就选"不使用代理"。
+            各功能开启“使用全局代理”后使用此地址；未配置代理地址时直接连接。
           </p>
 
           <div className="grid gap-3 sm:grid-cols-3">

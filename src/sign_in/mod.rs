@@ -172,14 +172,22 @@ pub async fn probe_browser_1_1_1_1(
         SIGN_IN_BROWSER_LIGHTPANDA => {
             let endpoint =
                 build_lightpanda_endpoint(&settings.lightpanda, settings.use_proxy_for_lightpanda)?;
-            let proxy = settings.proxy.clone();
+            let proxy = settings
+                .effective_proxy(settings.use_global_proxy_for_lightpanda)
+                .map(str::to_owned);
             tokio::task::spawn_blocking(move || {
                 run_cdp_probe(endpoint, "https://1.1.1.1", "Lightpanda", proxy.as_deref())
             })
             .await
             .map_err(|e| format!("Lightpanda 探测任务 join 失败: {}", e))?
         }
-        SIGN_IN_BROWSER_BROWSERLESS => run_browserless_probe(&settings.browserless).await,
+        SIGN_IN_BROWSER_BROWSERLESS => {
+            run_browserless_probe(
+                &settings.browserless,
+                settings.effective_proxy(settings.use_global_proxy_for_browserless),
+            )
+            .await
+        }
         _ => Err(format!("未知签到浏览器: {}", browser)),
     }
 }
@@ -566,10 +574,14 @@ fn resolve_browserless_timings(
     })
 }
 
-async fn run_browserless_probe(config: &BrowserlessConfig) -> Result<BrowserProbeResult, String> {
+async fn run_browserless_probe(
+    config: &BrowserlessConfig,
+    proxy: Option<&str>,
+) -> Result<BrowserProbeResult, String> {
     const PROBE_URL: &str = "https://1.1.1.1";
     let result = post_browserless_bql(
         config,
+        proxy,
         BROWSERLESS_PROBE_QUERY,
         "Probe",
         json!({ "url": PROBE_URL }),
@@ -608,6 +620,7 @@ async fn run_browserless_probe(config: &BrowserlessConfig) -> Result<BrowserProb
 
 async fn run_browserless_sign_in(
     service_config: &BrowserlessConfig,
+    proxy: Option<&str>,
     base_url: String,
     cookie_header: String,
     task_config: BrowserlessTaskConfig,
@@ -653,6 +666,7 @@ async fn run_browserless_sign_in(
     let submit_condition = browserless_submit_condition(selector, image_captcha);
     let result = post_browserless_bql(
         service_config,
+        proxy,
         &browserless_sign_in_query(image_captcha, script_submit),
         "CheckIn",
         json!({
@@ -679,13 +693,14 @@ async fn run_browserless_sign_in(
 
 async fn post_browserless_bql(
     config: &BrowserlessConfig,
+    proxy: Option<&str>,
     query: &str,
     operation_name: &str,
     variables: Value,
     timeout: Duration,
 ) -> Result<Value, String> {
     let endpoint = build_browserless_bql_url(config)?;
-    let client = reqwest::Client::builder()
+    let client = service_http_client(proxy)?
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -1865,6 +1880,7 @@ mod tests {
             );
             let result = post_browserless_bql(
                 &service,
+                None,
                 &query.replace(
                     "result: evaluate(content: $resultScript) { value }",
                     "result: evaluate(content: $resultScript) { value }\n clicks: evaluate(content: \"String(window.testClicks)\") { value }",
@@ -2335,4 +2351,12 @@ mod tests {
         let diff = (next3.unwrap() - now3).num_seconds();
         assert_eq!(diff, 30, "diff at 07:59:30 should be 30s");
     }
+}
+
+fn service_http_client(proxy: Option<&str>) -> Result<reqwest::ClientBuilder, String> {
+    let mut builder = reqwest::Client::builder().no_proxy();
+    if let Some(proxy) = proxy.map(str::trim).filter(|v| !v.is_empty()) {
+        builder = builder.proxy(reqwest::Proxy::all(proxy).map_err(|_| "系统代理配置无效")?);
+    }
+    Ok(builder)
 }

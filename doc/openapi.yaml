@@ -1052,6 +1052,10 @@ components:
         log_level: {type: string, nullable: true, enum: [trace, debug, info, warn, error, null]}
         proxy: {type: string, nullable: true}
         use_proxy_for_lightpanda: {type: boolean}
+        use_global_proxy_for_lightpanda: {type: boolean, default: true, description: "开启且 proxy 非空时使用系统代理，否则直接连接"}
+        use_global_proxy_for_browserless: {type: boolean, default: true, description: "开启且 proxy 非空时使用系统代理，否则直接连接"}
+        use_global_proxy_for_llm: {type: boolean, default: true, description: "开启且 proxy 非空时使用系统代理，否则直接连接"}
+
         lightpanda: {$ref: '#/components/schemas/LightpandaConfig'}
         browserless: {$ref: '#/components/schemas/BrowserlessConfig'}
         tag_rule_scan_interval_mins: {type: integer, format: int64}
