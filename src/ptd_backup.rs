@@ -530,6 +530,7 @@ mod tests {
                 adoptions: Some(9),
                 hnr_unsatisfied: Some(1),
                 hnr_pre_warning: Some(2),
+                email: None,
                 extra: BTreeMap::from([("customMetric".to_string(), json!(11))]),
             },
         };

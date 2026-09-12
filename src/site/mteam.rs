@@ -174,6 +174,95 @@ impl MTeamAdapter {
             }
         }
     }
+
+    /// POST `/api/member/profile?uid=` 获取指定用户公开资料。
+    /// 与站点统计独立，供其他调用方按 UID 查询。
+    pub async fn fetch_user_profile_lookup(
+        &self,
+        user_id: &str,
+    ) -> crate::site::user_email::UserProfileLookup {
+        use crate::site::user_email::{UserProfileFailureKind, UserProfileInfo, UserProfileLookup};
+
+        let uid = user_id.trim();
+        if uid.is_empty() || !uid.chars().all(|ch| ch.is_ascii_digit()) {
+            return UserProfileLookup::failed(
+                UserProfileFailureKind::ParseFailed,
+                "UID 无效，必须为纯数字",
+            );
+        }
+
+        let path = format!("/api/member/profile?uid={uid}");
+        let json = match self.api_post(&path, None).await {
+            Ok(json) => json,
+            Err(error) => {
+                let lower = error.to_ascii_lowercase();
+                let kind = if lower.contains("http 401")
+                    || lower.contains("http 403")
+                    || lower.contains("api错误")
+                    || lower.contains("登录")
+                {
+                    UserProfileFailureKind::Intercepted
+                } else if lower.contains("json") || lower.contains("缺少") {
+                    UserProfileFailureKind::ParseFailed
+                } else {
+                    UserProfileFailureKind::RequestFailed
+                };
+                return UserProfileLookup::failed(kind, error);
+            }
+        };
+
+        let Some(data) = json.get("data") else {
+            return UserProfileLookup::failed(
+                UserProfileFailureKind::ParseFailed,
+                "响应缺少 data 字段",
+            );
+        };
+
+        let member_count = data.get("memberCount").unwrap_or(data);
+        let uploaded = member_count.get("uploaded").and_then(json_value_to_u64);
+        let downloaded = member_count.get("downloaded").and_then(json_value_to_u64);
+        let ratio = match (uploaded, downloaded) {
+            (Some(uploaded), Some(downloaded)) if downloaded > 0 => {
+                Some(uploaded as f64 / downloaded as f64)
+            }
+            _ => None,
+        };
+
+        let email = data
+            .get("email")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+
+        UserProfileLookup::ok(UserProfileInfo {
+            uid: data
+                .get("id")
+                .or_else(|| data.get("uid"))
+                .and_then(json_value_to_string)
+                .or_else(|| Some(uid.to_string())),
+            username: data
+                .get("username")
+                .and_then(|value| value.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+            email,
+            uploaded,
+            downloaded,
+            ratio,
+            join_time: data
+                .get("createdDate")
+                .and_then(json_value_to_timestamp_millis),
+            seeding_count: member_count
+                .get("seeding")
+                .or_else(|| member_count.get("seederCount"))
+                .and_then(json_value_to_u32),
+            seeding_size: member_count
+                .get("seedingSize")
+                .and_then(json_value_to_u64),
+        })
+    }
 }
 
 impl SiteAdapter for MTeamAdapter {
@@ -371,6 +460,14 @@ impl SiteAdapter for MTeamAdapter {
             }
         })
     }
+
+    fn fetch_user_profile(
+        &self,
+        user_id: &str,
+    ) -> Pin<Box<dyn Future<Output = crate::site::user_email::UserProfileLookup> + Send + '_>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move { self.fetch_user_profile_lookup(&user_id).await })
+    }
 }
 
 /// 简单的伪随机数生成，基于当前时间纳秒，返回 [0, max_ms) 范围内的毫秒数。
@@ -517,6 +614,117 @@ mod tests {
         let headers = adapter.build_headers();
         assert_eq!(headers["x-browser-profile"], "desktop");
         assert_eq!(headers["x-api-key"], "current");
+    }
+
+    #[tokio::test]
+    async fn fetch_user_profile_posts_member_profile_with_uid() {
+        use crate::site::SiteAdapter;
+        use axum::Router;
+        use axum::extract::Query;
+        use axum::response::IntoResponse;
+        use axum::routing::post;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let hits_for_route = hits.clone();
+        let app = Router::new().route(
+            "/api/member/profile",
+            post(move |Query(query): Query<HashMap<String, String>>| {
+                let hits = hits_for_route.clone();
+                async move {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                    assert_eq!(query.get("uid").map(String::as_str), Some("111"));
+                    axum::Json(serde_json::json!({
+                        "code": "0",
+                        "message": "SUCCESS",
+                        "data": {
+                            "id": "111",
+                            "username": "alice",
+                            "email": "alice@example.com",
+                            "createdDate": "2025-12-14 12:35:09",
+                            "memberCount": {
+                                "uploaded": "82843329824561",
+                                "downloaded": "2467847874773",
+                                "shareRate": "33.569"
+                            }
+                        }
+                    }))
+                    .into_response()
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let adapter = MTeamAdapter::new(
+            format!("http://{address}"),
+            SiteAuth::ApiKey {
+                api_key: "k".into(),
+            },
+            HeaderMap::new(),
+            Client::builder().no_proxy().build().unwrap(),
+        );
+        let lookup = adapter.fetch_user_profile("111").await;
+        server.abort();
+        assert!(lookup.is_ok(), "{}", lookup.message);
+        assert_eq!(lookup.profile.uid.as_deref(), Some("111"));
+        assert_eq!(lookup.profile.username.as_deref(), Some("alice"));
+        assert_eq!(lookup.profile.email.as_deref(), Some("alice@example.com"));
+        assert_eq!(lookup.profile.uploaded, Some(82_843_329_824_561));
+        assert_eq!(lookup.profile.downloaded, Some(2_467_847_874_773));
+        let expected_ratio = 82_843_329_824_561f64 / 2_467_847_874_773f64;
+        assert!((lookup.profile.ratio.unwrap() - expected_ratio).abs() < 1e-9);
+        assert!(lookup.profile.join_time.is_some());
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn fetch_user_profile_allows_empty_email() {
+        use crate::site::SiteAdapter;
+        use axum::Router;
+        use axum::extract::Query;
+        use axum::response::IntoResponse;
+        use axum::routing::post;
+        use std::collections::HashMap;
+
+        let app = Router::new().route(
+            "/api/member/profile",
+            post(|Query(_query): Query<HashMap<String, String>>| async move {
+                axum::Json(serde_json::json!({
+                    "code": "0",
+                    "message": "SUCCESS",
+                    "data": {
+                        "id": "222",
+                        "username": "bob",
+                        "email": "",
+                        "createdDate": "2025-12-14 12:35:09",
+                        "memberCount": {
+                            "uploaded": "100",
+                            "downloaded": "50"
+                        }
+                    }
+                }))
+                .into_response()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let adapter = MTeamAdapter::new(
+            format!("http://{address}"),
+            SiteAuth::ApiKey {
+                api_key: "k".into(),
+            },
+            HeaderMap::new(),
+            Client::builder().no_proxy().build().unwrap(),
+        );
+        let lookup = adapter.fetch_user_profile("222").await;
+        server.abort();
+        assert!(lookup.is_ok(), "{}", lookup.message);
+        assert_eq!(lookup.profile.email, None);
+        assert_eq!(lookup.profile.ratio, Some(2.0));
     }
 
     #[test]

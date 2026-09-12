@@ -90,6 +90,7 @@ export type UserStatsDetails = {
   adoptions?: number | null;
   hnr_unsatisfied?: number | null;
   hnr_pre_warning?: number | null;
+  email?: string | null;
 };
 
 export type SiteStatsRecord = UserStatsDetails & {

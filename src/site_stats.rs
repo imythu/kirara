@@ -9,7 +9,7 @@ use tracing::{error, info};
 use crate::db::Database;
 use crate::error::AppError;
 use crate::net::client_factory;
-use crate::site::SiteWithStats;
+use crate::site::{SiteAdapter, SiteWithStats, UserStats};
 use crate::site::factory as site_factory;
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
@@ -88,25 +88,29 @@ impl SiteStatsRefresher {
             async move {
                 let cached_user_id = site.reusable_user_id();
                 let site_record = site.site_record();
-                let result = match client_factory::resolve_site_client(proxy, site.use_proxy) {
+                let prepared = match client_factory::resolve_site_client(proxy, site.use_proxy) {
                     Ok(client) => {
-                        match site_factory::create_adapter_with_cached_user_id(
+                        site_factory::create_adapter_with_cached_user_id(
                             &site_record,
                             client,
                             cached_user_id,
-                        ) {
-                            Ok(adapter) => adapter.get_user_stats().await,
-                            Err(error) => Err(error),
-                        }
+                        )
                     }
                     Err(error) => Err(format!("创建 HTTP 客户端失败: {}", error)),
                 };
 
-                match result {
-                    Ok(stats) => {
-                        db.upsert_site_stats_success(site.id, &stats, &checked_at)
-                            .await
-                    }
+                match prepared {
+                    Ok(adapter) => match adapter.get_user_stats().await {
+                        Ok(mut stats) => {
+                            apply_own_email(adapter.as_ref(), &site, &mut stats).await;
+                            db.upsert_site_stats_success(site.id, &stats, &checked_at)
+                                .await
+                        }
+                        Err(error) => {
+                            db.upsert_site_stats_error(site.id, &error, &checked_at)
+                                .await
+                        }
+                    },
                     Err(error) => {
                         db.upsert_site_stats_error(site.id, &error, &checked_at)
                             .await
@@ -126,6 +130,49 @@ impl SiteStatsRefresher {
     }
 }
 
+/// 统计刷新成功后补全本人邮箱。
+///
+/// 已保存非空邮箱则跳过（站点侧邮箱不可改，避免重复请求）；
+/// 需要抓取时失败或未公开则不写入，保留历史结果。
+pub(crate) async fn apply_own_email(
+    adapter: &dyn SiteAdapter,
+    previous: &SiteWithStats,
+    stats: &mut UserStats,
+) {
+    if let Some(existing) = previous
+        .stats
+        .as_ref()
+        .and_then(|record| record.details.email.as_deref())
+        .map(str::trim)
+        .filter(|email| !email.is_empty())
+    {
+        stats.details.email = Some(existing.to_string());
+        return;
+    }
+    if stats
+        .details
+        .email
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|email| !email.is_empty())
+    {
+        return;
+    }
+    let Some(uid) = stats
+        .uid
+        .as_deref()
+        .map(str::trim)
+        .filter(|uid| !uid.is_empty())
+    else {
+        return;
+    };
+    let lookup = adapter.fetch_user_profile(uid).await;
+    let email = lookup.email().trim();
+    if !email.is_empty() {
+        stats.details.email = Some(email.to_string());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -136,7 +183,125 @@ mod tests {
     use axum::routing::get;
 
     use super::*;
-    use crate::site::{UserStats, UserStatsDetails};
+    use crate::site::{
+        SiteAdapter, TorrentAttributes, UserStats, UserStatsDetails,
+        user_email::{UserProfileInfo, UserProfileLookup},
+    };
+    use std::future::Future;
+    use std::pin::Pin;
+
+    struct StubAdapter {
+        profile: UserProfileLookup,
+        fetch_calls: Arc<AtomicUsize>,
+    }
+
+    impl SiteAdapter for StubAdapter {
+        fn get_user_stats(
+            &self,
+        ) -> Pin<Box<dyn Future<Output = Result<UserStats, String>> + Send + '_>> {
+            Box::pin(async { unreachable!("stats not used in this unit test") })
+        }
+
+        fn get_torrent_attributes(
+            &self,
+            _detail_url: &str,
+        ) -> Pin<Box<dyn Future<Output = Result<TorrentAttributes, String>> + Send + '_>> {
+            Box::pin(async { unreachable!("torrents not used in this unit test") })
+        }
+
+        fn fetch_user_profile(
+            &self,
+            _user_id: &str,
+        ) -> Pin<Box<dyn Future<Output = UserProfileLookup> + Send + '_>> {
+            self.fetch_calls.fetch_add(1, Ordering::SeqCst);
+            let profile = self.profile.clone();
+            Box::pin(async move { profile })
+        }
+    }
+
+    fn lookup_with_email(email: &str) -> UserProfileLookup {
+        UserProfileLookup::ok(UserProfileInfo {
+            email: Some(email.to_string()),
+            ..Default::default()
+        })
+    }
+
+    fn site_with_email(email: Option<&str>) -> SiteWithStats {
+        SiteWithStats {
+            id: 1,
+            name: "tracker".into(),
+            site_type: "nexusphp".into(),
+            base_url: "https://pt.example".into(),
+            auth_config: "{}".into(),
+            request_headers: "[]".into(),
+            use_proxy: false,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            stats: Some(crate::site::SiteStatsRecord {
+                site_id: 1,
+                details: UserStatsDetails {
+                    email: email.map(str::to_string),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+        }
+    }
+
+    fn stats_with_uid() -> UserStats {
+        UserStats {
+            uid: Some("42".into()),
+            username: "Alice".into(),
+            uploaded: 1,
+            downloaded: 1,
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_own_email_skips_fetch_when_already_present() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let adapter = StubAdapter {
+            profile: lookup_with_email("new@example.com"),
+            fetch_calls: calls.clone(),
+        };
+        let previous = site_with_email(Some("kept@example.com"));
+        let mut stats = stats_with_uid();
+        apply_own_email(&adapter, &previous, &mut stats).await;
+        assert_eq!(stats.details.email.as_deref(), Some("kept@example.com"));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn apply_own_email_saves_successful_fetch() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let adapter = StubAdapter {
+            profile: lookup_with_email("fetched@example.com"),
+            fetch_calls: calls.clone(),
+        };
+        let previous = site_with_email(None);
+        let mut stats = stats_with_uid();
+        apply_own_email(&adapter, &previous, &mut stats).await;
+        assert_eq!(stats.details.email.as_deref(), Some("fetched@example.com"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn apply_own_email_ignores_failed_or_empty_lookup() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let adapter = StubAdapter {
+            profile: UserProfileLookup::failed(
+                crate::site::user_email::UserProfileFailureKind::Intercepted,
+                "blocked",
+            ),
+            fetch_calls: calls.clone(),
+        };
+        let previous = site_with_email(None);
+        let mut stats = stats_with_uid();
+        apply_own_email(&adapter, &previous, &mut stats).await;
+        assert_eq!(stats.details.email, None);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
 
     #[tokio::test]
     async fn background_refresh_is_deduplicated_while_another_refresh_is_running() {

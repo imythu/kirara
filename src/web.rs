@@ -238,6 +238,7 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
         )
         .route("/api/sites/{id}/sync", post(sync_site))
         .route("/api/sites/{id}/stats", get(get_site_stats))
+        .route("/api/invite-profile/lookup", post(lookup_invite_profiles))
         .route("/api/proxy/test", post(test_proxy))
         // 自动签到
         .route(
@@ -3003,6 +3004,132 @@ async fn list_sites(State(state): State<AppState>) -> Result<Json<Vec<SiteRespon
     ))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InviteProfileLookupRequest {
+    items: Vec<InviteProfileLookupItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InviteProfileLookupItem {
+    site_id: i64,
+    uid: String,
+}
+
+#[derive(Debug, Serialize)]
+struct InviteProfileLookupItemResult {
+    site_id: i64,
+    site_name: String,
+    site_type: String,
+    uid: String,
+    username: Option<String>,
+    email: Option<String>,
+    uploaded: Option<u64>,
+    downloaded: Option<u64>,
+    ratio: Option<f64>,
+    join_time: Option<i64>,
+    seeding_count: Option<u32>,
+    seeding_size: Option<u64>,
+    failure: Option<String>,
+    message: String,
+}
+
+/// 求药/发药：按站点 + UID 拉取公开用户资料。与站点统计独立。
+async fn lookup_invite_profiles(
+    State(state): State<AppState>,
+    Json(payload): Json<InviteProfileLookupRequest>,
+) -> Result<Json<Vec<InviteProfileLookupItemResult>>, ApiError> {
+    if payload.items.is_empty() {
+        return Err(ApiError::bad_request("至少需要一条站点与 UID"));
+    }
+    if payload.items.len() > 20 {
+        return Err(ApiError::bad_request("单次最多查询 20 条"));
+    }
+    let settings = state.db.get_settings().await?;
+    let proxy = settings.proxy.as_deref();
+    let mut results = Vec::with_capacity(payload.items.len());
+    for item in payload.items {
+        let uid = item.uid.trim().to_string();
+        if uid.is_empty() || !uid.chars().all(|ch| ch.is_ascii_digit()) {
+            results.push(InviteProfileLookupItemResult {
+                site_id: item.site_id,
+                site_name: String::new(),
+                site_type: String::new(),
+                uid,
+                username: None,
+                email: None,
+                uploaded: None,
+                downloaded: None,
+                ratio: None,
+                join_time: None,
+                seeding_count: None,
+                seeding_size: None,
+                failure: Some("parse_failed".into()),
+                message: "UID 无效，必须为纯数字".into(),
+            });
+            continue;
+        }
+        let Some(site) = state.db.get_site_with_stats(item.site_id).await? else {
+            results.push(InviteProfileLookupItemResult {
+                site_id: item.site_id,
+                site_name: String::new(),
+                site_type: String::new(),
+                uid,
+                username: None,
+                email: None,
+                uploaded: None,
+                downloaded: None,
+                ratio: None,
+                join_time: None,
+                seeding_count: None,
+                seeding_size: None,
+                failure: Some("parse_failed".into()),
+                message: "站点不存在".into(),
+            });
+            continue;
+        };
+        let site_record = site.site_record();
+        let prepared = client_factory::resolve_site_client(proxy, site.use_proxy)
+            .map_err(|error| format!("创建 HTTP 客户端失败: {error}"))
+            .and_then(|client| {
+                site_factory::create_adapter(&site_record, client)
+                    .map_err(|error| format!("创建站点适配器失败: {error}"))
+            });
+        let (profile, failure, message) = match prepared {
+            Ok(adapter) => {
+                let lookup = adapter.fetch_user_profile(&uid).await;
+                let kind = lookup
+                    .failure
+                    .map(|kind| kind.as_str().to_string());
+                (lookup.profile, kind, lookup.message)
+            }
+            Err(error) => (
+                crate::site::user_email::UserProfileInfo::default(),
+                Some("request_failed".into()),
+                error,
+            ),
+        };
+        results.push(InviteProfileLookupItemResult {
+            site_id: site.id,
+            site_name: site.name.clone(),
+            site_type: site.site_type.clone(),
+            uid: profile.uid.clone().unwrap_or(uid),
+            username: profile.username,
+            email: profile.email,
+            uploaded: profile.uploaded,
+            downloaded: profile.downloaded,
+            ratio: profile.ratio,
+            join_time: profile.join_time,
+            seeding_count: profile.seeding_count,
+            seeding_size: profile.seeding_size,
+            failure,
+            message,
+        });
+    }
+    Ok(Json(results))
+}
+
 async fn list_site_presets() -> Json<&'static [crate::ptd_site_catalog::PtdSitePreset]> {
     Json(crate::ptd_site_catalog::SITE_PRESETS)
 }
@@ -3140,7 +3267,9 @@ async fn sync_site(
             client,
             site.reusable_user_id(),
         )?;
-        adapter.get_user_stats().await
+        let mut stats = adapter.get_user_stats().await?;
+        crate::site_stats::apply_own_email(adapter.as_ref(), &site, &mut stats).await;
+        Ok::<crate::site::UserStats, String>(stats)
     }
     .await;
     let result = match result {

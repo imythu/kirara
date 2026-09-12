@@ -7,6 +7,7 @@ import {
   Database,
   Download,
   FileText,
+  Gift,
   HardDrive,
   FolderInput,
   LayoutDashboard,
@@ -45,6 +46,7 @@ type AppPage =
   | "media"
   | "rss"
   | "sites"
+  | "invite-profile"
   | "downloaders"
   | "torrent-transfer"
   | "brush-tasks"
@@ -62,6 +64,9 @@ const navGroups: Array<{ key: NavGroup; label: string }> = [
 ];
 
 const SitesPage = lazy(() => import("@/pages/sites-page").then((module) => ({ default: module.SitesPage })));
+const InviteProfilePage = lazy(() =>
+  import("@/pages/invite-profile-page").then((module) => ({ default: module.InviteProfilePage })),
+);
 const DownloadersPage = lazy(() => import("@/pages/downloaders-page").then((module) => ({ default: module.DownloadersPage })));
 const TorrentTransferPage = lazy(() => import("@/pages/torrent-transfer-page").then((module) => ({ default: module.TorrentTransferPage })));
 const BrushTasksPage = lazy(() => import("@/pages/brush-tasks-page").then((module) => ({ default: module.BrushTasksPage })));
@@ -104,6 +109,13 @@ const navItems: Array<{
     label: "RSS 下载",
     description: "订阅站点更新，自动下载符合条件的新资源",
     icon: Rss,
+    group: "resources",
+  },
+  {
+    key: "invite-profile",
+    label: "求药发药",
+    description: "复制站点+UID 求药信息；粘贴后逐个查询公开资料",
+    icon: Gift,
     group: "resources",
   },
   {
@@ -164,6 +176,7 @@ function readPageFromHash(): AppPage {
     "media",
     "rss",
     "sites",
+    "invite-profile",
     "downloaders",
     "torrent-transfer",
     "brush-tasks",
@@ -623,6 +636,7 @@ export default function App() {
               {page === "media" ? <MediaPage /> : null}
               {page === "rss" ? <RssPage /> : null}
               {page === "sites" ? <SitesPage /> : null}
+              {page === "invite-profile" ? <InviteProfilePage /> : null}
               {page === "downloaders" ? <DownloadersPage /> : null}
               {page === "torrent-transfer" && selfUse ? <TorrentTransferPage /> : null}
               {page === "brush-tasks" ? <BrushTasksPage /> : null}

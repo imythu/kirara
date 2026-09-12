@@ -4,6 +4,7 @@ pub mod nexusphp;
 mod nexusphp_levels;
 pub mod gazelle;
 pub mod u2_shoutbox;
+pub mod user_email;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -258,6 +259,9 @@ pub struct UserStatsDetails {
     pub hnr_unsatisfied: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hnr_pre_warning: Option<u64>,
+    /// 本人公开邮箱。站点通常不允许修改；已保存非空值后跳过再次抓取。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
     /// PT-Depiler permits site-specific user information keys. Preserve those keys so a
     /// scheduled refresh can round-trip data added by a specialized adapter later.
     #[serde(default, flatten)]
@@ -441,6 +445,15 @@ pub trait SiteAdapter: Send + Sync {
         &self,
         detail_url: &str,
     ) -> Pin<Box<dyn Future<Output = Result<TorrentAttributes, String>> + Send + '_>>;
+
+    /// 抓取本人公开用户资料（用户名/UID/邮箱/流量）。默认不支持，返回空结果。
+    fn fetch_user_profile(
+        &self,
+        user_id: &str,
+    ) -> Pin<Box<dyn Future<Output = user_email::UserProfileLookup> + Send + '_>> {
+        let _ = user_id;
+        Box::pin(async { user_email::UserProfileLookup::ok(Default::default()) })
+    }
 }
 
 #[cfg(test)]

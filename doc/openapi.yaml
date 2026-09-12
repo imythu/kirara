@@ -1369,6 +1369,7 @@ components:
         adoptions: {type: integer, format: int64, nullable: true}
         hnr_unsatisfied: {type: integer, format: int64, nullable: true}
         hnr_pre_warning: {type: integer, format: int64, nullable: true}
+        email: {type: string, nullable: true}
         updated_at: {type: string, nullable: true}
         last_checked_at: {type: string}
         last_error: {type: string, nullable: true}
@@ -1467,6 +1468,7 @@ components:
         adoptions: {type: integer, format: int64, nullable: true}
         hnr_unsatisfied: {type: integer, format: int64, nullable: true}
         hnr_pre_warning: {type: integer, format: int64, nullable: true}
+        email: {type: string, nullable: true}
 
     SiteSyncResult:
       type: object

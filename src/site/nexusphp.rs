@@ -101,7 +101,7 @@ impl NexusPhpAdapter {
             let detail_url = self.resolve_same_origin_url(&current_user.href)?;
             attempted_detail_url = Some(detail_url.clone());
             match self
-                .fetch_user_profile(&detail_url, &current_user.uid)
+                .fetch_user_profile_page(&detail_url, &current_user.uid)
                 .await
             {
                 Ok(html) => {
@@ -151,7 +151,7 @@ impl NexusPhpAdapter {
                 // and do not immediately retry the exact request that already failed.
                 if attempted_detail_url.as_deref() != Some(detail_url.as_str()) {
                     match self
-                        .fetch_user_profile(&detail_url, &current_user.uid)
+                        .fetch_user_profile_page(&detail_url, &current_user.uid)
                         .await
                     {
                         Ok(html) => detail_html = Some(html),
@@ -407,7 +407,7 @@ impl NexusPhpAdapter {
             .and_then(|element| first_number(&element.text().collect::<String>()))
     }
 
-    async fn fetch_user_profile(&self, url: &str, user_id: &str) -> Result<String, String> {
+    async fn fetch_user_profile_page(&self, url: &str, user_id: &str) -> Result<String, String> {
         let html = self.fetch_html_page(url, "用户详情页").await?;
         if extract_current_user(&html).is_some_and(|current| current.uid != user_id) {
             return Err("用户详情页的登录用户与请求的 UID 不一致，已拒绝使用该页统计".to_string());
@@ -455,6 +455,44 @@ impl NexusPhpAdapter {
             return Err("用户详情链接跳转到了其他站点，已拒绝请求".to_string());
         }
         Ok(url.to_string())
+    }
+
+    /// 读取指定 UID 的公开用户资料。
+    /// 复用项目现有的 `userdetails.php` 请求与标签解析，额外解析邮箱。
+    async fn fetch_user_profile_inner(
+        &self,
+        user_id: &str,
+    ) -> crate::site::user_email::UserProfileLookup {
+        use crate::site::user_email::{UserProfileFailureKind, UserProfileLookup};
+
+        let Some(uid) = normalize_user_id(user_id) else {
+            return UserProfileLookup::failed(
+                UserProfileFailureKind::ParseFailed,
+                "UID 无效，必须为纯数字",
+            );
+        };
+        let url = format!("{}/userdetails.php?id={}", self.base_url, uid);
+        let html = match self.fetch_html_page(&url, "用户详情页").await {
+            Ok(html) => html,
+            Err(error) => {
+                let kind = if error.contains("Cloudflare") || error.contains("登录页") {
+                    UserProfileFailureKind::Intercepted
+                } else if error.contains("Cookie 格式无效") {
+                    UserProfileFailureKind::ParseFailed
+                } else {
+                    UserProfileFailureKind::RequestFailed
+                };
+                return UserProfileLookup::failed(kind, error);
+            }
+        };
+
+        // 与 get_user_stats 相同的可见文本 + 标签解析，再补邮箱。
+        let mut profile =
+            crate::site::user_email::parse_user_profile_html(&html, Some(uid.as_str()));
+        if profile.username.is_none() {
+            profile.username = Some(uid.clone());
+        }
+        UserProfileLookup::ok(profile)
     }
 
     async fn fetch_user_torrent_summary(
@@ -635,6 +673,14 @@ impl SiteAdapter for NexusPhpAdapter {
             Ok(Self::detect_torrent_attributes(&html))
         })
     }
+
+    fn fetch_user_profile(
+        &self,
+        user_id: &str,
+    ) -> Pin<Box<dyn Future<Output = crate::site::user_email::UserProfileLookup> + Send + '_>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move { self.fetch_user_profile_inner(&user_id).await })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -691,7 +737,7 @@ fn json_value_to_string(value: &Value) -> Option<String> {
         .or_else(|| value.as_i64().map(|n| n.to_string()))
 }
 
-fn ratio_from_totals(uploaded: Option<u64>, downloaded: Option<u64>) -> Option<f64> {
+pub(crate) fn ratio_from_totals(uploaded: Option<u64>, downloaded: Option<u64>) -> Option<f64> {
     match (uploaded, downloaded) {
         (Some(uploaded), Some(downloaded)) if downloaded > 0 => {
             Some(uploaded as f64 / downloaded as f64)
@@ -827,7 +873,7 @@ fn decode_cookie_user_id(value: &str, allow_plain_uid: bool) -> Option<String> {
     None
 }
 
-fn extract_username(html: &str) -> Option<String> {
+pub(crate) fn extract_username(html: &str) -> Option<String> {
     let document = Html::parse_document(html);
     for selector in [
         "#info_block .User_Name",
@@ -848,7 +894,7 @@ fn extract_username(html: &str) -> Option<String> {
     None
 }
 
-fn extract_user_id_from_href(href: &str) -> Option<String> {
+pub(crate) fn extract_user_id_from_href(href: &str) -> Option<String> {
     let base = Url::parse("https://tracker.invalid/").ok()?;
     let url = base.join(href).ok()?;
     url.query_pairs()
@@ -864,7 +910,7 @@ fn normalize_text<'a>(parts: impl Iterator<Item = &'a str>) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-fn extract_visible_text(html: &str) -> String {
+pub(crate) fn extract_visible_text(html: &str) -> String {
     let document = Html::parse_document(html);
     normalize_text(document.root_element().text()).unwrap_or_default()
 }
@@ -899,7 +945,7 @@ fn parse_labeled_number(text: &str, labels: &[&str]) -> Option<f64> {
     })
 }
 
-fn parse_labeled_integer(text: &str, labels: &[&str]) -> Option<u32> {
+pub(crate) fn parse_labeled_integer(text: &str, labels: &[&str]) -> Option<u32> {
     // Counts must immediately follow their label. The generic number parser
     // also matches "Seeding Bonus Per Hour", and truncates fractional rates.
     labels.iter().find_map(|label| {
@@ -1068,7 +1114,7 @@ fn parse_table_labeled_value(html: &str, labels: &[&str]) -> Option<String> {
     fallback
 }
 
-fn parse_profile_value(html: &str, labels: &[&str]) -> Option<String> {
+pub(crate) fn parse_profile_value(html: &str, labels: &[&str]) -> Option<String> {
     parse_table_labeled_value(html, labels).or_else(|| {
         let document = Html::parse_document(html);
         let selector = Selector::parse("span").ok()?;
@@ -1229,7 +1275,7 @@ fn parse_hourly_amounts(text: &str) -> Vec<f64> {
         .unwrap().captures_iter(text).filter_map(|capture| first_number(&capture[1])).collect()
 }
 
-fn parse_user_datetime_millis(value: &str) -> Option<i64> {
+pub(crate) fn parse_user_datetime_millis(value: &str) -> Option<i64> {
     let value = value.trim();
     if let Ok(timestamp) = value.parse::<i64>() {
         return normalize_timestamp_millis(timestamp);
@@ -1585,6 +1631,7 @@ mod tests {
         parse_seeding_ajax_count, parse_table_labeled_value, parse_user_datetime_millis,
         parse_user_torrent_ajax_summary,
     };
+    use crate::site::user_email::UserProfileFailureKind;
     use crate::site::SiteAdapter;
 
     async fn serve_fixture(app: Router) -> (String, tokio::task::JoinHandle<()>) {
@@ -2362,5 +2409,85 @@ mod tests {
             parse_labeled_duration_seconds("平均做种时间：2.5 days", &["平均做种时间"]),
             Some(216_000)
         );
+    }
+
+    #[tokio::test]
+    async fn fetch_user_email_returns_empty_when_profile_hides_email() {
+        let app = Router::new().route(
+            "/userdetails.php",
+            get(|Query(query): Query<HashMap<String, String>>| async move {
+                let id = query.get("id").cloned().unwrap_or_default();
+                Html(format!(
+                    r#"<html><body>
+                      <div id="info_block"><a class="User_Name" href="/userdetails.php?id={id}">Bob</a></div>
+                      <table><tr><td>用户ID</td><td>{id}</td></tr></table>
+                    </body></html>"#
+                ))
+            }),
+        );
+        let (base_url, server) = serve_fixture(app).await;
+        let adapter = fixture_adapter(base_url);
+        let lookup = adapter.fetch_user_profile("708227").await;
+        server.abort();
+        assert_eq!(lookup.email(), "");
+        assert_eq!(lookup.failure, None);
+        assert!(lookup.is_ok());
+        assert_eq!(lookup.profile.uid.as_deref(), Some("708227"));
+        assert_eq!(lookup.profile.username.as_deref(), Some("Bob"));
+    }
+
+    #[tokio::test]
+    async fn fetch_user_email_reads_mailto_from_profile() {
+        let app = Router::new().route(
+            "/userdetails.php",
+            get(|| async {
+                Html(
+                    r#"<html><body>
+                      <div id="info_block"><a class="User_Name" href="/userdetails.php?id=708227">sun2008050</a></div>
+                      <table>
+                        <tr><td class="rowhead">上传量</td><td>4 GiB</td></tr>
+                        <tr><td class="rowhead">下载量</td><td>1 GiB</td></tr>
+                        <tr><td class="rowhead">邮箱</td>
+                        <td><a href="mailto:2275974893@qq.com">2275974893@qq.com</a></td></tr>
+                      </table>
+                    </body></html>"#
+                    .to_string(),
+                )
+            }),
+        );
+        let (base_url, server) = serve_fixture(app).await;
+        let adapter = fixture_adapter(base_url);
+        let lookup = adapter.fetch_user_profile("708227").await;
+        server.abort();
+        assert_eq!(lookup.email(), "2275974893@qq.com");
+        assert_eq!(lookup.failure, None);
+        assert_eq!(lookup.profile.username.as_deref(), Some("sun2008050"));
+        assert_eq!(lookup.profile.uploaded, Some(4 * 1024 * 1024 * 1024));
+        assert_eq!(lookup.profile.downloaded, Some(1024 * 1024 * 1024));
+        assert_eq!(lookup.profile.ratio, Some(4.0));
+    }
+
+    #[tokio::test]
+    async fn fetch_user_email_classifies_intercepted_login_page() {
+        let app = Router::new().route(
+            "/userdetails.php",
+            get(|| async {
+                Html(
+                    r#"<html><body>
+                      <form action="login.php" method="post">
+                        <input type="password" name="password" />
+                        <input type="text" name="username" />
+                      </form>
+                    </body></html>"#
+                    .to_string(),
+                )
+            }),
+        );
+        let (base_url, server) = serve_fixture(app).await;
+        let adapter = fixture_adapter(base_url);
+        let lookup = adapter.fetch_user_profile("708227").await;
+        server.abort();
+        assert_eq!(lookup.email(), "");
+        assert_eq!(lookup.failure, Some(UserProfileFailureKind::Intercepted));
     }
 }

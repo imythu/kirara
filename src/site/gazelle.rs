@@ -57,6 +57,27 @@ impl GazelleAdapter {
             .map_err(|_| "读取 Gazelle 响应失败".to_string())
     }
 
+    /// 读取 Gazelle `/user.php?id=` 公开资料页。
+    async fn fetch_user_profile_inner(
+        &self,
+        user_id: &str,
+    ) -> crate::site::user_email::UserProfileLookup {
+        let cookie = match &self.auth {
+            SiteAuth::Cookie { cookie } | SiteAuth::CookiePasskey { cookie, .. } => {
+                cookie.as_str()
+            }
+            _ => "",
+        };
+        crate::site::user_email::fetch_gazelle_user_profile(
+            &self.client,
+            &self.base_url,
+            cookie,
+            user_id,
+            Some(&self.headers),
+        )
+        .await
+    }
+
     async fn api(&self, action: &str, id: Option<&str>) -> Result<Value, String> {
         let mut query = vec![("action", action)];
         if let Some(id) = id {
@@ -210,6 +231,14 @@ impl SiteAdapter for GazelleAdapter {
             Err("Gazelle 当前仅支持用户统计，尚未支持种子属性获取".to_string())
         })
     }
+
+    fn fetch_user_profile(
+        &self,
+        user_id: &str,
+    ) -> Pin<Box<dyn Future<Output = crate::site::user_email::UserProfileLookup> + Send + '_>> {
+        let user_id = user_id.to_string();
+        Box::pin(async move { self.fetch_user_profile_inner(&user_id).await })
+    }
 }
 
 #[cfg(test)]
@@ -249,5 +278,54 @@ mod tests {
             Some((25.18 * 1073741824.0) as u64)
         );
         assert_eq!(parse_true_downloaded("<html>Login</html>"), None);
+    }
+
+    #[tokio::test]
+    async fn fetch_user_email_uses_user_php_path() {
+        use axum::Router;
+        use axum::extract::Query;
+        use axum::response::Html;
+        use axum::routing::get;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let hits_for_route = hits.clone();
+        let app = Router::new().route(
+            "/user.php",
+            get(move |Query(query): Query<HashMap<String, String>>| {
+                let hits = hits_for_route.clone();
+                async move {
+                    hits.fetch_add(1, Ordering::SeqCst);
+                    let id = query.get("id").cloned().unwrap_or_default();
+                    Html(format!(
+                        r#"<html><body>
+                          <a href="mailto:gazelle-user@example.com">gazelle-user@example.com</a>
+                          <div>id={id}</div>
+                        </body></html>"#
+                    ))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let base_url = format!("http://{address}");
+        let adapter = GazelleAdapter::new(
+            base_url,
+            SiteAuth::Cookie {
+                cookie: "session=valid".to_string(),
+            },
+            HeaderMap::new(),
+            Client::builder().no_proxy().build().unwrap(),
+        );
+        let lookup = adapter.fetch_user_profile("33037").await;
+        server.abort();
+        assert_eq!(lookup.email(), "gazelle-user@example.com");
+        assert_eq!(lookup.failure, None);
+        assert_eq!(lookup.profile.uid.as_deref(), Some("33037"));
+        assert_eq!(lookup.profile.join_time, None);
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 }
