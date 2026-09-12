@@ -2,7 +2,7 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const output = '/workspace/rflush/.impeccable/review/ptd-import';
+const output = process.env.PTD_IMPORT_SCREENSHOTS || '/tmp/kirara-ptd-import';
 (async () => {
  fs.mkdirSync(output,{recursive:true});
  const browser = await chromium.launch({headless:true,args:['--no-sandbox']});
@@ -23,14 +23,45 @@ const output = '/workspace/rflush/.impeccable/review/ptd-import';
     else if(path.includes('/sites')) body=[];
     await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
    });
-   await page.goto('http://127.0.0.1:4179/#/sites');
-   await page.getByRole('button',{name:'导入 PTD 配置',exact:true}).click();
+   await page.goto(`${process.env.SITES_TEST_URL || 'http://127.0.0.1:5173'}/#/sites`);
+   await page.getByRole('button',{name:'更多站点操作',exact:true}).click();
+   await page.getByRole('menuitem',{name:/导入 PTD 数据/}).click();
+   await page.getByText(/PTD 即 PT-depiler/).waitFor();
+   assert.equal(await page.getByRole('button',{name:'从备份导入',exact:true}).getAttribute('aria-pressed'),'true');
+   const chooserEvent = page.waitForEvent('filechooser');
+   await page.getByRole('button',{name:'选择文件',exact:true}).click();
+   await chooserEvent;
    const panel=page.getByRole('region',{name:'PTD 配置导入'});
    const submit=panel.getByRole('button',{name:'开始导入',exact:true});
    assert(await submit.isDisabled());
    await panel.getByLabel('PTD 备份文件',{exact:true}).setInputFiles({name:'empty.json',mimeType:'application/json',buffer:Buffer.alloc(0)});
    await panel.getByText('请选择非空且不超过 8 MiB 的文件').waitFor();
    const payload=Buffer.from(JSON.stringify({'hdhome.org':[{domain:'hdhome.org',name:'c_secure_pass',value:'synthetic',path:'/'}]}));
+   await panel.getByLabel('PTD 备份文件',{exact:true}).setInputFiles({name:'cookies.json',mimeType:'application/json',buffer:payload});
+   await panel.getByRole('button',{name:'更换文件',exact:true}).waitFor();
+   await panel.getByRole('button',{name:'移除文件',exact:true}).click();
+   assert(await submit.isDisabled());
+   await panel.getByLabel('PTD 备份文件',{exact:true}).setInputFiles({name:'cookies.json',mimeType:'application/json',buffer:payload});
+   const dropzone=panel.getByRole('group',{name:'备份文件选择区'});
+   async function dropFiles(names) {
+    const transfer=await page.evaluateHandle(names=>{
+     const data=new DataTransfer();
+     for(const name of names) data.items.add(new File(['synthetic'],name,{type:'application/json'}));
+     return data;
+    },names);
+    await dropzone.dispatchEvent('dragenter',{dataTransfer:transfer});
+    await panel.getByText('松开以选择备份文件',{exact:true}).waitFor();
+    await dropzone.dispatchEvent('drop',{dataTransfer:transfer});
+    await transfer.dispose();
+   }
+   await dropFiles(['backup.txt']);
+   await panel.getByText('请选择 PTD 导出的 ZIP 或 cookies.json 文件',{exact:true}).waitFor();
+   assert(await submit.isDisabled());
+   await dropFiles(['one.json','two.json']);
+   await panel.getByText('一次请选择一个备份文件',{exact:true}).waitFor();
+   await dropFiles(['cookies.json']);
+   assert.equal(writes.length,0,'dropping a file does not submit it');
+   assert.equal(await submit.isDisabled(),false);
    await panel.getByLabel('PTD 备份文件',{exact:true}).setInputFiles({name:'cookies.json',mimeType:'application/json',buffer:payload});
    await page.screenshot({path:`${output}/${width}-settings.png`,fullPage:true});
    await submit.click();

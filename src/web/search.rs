@@ -7,8 +7,11 @@ use crate::search::{ParsedFilter, SearchDocument, SearchFilters};
 pub(super) enum SiteSort {
     #[default]
     JoinTime,
+    JoinTimeAsc,
     CreatedAt,
+    CreatedAtAsc,
     Name,
+    NameDesc,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -490,6 +493,20 @@ fn search_snapshot_results(
                     .as_ref()
                     .and_then(|s| s.details.join_time)
                     .cmp(&a.stats.as_ref().and_then(|s| s.details.join_time)),
+                SiteSort::JoinTimeAsc => {
+                    let a = a.stats.as_ref().and_then(|s| s.details.join_time);
+                    let b = b.stats.as_ref().and_then(|s| s.details.join_time);
+                    match (a, b) {
+                        (Some(a), Some(b)) => a.cmp(&b),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    }
+                }
+                SiteSort::CreatedAtAsc => a.created_at.cmp(&b.created_at),
+                SiteSort::NameDesc => {
+                    crate::search::normalize(&b.name).cmp(&crate::search::normalize(&a.name))
+                }
                 SiteSort::CreatedAt => b.created_at.cmp(&a.created_at),
                 SiteSort::Name => {
                     crate::search::normalize(&a.name).cmp(&crate::search::normalize(&b.name))
@@ -562,6 +579,9 @@ mod tests {
             (None, vec![3, 2, 1]),
             (Some(SiteSort::CreatedAt), vec![2, 3, 1]),
             (Some(SiteSort::Name), vec![2, 3, 1]),
+            (Some(SiteSort::JoinTimeAsc), vec![2, 3, 1]),
+            (Some(SiteSort::CreatedAtAsc), vec![1, 3, 2]),
+            (Some(SiteSort::NameDesc), vec![1, 3, 2]),
         ] {
             for (index, expected_id) in expected.into_iter().enumerate() {
                 let mut snapshot = db.search_snapshot("sites", None, None).await.unwrap();

@@ -84,20 +84,20 @@ export function WebdavSyncPanel() {
     catch (e) { if (mounted.current) setRetryError({ id, message: (e as Error).message || "重新同步失败，请重试" }); }
     finally { if (mounted.current) setRetrying(null); }
   }
-  if (isDesktop) return <section className="space-y-3 p-4 sm:p-6" aria-label="WebDAV 接收"><h3 className="text-base font-bold">Cookie 自动同步</h3><p className="text-sm text-muted">桌面版通过本地进程通道通信，没有可供 PTD 连接的 Web 端口。请使用 Web 服务版，在其站点管理中配置自动同步。</p></section>;
+  if (isDesktop) return <section className="space-y-3 p-4 sm:p-6" aria-label="WebDAV 接收"><h3 className="text-base font-bold">接收 PTD 自动同步</h3><p className="text-sm text-muted">桌面版通过本地进程通道通信，没有可供 PTD 连接的 Web 端口。请使用 Web 服务版，在其站点管理中配置自动同步。</p></section>;
   const address = new URL("/dav/ptd/", window.location.origin).href;
   const runningText = config?.enabled ? config.runtime_error ? "启动失败" : config.running ? "正在接收" : "正在启动" : config?.running ? "正在停止" : "未启用";
 
   return <section className="space-y-4 p-4 sm:space-y-6 sm:p-6" aria-label="WebDAV 接收">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="text-base font-bold">Cookie 自动同步</h3><p className="mt-1 text-sm text-muted">PTD 定时推送后，自动更新站点登录凭据。</p></div>
+      <div><h3 className="text-base font-bold">接收 PTD 自动同步</h3><p className="mt-1 text-sm text-muted">在 PTD 中配置下方 WebDAV 地址后，PTD 会将备份推送到云母，云母自动读取其中的站点与 Cookie，并按你的设置添加站点或更新登录凭据。</p></div>
       {config && <span className="text-sm font-semibold" role="status">{runningText}</span>}
     </div>
     {loadError && <div role="alert" className="text-sm text-destructive">{loadError} <button type="button" className="underline underline-offset-2" onClick={() => void refresh(!form)}>重新加载</button></div>}
     {!form ? !loadError && <p role="status" className="flex items-center gap-2 text-sm text-muted"><Loader2 className="size-4 motion-safe:animate-spin" />正在加载接收设置…</p> : <>
       <fieldset disabled={saving} className="space-y-3 disabled:opacity-60 sm:space-y-4">
         <legend className="sr-only">接收服务设置</legend>
-        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold"><input type="checkbox" className="size-4 accent-primary" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />启用 WebDAV 接收</label>
+        <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold"><input type="checkbox" className="size-4 accent-primary" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} />允许 PTD 通过 WebDAV 同步</label>
         <p className="text-xs leading-5 text-muted">与当前 Web 页面共用地址和端口，接收路径为 /dav/ptd/，无需额外映射端口。</p>
         <div className="space-y-2"><Label htmlFor="dav-username">接收用户名</Label><Input id="dav-username" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} autoComplete="off" maxLength={128} /></div>
         <div className="space-y-2"><Label htmlFor="dav-policy">已有站点</Label><Select id="dav-policy" disabled={saving} value={form.existing_policy} onChange={value => setForm({ ...form, existing_policy: value })} options={[{ value: "update", label: "更新 Cookie，保留其他配置" }, { value: "skip", label: "跳过，保留现有 Cookie" }]} /></div>

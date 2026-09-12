@@ -21,7 +21,6 @@ import {
   RotateCcw,
   Search,
   X,
-  CloudCog,
   Server,
   KeyRound,
   Clock3,
@@ -33,6 +32,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SiteActionMenu } from "@/components/site-action-menu";
 import { SearchFeedback, SearchPagination } from "@/components/search-controls";
 import { SiteSearchBindingField, useSiteSearchBinding } from "@/components/site-search-binding";
 import { useServerSearch } from "@/lib/server-search";
@@ -693,6 +693,7 @@ export function SitesPage() {
   const [sitesError, setSitesError] = useState("");
   const [actionsTarget, setActionsTarget] = useState<SiteRecord | null>(null);
   const [credentialMessage, setCredentialMessage] = useState("");
+  const [siteFiltersOpen, setSiteFiltersOpen] = useState(false);
   const [refreshAllSubmitting, setRefreshAllSubmitting] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [siteCredentials, setSiteCredentials] = useState<Record<number, SiteCredentialsRecord>>({});
@@ -1559,41 +1560,26 @@ export function SitesPage() {
     <div className="space-y-6">
       <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-none">
         <CardHeader className="border-0 p-4 pb-0 sm:p-6 sm:pb-0">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <CardDescription>管理站点连接，查看账户数据与同步状态</CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button
-                variant="outline"
-                className="h-11"
-                onClick={() => void handleRefreshAll()}
-                disabled={loading || sites.length === 0 || refreshAllSubmitting || refreshingAll}
-                aria-busy={refreshAllSubmitting || refreshingAll}
-                title="在后台同步全部站点统计"
-              >
-                <RefreshCw className={`mr-2 size-4 ${refreshAllSubmitting || refreshingAll ? "motion-safe:animate-spin" : ""}`} />
-                {refreshAllSubmitting ? "提交中" : refreshingAll ? "同步中" : "同步所有"}
-              </Button>
-              <Button variant="outline" className="h-11" onClick={handleOverview} disabled={loading || sites.length === 0}>
-                <ListChecks className="mr-2 size-4" />
-                数据总览
-              </Button>
-              <Button variant="outline" className="h-11" onClick={() => { setPtdPanel("import"); setPtdDialogOpen(true); }}>导入 PTD 配置</Button>
-              <Button variant="outline" className="h-11" onClick={openPtdConfig} disabled={ptdConfigLoading}>
-                <CloudCog className="mr-2 size-4" />
-                备份与同步
-                {ptdConfig?.last_error || ptdConfigError ? <span className="ml-2 text-xs text-red-700">异常</span> : null}
-              </Button>
-              <Button className={sitePrimaryButtonClassName} onClick={openAdd}>
-                <Plus className="mr-2 size-4" />
-                添加站点
-              </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardDescription className="hidden text-sm sm:block">管理站点与账户，查看同步状态</CardDescription>
+            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+              <Button className="h-11 px-3" onClick={openAdd}><Plus className="hidden size-4 sm:block" />添加站点</Button>
+              <SiteActionMenu
+                onSync={() => { setPtdPanel("backup"); openPtdConfig(); }}
+                disabled={ptdConfigLoading}
+                hasError={Boolean(ptdConfig?.last_error || ptdConfigError)}
+                actions={[
+                  { label: refreshAllSubmitting ? "正在提交…" : refreshingAll ? "同步中…" : "全部同步", description: "更新所有站点的账户数据", icon: <RefreshCw className={refreshAllSubmitting || refreshingAll ? "motion-safe:animate-spin" : ""} />, disabled: loading || sites.length === 0 || refreshAllSubmitting || refreshingAll, onSelect: () => { void handleRefreshAll(); } },
+                  { label: "数据总览", description: "查看站点账户与汇总统计", icon: <ListChecks />, disabled: loading || sites.length === 0, onSelect: handleOverview },
+                  { label: "导入 PTD 数据", description: "从备份导入，或通过 WebDAV 同步", icon: <DownloadCloud />, onSelect: () => { setPtdPanel("import"); setPtdDialogOpen(true); } },
+                ]}
+              />
             </div>
           </div>
+          <p id="hive-sync-help" className="pt-1 text-xs leading-5 text-muted sm:text-right">支持将账户数据与历史统计用于蜂巢「PT 人生」展示。</p>
         </CardHeader>
 
-        <CardContent className="space-y-5 p-4 sm:p-6">
+        <CardContent className="space-y-3 p-4 sm:space-y-5 sm:p-6">
           {message ? (
             <div
               className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
@@ -1609,7 +1595,76 @@ export function SitesPage() {
             </div>
           ) : null}
 
-          <section className="flex flex-wrap gap-2" aria-label="站点状态概览">
+
+          <section className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:gap-3" aria-label="筛选站点">
+            <div className="relative min-w-0">
+              <Label htmlFor="site-search" className="sr-only">搜索站点</Label>
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted" />
+              <Input
+                ref={siteSearchInputRef}
+                id="site-search"
+                value={siteQuery}
+                onChange={(event) => setSiteQuery(event.target.value)}
+                onCompositionStart={() => setSiteComposing(true)}
+                onCompositionEnd={(event) => { setSiteQuery(event.currentTarget.value); setSiteComposing(false); }}
+                onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !siteComposing) siteSearch.reload(); }}
+                className={`h-11 rounded-lg pl-10 ${siteQuery ? "pr-24" : "pr-12"}`}
+                placeholder="搜索站点"
+                title="支持自定义名称、官方别名、拼音、账户和站点特色，可组合状态条件"
+              />
+              <div className="absolute inset-y-0 right-1 flex items-center">
+                {siteQuery ? <Button variant="outline" className="h-11 w-11 border-0 bg-transparent p-0" aria-label="清空搜索" title="清空搜索" onClick={() => { setSiteQuery(""); siteSearchInputRef.current?.focus(); }}><X aria-hidden="true" className="size-4" /></Button> : null}
+                <Button variant="outline" className="h-11 w-11 border-0 bg-transparent p-0" aria-label={siteQuery.trim() ? "搜索站点" : "刷新站点列表"} title={siteQuery.trim() ? "搜索站点" : "刷新站点列表"} disabled={loading || siteComposing} onClick={siteSearch.reload}>
+                  {siteSearch.loading ? <Loader2 aria-hidden="true" className="size-4 motion-safe:animate-spin" /> : siteQuery.trim() ? <Search aria-hidden="true" className="size-4" /> : <RefreshCw aria-hidden="true" className="size-4" />}
+                </Button>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="h-11 px-3"
+              aria-expanded={siteFiltersOpen}
+              aria-controls="site-filters"
+              onClick={() => setSiteFiltersOpen((open) => !open)}
+            >
+              筛选{siteTypeFilter !== "all" || siteStatusFilter !== "all" ? ` · ${Number(siteTypeFilter !== "all") + Number(siteStatusFilter !== "all")}` : ""}
+              <ChevronDown className={`size-4 transition-transform ${siteFiltersOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </section>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 flex-1 sm:max-w-xs">
+              <Label htmlFor="site-sort" className="sr-only">站点排序</Label>
+              <Select id="site-sort" value={siteSort} onChange={setSiteSort} className="w-full" options={[
+                { value: "join_time", label: "最近入站" },
+                { value: "join_time_asc", label: "最早入站" },
+                { value: "created_at", label: "最近添加" },
+                { value: "created_at_asc", label: "最早添加" },
+                { value: "name", label: "名称升序" },
+                { value: "name_desc", label: "名称降序" },
+              ]} />
+            </div>
+            <span className="shrink-0 text-xs text-muted" role="status">
+              {loading || siteSearch.loading || siteComposing ? "正在加载站点…" : sitesError || siteSearch.error ? "数量暂不可用" : siteSearch.total === sites.length ? `共 ${sites.length} 个站点` : `${siteSearch.total} / ${sites.length} 个站点`}
+            </span>
+          </div>
+          <div id="site-filters" className={`${siteFiltersOpen ? "flex" : "hidden"} flex-col gap-3 border-t border-border pt-3`}>
+            <div className="min-w-0 flex-1">
+            <Label htmlFor="site-type-filter" className="sr-only">筛选站点类型</Label>
+            <Select
+              id="site-type-filter"
+              value={siteTypeFilter}
+              onChange={setSiteTypeFilter}
+              className="w-full"
+              options={[
+                { value: "all", label: "全部类型" },
+                { value: "nexusphp", label: "NexusPHP" },
+                { value: "mteam", label: "M-Team" },
+                { value: "gazelle", label: "Gazelle" },
+              ]}
+            />
+            </div>
+
+
+          <section className="grid grid-cols-4 gap-1 sm:flex sm:flex-wrap sm:gap-2" aria-label="站点状态概览">
             {([
               { key: "all", label: "全部站点", value: sites.length, icon: Server, tone: "text-primary bg-primary/10" },
               { key: "healthy", label: "同步成功", value: siteCounts.healthy, icon: CircleCheck, tone: "text-emerald-700 bg-emerald-100" },
@@ -1622,78 +1677,24 @@ export function SitesPage() {
                 <button
                   key={metric.key}
                   type="button"
-                  className={`flex min-h-11 min-w-0 items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-secondary text-secondary-foreground" : "text-muted hover:bg-accent/45"}`}
+                  className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1 py-2 text-left transition-colors sm:px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-secondary text-secondary-foreground" : "text-muted hover:bg-accent/45"}`}
                   aria-pressed={selected}
+                  aria-label={`${metric.label} ${sitesError && sites.length === 0 ? "数量未知" : metric.value}`}
                   onClick={() => setSiteStatusFilter(metric.key)}
                 >
-                  <span className={`flex size-6 shrink-0 items-center justify-center rounded-full ${metric.tone}`}>
+                  <span className={`hidden size-6 shrink-0 items-center justify-center rounded-full sm:flex ${metric.tone}`}>
                     <MetricIcon className="size-4" />
                   </span>
-                  <span className="flex items-center gap-2 text-sm">
-                    <span>{metric.label}</span>
+                  <span className="flex w-full items-center justify-center gap-1 text-sm sm:gap-2">
+                    <span className="sm:hidden">{metric.key === "all" ? "全部" : metric.key === "healthy" ? "成功" : metric.key === "failed" ? "失败" : "待同步"}</span>
+                    <span className="hidden sm:inline">{metric.label}</span>
                     <span className="font-semibold tabular-nums">{sitesError && sites.length === 0 ? "—" : metric.value}</span>
                   </span>
                 </button>
               );
             })}
           </section>
-
-          <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" aria-label="筛选站点">
-            <div className="relative min-w-0 flex-1 sm:basis-64">
-              <Label htmlFor="site-search" className="sr-only">搜索站点</Label>
-              <Input
-                ref={siteSearchInputRef}
-                id="site-search"
-                value={siteQuery}
-                onChange={(event) => setSiteQuery(event.target.value)}
-                onCompositionStart={() => setSiteComposing(true)}
-                onCompositionEnd={(event) => { setSiteQuery(event.currentTarget.value); setSiteComposing(false); }}
-                onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !siteComposing) siteSearch.reload(); }}
-                className="h-11 rounded-2xl pr-24"
-                placeholder="搜索站点、别名、拼音或特色"
-                title="支持自定义名称、官方别名、拼音、账户和站点特色，可组合状态条件"
-              />
-              <div className="absolute inset-y-0 right-1 flex items-center">
-                {siteQuery ? <Button variant="outline" className="h-11 w-11 border-0 bg-transparent p-0" aria-label="清空搜索" title="清空搜索" onClick={() => { setSiteQuery(""); siteSearchInputRef.current?.focus(); }}><X aria-hidden="true" className="size-4" /></Button> : null}
-                <Button variant="outline" className="h-11 w-11 border-0 bg-transparent p-0" aria-label={siteQuery.trim() ? "搜索站点" : "刷新站点列表"} title={siteQuery.trim() ? "搜索站点" : "刷新站点列表"} disabled={loading || siteComposing} onClick={siteSearch.reload}>
-                  {siteSearch.loading ? <Loader2 aria-hidden="true" className="size-4 motion-safe:animate-spin" /> : siteQuery.trim() ? <Search aria-hidden="true" className="size-4" /> : <RefreshCw aria-hidden="true" className="size-4" />}
-                </Button>
-              </div>
-            </div>
-            <Label htmlFor="site-sort" className="sr-only">站点排序</Label>
-            <Select id="site-sort" value={siteSort} onChange={setSiteSort} className="w-full sm:w-52" options={[
-              { value: "join_time", label: "入站时间（新到旧）" },
-              { value: "created_at", label: "添加时间（新到旧）" },
-              { value: "name", label: "站点名（升序）" },
-            ]} />
-            <Label htmlFor="site-type-filter" className="sr-only">筛选站点类型</Label>
-            <Select
-              id="site-type-filter"
-              value={siteTypeFilter}
-              onChange={setSiteTypeFilter}
-              className="w-full sm:w-40"
-              options={[
-                { value: "all", label: "全部类型" },
-                { value: "nexusphp", label: "NexusPHP" },
-                { value: "mteam", label: "M-Team" },
-                { value: "gazelle", label: "Gazelle" },
-              ]}
-            />
-            <Label htmlFor="site-status-filter" className="sr-only">筛选同步状态</Label>
-            <Select
-              id="site-status-filter"
-              value={siteStatusFilter}
-              onChange={(value) => setSiteStatusFilter(value as "all" | SiteHealth)}
-              className="w-full sm:w-40"
-              options={[
-                { value: "all", label: "全部状态" },
-                { value: "healthy", label: "同步成功" },
-                { value: "failed", label: "同步失败" },
-                { value: "pending", label: "待同步" },
-              ]}
-            />
-            <span className="shrink-0 px-1 text-xs font-semibold text-muted">匹配 {siteSearch.total} / {sites.length}</span>
-          </section>
+          </div>
 
           {!loading ? <SearchFeedback search={siteSearch} onClearQuery={() => { setSiteQuery(""); setSiteTypeFilter("all"); setSiteStatusFilter("all"); }} /> : null}
 
@@ -1792,15 +1793,14 @@ export function SitesPage() {
       <Dialog
         open={ptdDialogOpen}
         onClose={() => { setPtdDialogOpen(false); loadSites(); loadPtdConfig(); }}
-        title="备份与同步"
-        description="导入 PTD 配置、自动同步 Cookie，或将账户数据备份到 WebDAV。"
+        title={ptdPanel === "backup" ? "同步到蜂巢" : "导入 PTD 数据"}
+        description={ptdPanel === "backup" ? "通过 WebDAV 备份传递站点账户数据与历史统计，用于蜂巢「PT 人生」展示。支持手动备份和定时备份。" : "PTD 即 PT-depiler。可从其导出的备份文件中导入站点与 Cookie，或由 PTD 通过 WebDAV 自动同步到云母。"}
         panelClassName="max-w-3xl"
       >
-        <div className="flex flex-wrap gap-2 border-b border-border px-4 py-3 sm:px-6" role="group" aria-label="备份与同步方式">
-          <Button variant={ptdPanel === "import" ? "default" : "outline"} aria-pressed={ptdPanel === "import"} onClick={() => setPtdPanel("import")}>导入 PTD 配置</Button>
-          <Button variant={ptdPanel === "receive" ? "default" : "outline"} aria-pressed={ptdPanel === "receive"} onClick={() => setPtdPanel("receive")}>Cookie 自动同步</Button>
-          <Button variant={ptdPanel === "backup" ? "default" : "outline"} aria-pressed={ptdPanel === "backup"} onClick={() => setPtdPanel("backup")}>账户数据备份</Button>
-        </div>
+        {ptdPanel !== "backup" ? <div className="flex flex-wrap gap-2 border-b border-border px-4 py-3 sm:px-6" role="group" aria-label="PTD 数据导入方式">
+          <Button className="h-11" variant={ptdPanel === "import" ? "default" : "outline"} aria-pressed={ptdPanel === "import"} onClick={() => setPtdPanel("import")}>从备份导入</Button>
+          <Button className="h-11" variant={ptdPanel === "receive" ? "default" : "outline"} aria-pressed={ptdPanel === "receive"} onClick={() => setPtdPanel("receive")}>通过 WebDAV 同步</Button>
+        </div> : null}
         {ptdDialogOpen && ptdPanel === "import" ? <PtdImportPanel onImported={loadSites} /> : null}
         {ptdDialogOpen && ptdPanel === "receive" ? <WebdavSyncPanel /> : null}
         {ptdPanel === "backup" ? <div className="space-y-5 p-4 sm:p-6">

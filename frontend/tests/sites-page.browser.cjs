@@ -63,7 +63,8 @@ const sites = [
     assert.equal(await table.evaluate(el => el.scrollWidth <= el.clientWidth), true, 'table fits');
     assert.equal(await visibleButton('云海测试站的更多操作').evaluate(el => el.getBoundingClientRect().right < innerWidth), true);
     await capture('desktop');
-    await visibleButton('数据总览').click();
+    await visibleButton('更多站点操作').click();
+    await page.getByRole('menuitem', { name: /数据总览/ }).click();
     await dialog('PT 数据总览').getByText('站点总览加载失败', { exact: true }).waitFor();
     assert.equal(await dialog('PT 数据总览').getByText('暂无站点统计数据', { exact: true }).count(), 0);
     overviewFailure = false;
