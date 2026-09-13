@@ -2,7 +2,7 @@
 version: 1
 slug: "frontend-src-pages-scheduled-tasks-page"
 primary_target: "frontend/src/pages/scheduled-tasks-page.tsx"
-related_targets: ["frontend/src/App.tsx", "frontend/src/components/scheduled-http-panel.tsx"]
+related_targets: ["frontend/src/App.tsx", "frontend/src/components/scheduled-http-panel.tsx", "frontend/src/components/curl-import-dialog.tsx"]
 ---
 
 # 定时任务
@@ -47,3 +47,13 @@ The independent [HTTP expansion finish review](../review/scheduled-http-v2/finis
 `HttpDeliveryEditor` in `frontend/src/components/scheduled-http-panel.tsx`, rendered by `frontend/src/pages/scheduled-tasks-page.tsx`, places a labeled shared select before advanced request options. HTTP 客户端 exposes 使用全局代理发送; 浏览器（Browserless） exposes 连接浏览器时使用全局代理. These are independent persisted booleans, defaulting to false. Supporting copy identifies the existing Browserless configuration location, /function support, and the distinction between the application's connection proxy and the browser service's externally configured target-site egress. README.md records the same behavior. The extension uses existing tokens and controls and adds no global design rule.
 
 The independent [delivery finish review](../review/scheduled-delivery/finish-review.md) records **ship**, supported by [desktop](../review/scheduled-delivery/desktop.png), [mobile](../review/scheduled-delivery/mobile.png), source inspection and an empty [detector result](../review/scheduled-delivery/detector.json). It identifies a small incumbent request-introduction copy mismatch for the primary agent to correct; live control, overflow, backend and release results remain attributed to the implementation report.
+
+## cURL（Bash） import (2026-09-13)
+
+`CurlImportDialog` adds an outline 导入 cURL action beside the HTTP configuration heading, retaining the existing lavender/plum Operate surface and shared controls. The modal follows paste → 解析命令 → summary → optional 显示完整值 → 应用到请求配置 → separate task save. Parsing neither executes the command nor sends its request. The labeled monospace input has syntax help and local error feedback; editing it invalidates the previous result. The summary shows method/host, header count, authentication, body type, timeout and redirect behavior. Complete URL, headers, authentication and body values require deliberate disclosure. Applying closes the modal and selects the request-preview section.
+
+Saved tasks require 载入已保存配置 before importing; adjacent copy explains the disabled action. Application preserves the task name, schedule, delivery mode, both proxy flags and expected status while replacing imported request settings. Empty/busy parsing is disabled, stale asynchronous results are ignored, and closing clears pasted content and results. Shared dialog focus trapping and restoration apply.
+
+The dialog is centered on desktop and bottom-aligned on mobile, with a 90dvh height cap, independently scrolling body and non-scrolling header/footer. Footer actions wrap as needed and remain accessible while inspecting results. The summary retains two columns at 390px; revealed monospace details wrap long values and have their own bounded scroll area. No global tokens or visual rules were added.
+
+The independent [cURL finish review](../review/scheduled-curl/finish-review.md) records **ship**, with no material corrections. Its [1440px desktop](../review/scheduled-curl/desktop.png) and [390px mobile](../review/scheduled-curl/mobile.png) captures show parsed results with full details revealed. Live interaction and preservation checks remain attributed to the primary implementation report; screenshot/source review does not establish parser safety or release correctness.

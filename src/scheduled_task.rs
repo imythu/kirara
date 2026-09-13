@@ -115,6 +115,7 @@ fn normalize_weekdays(value: &str) -> Result<String, String> {
         .join(","))
 }
 mod browser;
+pub mod curl;
 mod http;
 pub use http::HttpConfig;
 #[cfg(test)]

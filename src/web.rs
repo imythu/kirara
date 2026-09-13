@@ -263,6 +263,10 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
             get(scheduled_task::list).post(scheduled_task::create),
         )
         .route(
+            "/api/scheduled-tasks/import-curl",
+            post(scheduled_task::import_curl),
+        )
+        .route(
             "/api/scheduled-tasks/request-preview",
             post(scheduled_task::request_preview),
         )

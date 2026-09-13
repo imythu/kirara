@@ -17,6 +17,7 @@ import { Select } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { CurlImportDialog } from "@/components/curl-import-dialog";
 
 import {
   HttpAuthEditor,
@@ -750,13 +751,28 @@ function TaskEditor({
                   配置请求地址与内容，并在下方选择发送方式。
                 </p>
               </div>
+              <CurlImportDialog
+                disabled={saving || loadingHttp || (!!task && !replaceHttp)}
+                onImport={(imported) => {
+                  setHttp((current) => ({
+                    ...normalizeHttp(imported),
+                    send_via_browser: current.send_via_browser,
+                    use_global_proxy: current.use_global_proxy,
+                    browser_use_global_proxy: current.browser_use_global_proxy,
+                    expected_status: current.expected_status,
+                  }));
+                  setReplaceHttp(true);
+                  setError("");
+                  setTab("preview");
+                }}
+              />
               {task && (
                 <div className="space-y-3 rounded-xl bg-accent p-4">
                   <p className="break-all text-sm">
                     已保存：{task.request_summary}
                   </p>
                   <p className="text-xs leading-6 text-muted">
-                    调整名称或时间会保留原请求。载入后可查看、修改已保存的认证与请求体，认证值默认隐藏。
+                    调整名称或时间会保留原请求。导入 cURL 前请先载入已保存配置，以保留发送方式和代理设置；载入后也可修改认证与请求体，认证值默认隐藏。
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -783,7 +799,7 @@ function TaskEditor({
                       {loadingHttp
                         ? "载入中…"
                         : replaceHttp
-                          ? "已载入，保存时更新请求"
+                          ? "请求可编辑，保存时更新"
                           : "载入已保存配置"}
                     </Button>
                     {replaceHttp && (

@@ -98,3 +98,18 @@ pub(super) async fn request_preview(
         Json(preview),
     ))
 }
+
+#[derive(Deserialize)]
+pub(super) struct CurlCommand {
+    command: String,
+}
+pub(super) async fn import_curl(
+    Json(body): Json<CurlCommand>,
+) -> Result<impl axum::response::IntoResponse, ApiError> {
+    let parsed =
+        crate::scheduled_task::curl::parse(&body.command).map_err(ApiError::bad_request)?;
+    Ok((
+        [(axum::http::header::CACHE_CONTROL, "no-store")],
+        Json(parsed),
+    ))
+}
