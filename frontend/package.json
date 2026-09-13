@@ -1,11 +1,12 @@
 {
   "name": "kirara-web",
   "private": true,
-  "version": "2.4.8",
+  "version": "2.4.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:scheduled-tasks": "tsc -p tsconfig.scheduled-tasks.json",
     "check:rss": "tsc -p tsconfig.rss.json",
     "preview": "vite preview"
   },

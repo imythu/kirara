@@ -18,6 +18,7 @@ mod ptd_sites;
 mod relocation;
 mod rss;
 mod rss_download;
+mod scheduled_task;
 mod search;
 mod sign_in;
 mod site;
@@ -167,6 +168,7 @@ async fn run(
         message: format!("failed to read listener address: {error}"),
     })?;
     let db = db::Database::open(&db_dir).await?;
+    db.recover_scheduled_tasks().await?;
     let self_use = self_use_enabled(std::env::var("SELF_USE").ok().as_deref());
     let settings = db.get_settings().await?;
     let log_filter = logging::build_log_filter(settings.log_level.as_deref())?;

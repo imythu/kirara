@@ -19,6 +19,7 @@ mod media;
 mod openlist;
 mod ptd_backup;
 pub mod rss;
+mod scheduled_task;
 pub mod search;
 mod webdav;
 
@@ -93,6 +94,7 @@ impl Database {
         db.init().await?;
         db.init_webdav().await?;
         db.init_rss().await?;
+        db.init_scheduled_tasks().await?;
         Ok(db)
     }
 

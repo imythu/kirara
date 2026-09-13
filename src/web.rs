@@ -1,4 +1,5 @@
 mod rss;
+mod scheduled_task;
 mod search;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -64,6 +65,7 @@ use crate::tag_rule::scheduler::TagRuleScheduler;
 pub struct AppState {
     db: Database,
     scheduler: Arc<BrushScheduler>,
+    scheduled_task_scheduler: Arc<crate::scheduled_task::Scheduler>,
     sign_in_scheduler: Arc<SignInScheduler>,
     site_stats_refresher: Arc<SiteStatsRefresher>,
     collector: Arc<DownloaderSnapshotCollector>,
@@ -115,6 +117,7 @@ impl AppState {
         self_use: bool,
     ) -> Self {
         Self {
+            scheduled_task_scheduler: crate::scheduled_task::Scheduler::new(db.clone()),
             db,
             scheduler,
             sign_in_scheduler,
@@ -167,6 +170,12 @@ pub async fn serve(
         tag_rule_scheduler,
         Arc::clone(&relocation_scheduler),
         self_use,
+    );
+    tokio::spawn(
+        state
+            .scheduled_task_scheduler
+            .clone()
+            .start(shutdown.clone()),
     );
     state.shutdown = shutdown.clone();
     let app = app_router(state, relocation_scheduler);
@@ -248,6 +257,35 @@ fn app_router(state: AppState, relocation_scheduler: Arc<RelocationScheduler>) -
         .route(
             "/api/sign-in-tasks/{id}",
             put(update_sign_in_task).delete(delete_sign_in_task),
+        )
+        .route(
+            "/api/scheduled-tasks",
+            get(scheduled_task::list).post(scheduled_task::create),
+        )
+        .route(
+            "/api/scheduled-tasks/request-preview",
+            post(scheduled_task::request_preview),
+        )
+        .route(
+            "/api/scheduled-tasks/{id}/http-config",
+            post(scheduled_task::http_config),
+        )
+        .route(
+            "/api/scheduled-tasks/preview",
+            post(scheduled_task::preview),
+        )
+        .route(
+            "/api/scheduled-tasks/{id}",
+            put(scheduled_task::update).delete(scheduled_task::delete),
+        )
+        .route(
+            "/api/scheduled-tasks/{id}/enabled",
+            put(scheduled_task::enabled),
+        )
+        .route("/api/scheduled-tasks/{id}/run", post(scheduled_task::run))
+        .route(
+            "/api/scheduled-tasks/{id}/records",
+            get(scheduled_task::records),
         )
         .route("/api/sign-in-profiles", get(list_sign_in_profiles))
         .route("/api/sign-in-tasks/{id}/start", post(start_sign_in_task))
@@ -3099,9 +3137,7 @@ async fn lookup_invite_profiles(
         let (profile, failure, message) = match prepared {
             Ok(adapter) => {
                 let lookup = adapter.fetch_user_profile(&uid).await;
-                let kind = lookup
-                    .failure
-                    .map(|kind| kind.as_str().to_string());
+                let kind = lookup.failure.map(|kind| kind.as_str().to_string());
                 (lookup.profile, kind, lookup.message)
             }
             Err(error) => (

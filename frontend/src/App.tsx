@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Menu,
   CalendarCheck,
+  Clock3,
   Rss,
   Settings,
   Tag,
@@ -50,6 +51,7 @@ type AppPage =
   | "downloaders"
   | "torrent-transfer"
   | "brush-tasks"
+  | "scheduled-tasks"
   | "sign-in"
   | "tag-rules"
   | "stats"
@@ -70,6 +72,7 @@ const InviteProfilePage = lazy(() =>
 const DownloadersPage = lazy(() => import("@/pages/downloaders-page").then((module) => ({ default: module.DownloadersPage })));
 const TorrentTransferPage = lazy(() => import("@/pages/torrent-transfer-page").then((module) => ({ default: module.TorrentTransferPage })));
 const BrushTasksPage = lazy(() => import("@/pages/brush-tasks-page").then((module) => ({ default: module.BrushTasksPage })));
+const ScheduledTasksPage = lazy(() => import("@/pages/scheduled-tasks-page").then((module) => ({ default: module.ScheduledTasksPage })));
 const SignInPage = lazy(() => import("@/pages/sign-in-page").then((module) => ({ default: module.SignInPage })));
 const TagRulesPage = lazy(() => import("@/pages/tag-rules-page").then((module) => ({ default: module.TagRulesPage })));
 const StatsPage = lazy(() => import("@/pages/stats-page").then((module) => ({ default: module.StatsPage })));
@@ -139,6 +142,7 @@ const navItems: Array<{
     icon: Download,
     group: "automation",
   },
+  { key: "scheduled-tasks", label: "定时任务", description: "自定义执行计划、HTTP 请求与执行记录", icon: Clock3, group: "automation" },
   {
     key: "sign-in",
     label: "自动签到",
@@ -180,6 +184,7 @@ function readPageFromHash(): AppPage {
     "downloaders",
     "torrent-transfer",
     "brush-tasks",
+    "scheduled-tasks",
     "sign-in",
     "tag-rules",
     "stats",
@@ -640,6 +645,7 @@ export default function App() {
               {page === "downloaders" ? <DownloadersPage /> : null}
               {page === "torrent-transfer" && selfUse ? <TorrentTransferPage /> : null}
               {page === "brush-tasks" ? <BrushTasksPage /> : null}
+              {page === "scheduled-tasks" ? <ScheduledTasksPage /> : null}
               {page === "sign-in" ? <SignInPage /> : null}
               {page === "tag-rules" ? <TagRulesPage /> : null}
               {page === "stats" ? <StatsPage /> : null}
