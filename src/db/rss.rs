@@ -397,53 +397,89 @@ impl Database {
         }).await
     }
 
+    /// Source and download settings are one user operation: either both save or neither does.
+    pub async fn rss_save_subscription(
+        &self,
+        id: Option<i64>,
+        mut input: SubscriptionInput,
+    ) -> RssResult<SubscriptionRecord> {
+        self.rss_read(move |conn| {
+            let tx = conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(sql_error)?;
+            let operation = id
+                .map(|id| format!("subscription:update:{id}"))
+                .unwrap_or_else(|| "subscription:create".into());
+            let request_digest = digest(&json(&input)?);
+            if let Some(feed_id) = request_lookup(
+                &tx,
+                &operation,
+                input.request_id.as_deref(),
+                &request_digest,
+            )? {
+                return subscription_record(&tx, feed_id);
+            }
+            let rule_id = if let Some(id) = id {
+                let ids = rule_ids_for_feed(&tx, id)?;
+                if ids.len() > 1 {
+                    return Err(RssError::Invalid(
+                        "此来源包含多条规则，请先在高级规则管理中整理为一条".into(),
+                    ));
+                }
+                if let Some(rule_id) = ids.first() {
+                    let rule = get_rule(&tx, *rule_id)?;
+                    if rule.feed_ids != vec![id] {
+                        return Err(RssError::Invalid(
+                            "此来源使用共享规则，请先在高级规则管理中拆分".into(),
+                        ));
+                    }
+                }
+                ids.first().copied()
+            } else {
+                None
+            };
+            input.feed.request_id = None;
+            input.rule.request_id = None;
+            input.rule.name = input.feed.name.clone();
+            // The source switch controls the whole subscription; the rule stays ready.
+            input.rule.enabled = true;
+            let feed = save_feed(&tx, id, input.feed)?;
+            input.rule.feed_ids = vec![feed.id];
+            let rule = save_rule(&tx, rule_id, input.rule)?;
+            record_request(
+                &tx,
+                &operation,
+                input.request_id.as_deref(),
+                &request_digest,
+                feed.id,
+                Some(feed.id),
+                "subscription_save",
+                &now(),
+            )?;
+            tx.commit().map_err(sql_error)?;
+            Ok(SubscriptionRecord {
+                feed,
+                rule: Some(rule),
+            })
+        })
+        .await
+    }
+
+    pub async fn rss_get_subscription(&self, id: i64) -> RssResult<SubscriptionRecord> {
+        self.rss_read(move |conn| subscription_record(conn, id))
+            .await
+    }
+
     pub async fn rss_save_feed(&self, id: Option<i64>, input: FeedInput) -> RssResult<FeedRecord> {
         self.rss_read(move |conn| {
-            if input.name.trim().is_empty() || input.name.chars().count()>100 || !(5..=1440).contains(&input.interval_minutes) {
-                return Err(RssError::Invalid("请输入名称（不超过 100 字）和 5–1440 分钟的检查间隔".into()));
-            }
-            let tx=conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(sql_error)?;
-            let operation=id.map(|v|format!("feed:update:{v}")).unwrap_or_else(||"feed:create".into());
-            let request_digest=digest(&json(&input)?);
-            if let Some(existing)=request_lookup(&tx,&operation,input.request_id.as_deref(),&request_digest)? { return Ok(get_feed(&tx,existing)?.record); }
-            if let Some(site_id)=input.site_id { require_reference(&tx,"sites",site_id,"关联站点")?; }
-            let current=id.map(|id|get_feed(&tx,id)).transpose()?;
-            if let Some(current)=&current { check_version(current.record.version,input.expected_version)?; }
-            let url=input.url.as_deref().map(str::trim).filter(|s|!s.is_empty()).map(str::to_owned)
-                .or_else(||current.as_ref().map(|c|c.url.clone())).ok_or_else(||RssError::Invalid("请输入 RSS 地址".into()))?;
-            if current.as_ref().is_some_and(|feed| feed.url != url) {
-                return Err(RssError::Invalid("RSS 地址保存后不可修改，请添加新的订阅源".into()));
-            }
-            let parsed=reqwest::Url::parse(&url).map_err(|_|RssError::Invalid("RSS 地址格式无效".into()))?;
-            if !matches!(parsed.scheme(),"http"|"https") || parsed.host_str().is_none() || !parsed.username().is_empty() || parsed.password().is_some() || url.len()>8192 || url.contains('•') {
-                return Err(RssError::Invalid("RSS 地址必须是有效的 HTTP/HTTPS 地址，不能包含用户信息或脱敏占位符".into()));
-            }
-            // A site's API may use a different origin from its RSS feed.
-            // The fetcher scopes credentials to the configured site origin per request.
-            let time=now();
-            let feed_id=if let Some(current)=current {
-                let resume=!current.record.enabled && input.enabled;
-                tx.execute("UPDATE rss_feeds SET name=?,site_id=?,use_proxy=?,enabled=?,interval_minutes=?,
-                    version=version+1,resume_baseline=CASE WHEN ? THEN 1 ELSE resume_baseline END,
-                    lease_owner=NULL,lease_until=NULL,lease_version=lease_version+1,current_run_id=NULL,
-                    requires_action=0,last_error=NULL,next_run_at=?,updated_at=? WHERE id=?",
-                    params![input.name.trim(),input.site_id,input.use_proxy,input.enabled,input.interval_minutes,
-                        resume,time,time,current.record.id]).map_err(sql_error)?;
-                if let Some(run_id)=tx.query_row("SELECT id FROM rss_runs WHERE feed_id=? AND kind='check' AND status IN ('queued','running') ORDER BY id DESC LIMIT 1",[current.record.id],|r|r.get::<_,i64>(0)).optional().map_err(sql_error)? {
-                    tx.execute("UPDATE rss_runs SET status='superseded',message='源配置已更新，旧响应已丢弃',finished_at=? WHERE id=?",params![time,run_id]).map_err(sql_error)?;
-                }
-                synchronize_jobs(&tx,&time)?;
-                current.record.id
-            } else {
-                tx.execute("INSERT INTO rss_feeds(name,url_display,site_id,use_proxy,enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-                    params![input.name.trim(),masked_url(&url),input.site_id,input.use_proxy,input.enabled,input.interval_minutes,time,time,time]).map_err(sql_error)?;
-                let id=tx.last_insert_rowid();
-                tx.execute("INSERT INTO rss_feed_secrets(feed_id,generation,url,url_digest) VALUES(?,1,?,?)",params![id,url,digest(&url)]).map_err(sql_error)?; id
-            };
-            record_request(&tx,&operation,input.request_id.as_deref(),&request_digest,feed_id,Some(feed_id),"feed_save",&time)?;
-            let result=get_feed(&tx,feed_id)?.record;
-            tx.commit().map_err(sql_error)?; Ok(result)
-        }).await
+            let tx = conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(sql_error)?;
+            let result = save_feed(&tx, id, input)?;
+            tx.commit().map_err(sql_error)?;
+            Ok(result)
+        })
+        .await
     }
 
     pub async fn rss_set_feed_enabled(
@@ -489,43 +525,16 @@ impl Database {
         }).await
     }
 
-    pub async fn rss_save_rule(
-        &self,
-        id: Option<i64>,
-        mut input: RuleInput,
-    ) -> RssResult<RuleRecord> {
+    pub async fn rss_save_rule(&self, id: Option<i64>, input: RuleInput) -> RssResult<RuleRecord> {
         self.rss_read(move |conn| {
-            matcher::validate_filters(&input.filters).map_err(RssError::Invalid)?;
-            input.feed_ids.sort_unstable();input.feed_ids.dedup();
-            if input.name.trim().is_empty() || input.name.chars().count()>100 || input.feed_ids.is_empty() || input.feed_ids.len()>200 {
-                return Err(RssError::Invalid("请填写规则名称并选择 1–200 个订阅源".into()));
-            }
-            let tx=conn.transaction_with_behavior(TransactionBehavior::Immediate).map_err(sql_error)?;
-            let operation=id.map(|v|format!("rule:update:{v}")).unwrap_or_else(||"rule:create".into());let request_digest=digest(&json(&input)?);
-            if let Some(id)=request_lookup(&tx,&operation,input.request_id.as_deref(),&request_digest)? {return get_rule(&tx,id);}
-            for feed_id in &input.feed_ids {get_feed(&tx,*feed_id)?;}
-            validate_rule_target(&tx,input.enabled,input.downloader_id)?;
-            let time=now();
-            let rule_id=if let Some(id)=id {
-                let current=get_rule(&tx,id)?;check_version(current.version,input.expected_version)?;
-                let new_revision=current.filters!=input.filters || current.feed_ids!=input.feed_ids || current.downloader_id!=input.downloader_id;
-                let activate=new_revision || (!current.enabled && input.enabled);
-                tx.execute("UPDATE rss_rules SET name=?,enabled=?,priority=?,filters_json=?,downloader_id=?,options_json=?,
-                    match_revision=match_revision+?,version=version+1,last_error=NULL,updated_at=? WHERE id=?",
-                    params![input.name.trim(),input.enabled,input.priority,json(&input.filters)?,input.downloader_id,json(&input.options)?,new_revision,time,id]).map_err(sql_error)?;
-                if activate { reset_rule_boundaries(&tx,id,&input.feed_ids)?; }
-                if new_revision {
-                    tx.execute("UPDATE rss_decisions SET status='superseded',next_evaluate_at=NULL,version=version+1 WHERE rule_id=? AND job_id IS NULL AND match_revision=?",params![id,current.match_revision]).map_err(sql_error)?;
-                }
-                synchronize_jobs(&tx,&time)?;id
-            } else {
-                tx.execute("INSERT INTO rss_rules(name,enabled,priority,filters_json,downloader_id,options_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-                    params![input.name.trim(),input.enabled,input.priority,json(&input.filters)?,input.downloader_id,json(&input.options)?,time,time]).map_err(sql_error)?;
-                let id=tx.last_insert_rowid();reset_rule_boundaries(&tx,id,&input.feed_ids)?;id
-            };
-            record_request(&tx,&operation,input.request_id.as_deref(),&request_digest,rule_id,None,"rule_save",&time)?;
-            let result=get_rule(&tx,rule_id)?;tx.commit().map_err(sql_error)?;Ok(result)
-        }).await
+            let tx = conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(sql_error)?;
+            let result = save_rule(&tx, id, input)?;
+            tx.commit().map_err(sql_error)?;
+            Ok(result)
+        })
+        .await
     }
 
     pub async fn rss_set_rule_enabled(
@@ -2061,6 +2070,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn subscription_save_is_atomic_idempotent_and_versioned() {
+        let f = fixture().await;
+        let mut input = SubscriptionInput {
+            feed: feed_input(Some(f.site)),
+            rule: rule_input(0, f.downloader),
+            request_id: Some("subscription-atomic".into()),
+        };
+        input.rule.downloader_id = Some(-1);
+        assert!(
+            f.db.rss_save_subscription(None, input.clone())
+                .await
+                .is_err()
+        );
+        assert_eq!(f.db.rss_summary().await.unwrap().feeds_total, 1);
+        assert_eq!(f.db.rss_summary().await.unwrap().rules_enabled, 0);
+        input.rule.downloader_id = Some(f.downloader);
+        let saved =
+            f.db.rss_save_subscription(None, input.clone())
+                .await
+                .unwrap();
+        let duplicate =
+            f.db.rss_save_subscription(None, input.clone())
+                .await
+                .unwrap();
+        assert_eq!(saved.feed.id, duplicate.feed.id);
+        assert_eq!(
+            saved.rule.as_ref().unwrap().id,
+            duplicate.rule.as_ref().unwrap().id
+        );
+        assert_eq!(saved.rule.as_ref().unwrap().feed_ids, vec![saved.feed.id]);
+        assert_eq!(saved.rule.as_ref().unwrap().name, saved.feed.name);
+        input.request_id = Some("subscription-edit".into());
+        input.feed.expected_version = Some(saved.feed.version);
+        input.feed.name = "Changed".into();
+        input.rule.expected_version = Some(saved.rule.as_ref().unwrap().version + 1);
+        assert!(
+            f.db.rss_save_subscription(Some(saved.feed.id), input.clone())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            f.db.rss_get_feed(saved.feed.id).await.unwrap().record.name,
+            saved.feed.name
+        );
+        input.rule.expected_version = Some(saved.rule.as_ref().unwrap().version);
+        input.feed.enabled = false;
+        let updated =
+            f.db.rss_save_subscription(Some(saved.feed.id), input)
+                .await
+                .unwrap();
+        assert!(!updated.feed.enabled);
+        assert!(updated.rule.unwrap().enabled);
+        assert_eq!(
+            f.db.rss_get_subscription(saved.feed.id)
+                .await
+                .unwrap()
+                .feed
+                .name,
+            "Changed"
+        );
+    }
+
+    #[tokio::test]
     async fn first_snapshot_is_baseline_and_reordering_never_replays_history() {
         let f = fixture().await;
         let rule =
@@ -3199,4 +3271,205 @@ mod tests {
         assert!(resumed.enabled);
         assert_eq!(resumed.feed_ids, vec![f.feed.id]);
     }
+}
+
+fn save_feed(
+    tx: &rusqlite::Transaction<'_>,
+    id: Option<i64>,
+    input: FeedInput,
+) -> RssResult<FeedRecord> {
+    if input.name.trim().is_empty()
+        || input.name.chars().count() > 100
+        || !(5..=1440).contains(&input.interval_minutes)
+    {
+        return Err(RssError::Invalid(
+            "请输入名称（不超过 100 字）和 5–1440 分钟的检查间隔".into(),
+        ));
+    }
+
+    let operation = id
+        .map(|v| format!("feed:update:{v}"))
+        .unwrap_or_else(|| "feed:create".into());
+    let request_digest = digest(&json(&input)?);
+    if let Some(existing) = request_lookup(
+        &tx,
+        &operation,
+        input.request_id.as_deref(),
+        &request_digest,
+    )? {
+        return Ok(get_feed(&tx, existing)?.record);
+    }
+    if let Some(site_id) = input.site_id {
+        require_reference(&tx, "sites", site_id, "关联站点")?;
+    }
+    let current = id.map(|id| get_feed(&tx, id)).transpose()?;
+    if let Some(current) = &current {
+        check_version(current.record.version, input.expected_version)?;
+    }
+    let url = input
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .or_else(|| current.as_ref().map(|c| c.url.clone()))
+        .ok_or_else(|| RssError::Invalid("请输入 RSS 地址".into()))?;
+    if current.as_ref().is_some_and(|feed| feed.url != url) {
+        return Err(RssError::Invalid(
+            "RSS 地址保存后不可修改，请添加新的订阅源".into(),
+        ));
+    }
+    let parsed =
+        reqwest::Url::parse(&url).map_err(|_| RssError::Invalid("RSS 地址格式无效".into()))?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || url.len() > 8192
+        || url.contains('•')
+    {
+        return Err(RssError::Invalid(
+            "RSS 地址必须是有效的 HTTP/HTTPS 地址，不能包含用户信息或脱敏占位符".into(),
+        ));
+    }
+    // A site's API may use a different origin from its RSS feed.
+    // The fetcher scopes credentials to the configured site origin per request.
+    let time = now();
+    let feed_id = if let Some(current) = current {
+        let resume = !current.record.enabled && input.enabled;
+        tx.execute("UPDATE rss_feeds SET name=?,site_id=?,use_proxy=?,enabled=?,interval_minutes=?,
+                    version=version+1,resume_baseline=CASE WHEN ? THEN 1 ELSE resume_baseline END,
+                    lease_owner=NULL,lease_until=NULL,lease_version=lease_version+1,current_run_id=NULL,
+                    requires_action=0,last_error=NULL,next_run_at=?,updated_at=? WHERE id=?",
+                    params![input.name.trim(),input.site_id,input.use_proxy,input.enabled,input.interval_minutes,
+                        resume,time,time,current.record.id]).map_err(sql_error)?;
+        if let Some(run_id)=tx.query_row("SELECT id FROM rss_runs WHERE feed_id=? AND kind='check' AND status IN ('queued','running') ORDER BY id DESC LIMIT 1",[current.record.id],|r|r.get::<_,i64>(0)).optional().map_err(sql_error)? {
+                    tx.execute("UPDATE rss_runs SET status='superseded',message='源配置已更新，旧响应已丢弃',finished_at=? WHERE id=?",params![time,run_id]).map_err(sql_error)?;
+                }
+        synchronize_jobs(&tx, &time)?;
+        current.record.id
+    } else {
+        tx.execute("INSERT INTO rss_feeds(name,url_display,site_id,use_proxy,enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    params![input.name.trim(),masked_url(&url),input.site_id,input.use_proxy,input.enabled,input.interval_minutes,time,time,time]).map_err(sql_error)?;
+        let id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO rss_feed_secrets(feed_id,generation,url,url_digest) VALUES(?,1,?,?)",
+            params![id, url, digest(&url)],
+        )
+        .map_err(sql_error)?;
+        id
+    };
+    record_request(
+        &tx,
+        &operation,
+        input.request_id.as_deref(),
+        &request_digest,
+        feed_id,
+        Some(feed_id),
+        "feed_save",
+        &time,
+    )?;
+    let result = get_feed(&tx, feed_id)?.record;
+    Ok(result)
+}
+
+fn save_rule(
+    tx: &rusqlite::Transaction<'_>,
+    id: Option<i64>,
+    mut input: RuleInput,
+) -> RssResult<RuleRecord> {
+    matcher::validate_filters(&input.filters).map_err(RssError::Invalid)?;
+    input.feed_ids.sort_unstable();
+    input.feed_ids.dedup();
+    if input.name.trim().is_empty()
+        || input.name.chars().count() > 100
+        || input.feed_ids.is_empty()
+        || input.feed_ids.len() > 200
+    {
+        return Err(RssError::Invalid(
+            "请填写规则名称并选择 1–200 个订阅源".into(),
+        ));
+    }
+
+    let operation = id
+        .map(|v| format!("rule:update:{v}"))
+        .unwrap_or_else(|| "rule:create".into());
+    let request_digest = digest(&json(&input)?);
+    if let Some(id) = request_lookup(
+        &tx,
+        &operation,
+        input.request_id.as_deref(),
+        &request_digest,
+    )? {
+        return get_rule(&tx, id);
+    }
+    for feed_id in &input.feed_ids {
+        get_feed(&tx, *feed_id)?;
+    }
+    validate_rule_target(&tx, input.enabled, input.downloader_id)?;
+    let time = now();
+    let rule_id = if let Some(id) = id {
+        let current = get_rule(&tx, id)?;
+        check_version(current.version, input.expected_version)?;
+        let new_revision = current.filters != input.filters
+            || current.feed_ids != input.feed_ids
+            || current.downloader_id != input.downloader_id;
+        let activate = new_revision || (!current.enabled && input.enabled);
+        tx.execute("UPDATE rss_rules SET name=?,enabled=?,priority=?,filters_json=?,downloader_id=?,options_json=?,
+                    match_revision=match_revision+?,version=version+1,last_error=NULL,updated_at=? WHERE id=?",
+                    params![input.name.trim(),input.enabled,input.priority,json(&input.filters)?,input.downloader_id,json(&input.options)?,new_revision,time,id]).map_err(sql_error)?;
+        if activate {
+            reset_rule_boundaries(&tx, id, &input.feed_ids)?;
+        }
+        if new_revision {
+            tx.execute("UPDATE rss_decisions SET status='superseded',next_evaluate_at=NULL,version=version+1 WHERE rule_id=? AND job_id IS NULL AND match_revision=?",params![id,current.match_revision]).map_err(sql_error)?;
+        }
+        synchronize_jobs(&tx, &time)?;
+        id
+    } else {
+        tx.execute("INSERT INTO rss_rules(name,enabled,priority,filters_json,downloader_id,options_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                    params![input.name.trim(),input.enabled,input.priority,json(&input.filters)?,input.downloader_id,json(&input.options)?,time,time]).map_err(sql_error)?;
+        let id = tx.last_insert_rowid();
+        reset_rule_boundaries(&tx, id, &input.feed_ids)?;
+        id
+    };
+    record_request(
+        &tx,
+        &operation,
+        input.request_id.as_deref(),
+        &request_digest,
+        rule_id,
+        None,
+        "rule_save",
+        &time,
+    )?;
+    let result = get_rule(&tx, rule_id)?;
+    Ok(result)
+}
+
+fn rule_ids_for_feed(conn: &Connection, id: i64) -> RssResult<Vec<i64>> {
+    let mut statement = conn.prepare("SELECT r.id FROM rss_rules r JOIN rss_rule_feeds rf ON rf.rule_id=r.id WHERE rf.feed_id=? AND r.archived_at IS NULL ORDER BY r.id").map_err(sql_error)?;
+    statement
+        .query_map([id], |row| row.get(0))
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)
+        .map_err(Into::into)
+}
+
+fn subscription_record(conn: &Connection, id: i64) -> RssResult<SubscriptionRecord> {
+    let feed = get_feed(conn, id)?.record;
+    let ids = rule_ids_for_feed(conn, id)?;
+    if ids.len() > 1 {
+        return Err(RssError::Invalid(
+            "此来源包含多条规则，请使用高级规则管理".into(),
+        ));
+    }
+    let rule = ids.first().map(|id| get_rule(conn, *id)).transpose()?;
+    if rule.as_ref().is_some_and(|rule| rule.feed_ids != vec![id]) {
+        return Err(RssError::Invalid(
+            "此来源使用共享规则，请使用高级规则管理".into(),
+        ));
+    }
+    Ok(SubscriptionRecord { feed, rule })
 }

@@ -103,6 +103,36 @@ impl RssService {
         ))
     }
 
+    pub async fn preview_subscription(
+        &self,
+        request: SubscriptionPreviewRequest,
+    ) -> RssResult<PreviewResponse> {
+        matcher::validate_filters(&request.filters).map_err(RssError::Invalid)?;
+        let sample = self.test_feed(request.source).await?;
+        let mut response = PreviewResponse {
+            rule_version: None,
+            total: sample.items.len() as u64,
+            matched: 0,
+            rejected: 0,
+            unknown: 0,
+            sample_limited: sample.item_count > sample.items.len(),
+            sample_time: sample.sample_time,
+            items: Vec::new(),
+        };
+        for item in sample.items {
+            let evaluation = matcher::evaluate(&request.filters, &item);
+            if evaluation.matched {
+                response.matched += 1;
+            } else if evaluation.needs_attributes {
+                response.unknown += 1;
+            } else {
+                response.rejected += 1;
+            }
+            response.items.push(PreviewItem { item, evaluation });
+        }
+        Ok(response)
+    }
+
     pub async fn preview(&self, request: PreviewRequest) -> RssResult<PreviewResponse> {
         matcher::validate_filters(&request.rule.filters).map_err(RssError::Invalid)?;
         if request.rule.feed_ids.is_empty()

@@ -12,6 +12,43 @@ info:
 servers:
   - url: http://127.0.0.1:3000
 paths:
+  /api/rss/subscriptions:
+    post:
+      summary: Atomically create a source and its download rule
+      description: The rule name and feed_ids are derived from the source. The rule stays enabled; the source enabled flag controls the subscription. A downloader is required even when paused. request_id deduplicates the entire transaction.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SubscriptionInput'}}}}
+      responses:
+        '200': {description: Saved subscription, content: {application/json: {schema: {$ref: '#/components/schemas/Subscription'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/subscriptions/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Get source and its exclusive rule; multiple/shared rules require advanced management
+      responses:
+        '200': {description: Subscription with masked URL, content: {application/json: {schema: {$ref: '#/components/schemas/Subscription'}}}}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      summary: Atomically update source and rule with both expected_version values
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SubscriptionInput'}}}}
+      responses:
+        '200': {description: Saved subscription, content: {application/json: {schema: {$ref: '#/components/schemas/Subscription'}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/rss/subscriptions/preview:
+    post:
+      summary: Preview up to 20 live samples from an unsaved or saved RSS source without persistence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source, filters]
+              properties:
+                source: {$ref: '#/components/schemas/FeedTestInput'}
+                filters: {$ref: '#/components/schemas/Filters'}
+      responses:
+        '200': {description: Match results; sample_limited signals truncation, content: {application/json: {schema: {$ref: '#/components/schemas/Preview'}}}}
+        default: {$ref: '#/components/responses/Error'}
   /api/rss/summary:
     get:
       summary: Counts across feeds, rules and downloads
@@ -217,6 +254,22 @@ components:
       description: '400 malformed JSON/query, 413 body over 128 KiB, 415 non-JSON body, 422 invalid configuration, 404 missing object, 409 version/state/idempotency conflict, 429 origin cooldown, 502 upstream failure, or 500 persistence failure. Messages omit private URLs and credentials.'
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    SubscriptionInput:
+      type: object
+      required: [feed, rule]
+      properties:
+        feed: {$ref: '#/components/schemas/FeedInput'}
+        rule: {$ref: '#/components/schemas/RuleInput'}
+        request_id: {type: string, nullable: true}
+    Subscription:
+      type: object
+      required: [feed, rule]
+      properties:
+        feed: {$ref: '#/components/schemas/Feed'}
+        rule:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/Rule'}]
+
     Error:
       type: object
       required: [error, code]

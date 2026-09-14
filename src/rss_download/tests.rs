@@ -283,6 +283,15 @@ async fn test_and_both_preview_modes_have_no_persistent_side_effects() {
             .unwrap();
         assert_eq!(preview.total, expected);
     }
+    let preview = harness
+        .service
+        .preview_subscription(SubscriptionPreviewRequest {
+            source: serde_json::from_value(json!({"feed_id":feed.id})).unwrap(),
+            filters: harness.rule_input(feed.id).filters,
+        })
+        .await
+        .unwrap();
+    assert_eq!(preview.total, 1);
     let unchanged = harness.service.db.rss_get_feed(feed.id).await.unwrap();
     assert_eq!(unchanged.record.last_sequence, 0);
     assert!(unchanged.record.initialized_at.is_none());

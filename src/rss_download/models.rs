@@ -413,3 +413,22 @@ fn default_interval() -> u32 {
 fn default_priority() -> i32 {
     100
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SubscriptionInput {
+    pub feed: FeedInput,
+    pub rule: RuleInput,
+    pub request_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SubscriptionRecord {
+    pub feed: FeedRecord,
+    pub rule: Option<RuleRecord>,
+}
+
+#[derive(Deserialize)]
+pub struct SubscriptionPreviewRequest {
+    pub source: FeedTestRequest,
+    pub filters: RuleFilters,
+}

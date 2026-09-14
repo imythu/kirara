@@ -148,7 +148,9 @@ async function localFeedback(page, scope, message, action, name) {
   if (process.env.RSS_CAPTURE !== '0') await page.screenshot({ path: path.join(output, `${name}.png`), fullPage: false, animations: 'disabled' });
 }
 
-(async () => {
+module.exports = { fixture, responder, noOverflow };
+
+if (require.main === module) (async () => {
   fs.mkdirSync(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   try {
@@ -169,69 +171,7 @@ async function localFeedback(page, scope, message, action, name) {
       state.listFail = false;
       await page.getByRole('button', { name: '重新加载', exact: true }).click();
 
-      // Saved addresses are never put back into the input; testing credentials uses POST.
-      await page.getByRole('button', { name: `编辑${state.feeds[0].name}`, exact: true }).click();
-      const dialog = page.getByRole('dialog', { name: '编辑订阅源', exact: true });
-      assert.equal(await dialog.locator('input[type="url"]').count(), 0, 'saved RSS addresses must not be editable');
-      assert(await dialog.getByText('地址保存后不可修改。如需使用其他地址，请添加订阅源。', { exact: true }).isVisible());
-      await dialog.getByLabel('订阅源名称', { exact: true }).fill('纪录片订阅（测试数据）');
-      await dialog.getByRole('button', { name: '测试并预览', exact: true }).click();
-      await dialog.getByText('源返回了登录页面，请更新站点凭据后重试', { exact: true }).waitFor();
-      assert.equal(await dialog.getByLabel('订阅源名称', { exact: true }).inputValue(), '纪录片订阅（测试数据）');
-      await dialog.getByRole('button', { name: '测试并预览', exact: true }).click();
-      await dialog.getByText('测试 RSS 来源 · 3 条', { exact: true }).waitFor();
-      assert.equal(state.writes.filter(r => r.path.endsWith('/feeds/test')).at(-1).body.url, null);
-      await capture(page, `feed-dialog-${width}`);
-      await dialog.getByRole('button', { name: '保存订阅源', exact: true }).click();
-      await dialog.waitFor({ state: 'hidden' });
-      const edit = state.writes.find(request => request.path === '/api/rss/feeds/1' && request.method === 'PUT');
-      assert.equal(edit.body.url, null, 'editing other settings must never resend the masked URL');
-      await page.goto(`${url}/#/rss`);
-      await page.getByRole('button', { name: state.feeds[0].name, exact: true }).waitFor();
-
-      // Discard confirmation stays beside Cancel even after scrolling to the bottom.
-      await page.getByRole('button', { name: '添加订阅源', exact: true }).click();
-      const unsaved = page.getByRole('dialog', { name: '添加订阅源', exact: true });
-      await unsaved.getByLabel('订阅源名称', { exact: true }).fill('未保存的草稿');
-      await unsaved.getByLabel('RSS 地址', { exact: true }).fill('https://draft.example/rss');
-      await unsaved.locator('.overflow-auto').evaluate(node => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
-      const beforeDiscard = state.writes.length;
-      await unsaved.getByRole('button', { name: '取消', exact: true }).click();
-      const keepEditing = unsaved.getByRole('button', { name: '继续编辑', exact: true });
-      await localFeedback(page, unsaved, '当前有未保存的修改', keepEditing, `discard-confirmation-${width}`);
-      await localFeedback(page, unsaved, '当前有未保存的修改', unsaved.getByRole('button', { name: '丢弃修改并关闭', exact: true }), `discard-confirmation-${width}`);
-      assert(await keepEditing.evaluate(node => node === document.activeElement));
-      await keepEditing.click();
-      assert.equal(await unsaved.getByLabel('订阅源名称', { exact: true }).inputValue(), '未保存的草稿');
-      await unsaved.getByRole('button', { name: '关闭添加订阅源', exact: true }).click();
-      await page.keyboard.press('Escape');
-      assert(await unsaved.isVisible(), 'Escape must not discard an unsaved draft');
-      await unsaved.getByRole('button', { name: '丢弃修改并关闭', exact: true }).click();
-      await unsaved.waitFor({ state: 'hidden' });
-      assert.equal(state.writes.length, beforeDiscard, 'closing must not save or download');
-
-      // Create: an HTTP failure preserves both the draft and its idempotency key.
-      await page.getByRole('button', { name: '添加订阅源', exact: true }).click();
-      const add = page.getByRole('dialog', { name: '添加订阅源', exact: true });
-      await add.getByLabel('订阅源名称', { exact: true }).fill('新来源（测试数据）');
-      const feedSave = add.getByRole('button', { name: '保存订阅源', exact: true });
-      await add.getByLabel('RSS 地址', { exact: true }).fill('invalid-url');
-      await add.locator('.overflow-auto').evaluate(node => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
-      await feedSave.click();
-      await localFeedback(page, add, '请输入完整的 RSS 地址', feedSave, `feed-validation-${width}`);
-      assert.equal(await add.getByLabel('RSS 地址', { exact: true }).getAttribute('aria-invalid'), 'true');
-      assert((await add.getByLabel('RSS 地址', { exact: true }).getAttribute('aria-describedby')).includes('rss-feed-url-error'));
-      assert.equal(await add.getByLabel('RSS 地址', { exact: true }).evaluate(node => node === document.activeElement), false, 'validation must not steal focus');
-      await add.getByLabel('RSS 地址', { exact: true }).fill('https://new.example/rss?passkey=synthetic-only');
-      await add.getByRole('button', { name: '保存订阅源', exact: true }).click();
-      await add.getByText('保存暂时失败，请重试', { exact: true }).waitFor();
-      await localFeedback(page, add, '保存暂时失败，请重试', feedSave, `feed-save-error-${width}`);
-      await add.getByRole('button', { name: '保存订阅源', exact: true }).click();
-      await page.getByRole('heading', { name: '新来源（测试数据）', exact: true }).waitFor();
-      const creates = state.writes.filter(r => r.path === '/api/rss/feeds' && r.method === 'POST');
-      assert.equal(creates.length, 2); assert.equal(creates[0].body.request_id, creates[1].body.request_id);
-      assert(!state.writes.some(r => r.path === '/api/rss/backfills'));
-
+      // Integrated source creation/editing is covered by rss-subscriptions.browser.cjs.
       await page.goto(`${url}/#/rss?tab=feeds&feed=1`);
       await page.getByRole('heading', { name: '纪录片订阅（测试数据）', exact: true }).waitFor();
       await page.getByText('查看筛选结果与资源信息', { exact: true }).nth(1).click();
@@ -336,10 +276,10 @@ async function localFeedback(page, scope, message, action, name) {
       await page.getByRole('button', { name: '恢复纪录片订阅（测试数据）', exact: true }).click();
       await page.getByRole('dialog', { name: '恢复订阅源', exact: true }).getByRole('button', { name: '恢复检查', exact: true }).click();
       await page.getByRole('button', { name: '暂停纪录片订阅（测试数据）', exact: true }).waitFor();
-      await page.getByRole('button', { name: '归档音乐精选（测试数据）', exact: true }).click();
-      await page.getByRole('dialog', { name: '归档订阅源', exact: true }).getByRole('button', { name: '确认归档', exact: true }).click();
+      await page.getByRole('button', { name: '删除订阅音乐精选（测试数据）', exact: true }).click();
+      await page.getByRole('dialog', { name: '删除订阅', exact: true }).getByRole('button', { name: '确认归档', exact: true }).click();
       await page.getByRole('button', { name: '音乐精选（测试数据）', exact: true }).waitFor({ state: 'hidden' });
-      await page.getByRole('tab', { name: '下载规则', exact: true }).click();
+      await page.getByRole('button', { name: '高级规则管理', exact: true }).click();
       await page.getByRole('button', { name: '暂停纪录片规则改名（测试数据）', exact: true }).click();
       await page.getByRole('button', { name: '启用纪录片规则改名（测试数据）', exact: true }).click();
       await page.getByRole('dialog', { name: '启用下载规则', exact: true }).getByRole('button', { name: '启用规则', exact: true }).click();
@@ -351,7 +291,7 @@ async function localFeedback(page, scope, message, action, name) {
       assert(!await page.locator('[data-rss-page]').innerText().then(text => text.includes('synthetic-only')));
       assert.deepEqual(errors, []);
       await page.close();
-      console.log(`${width}px: source CRUD/test, draft+idempotency recovery, server preview, history backfill, run records, delivery recovery, hash persistence and overflow passed`);
+      console.log(`${width}px: source actions, rule draft+idempotency recovery, server preview, history backfill, run records, delivery recovery, hash persistence and overflow passed`);
     }
 
     const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });

@@ -14,6 +14,12 @@ use crate::rss_download::{models::*, service::RssService};
 pub(super) fn router(service: Arc<RssService>) -> Router {
     Router::new()
         .route("/summary", get(summary))
+        .route("/subscriptions", post(create_subscription))
+        .route("/subscriptions/preview", post(preview_subscription))
+        .route(
+            "/subscriptions/{id}",
+            get(subscription).put(update_subscription),
+        )
         .route("/feeds", get(feeds).post(create_feed))
         .route("/feeds/test", post(test_feed))
         .route(
@@ -281,4 +287,34 @@ async fn run(
     Path(id): Path<i64>,
 ) -> RssResult<Json<RunRecord>> {
     Ok(Json(service.db.rss_get_run(id).await?))
+}
+
+async fn subscription(
+    State(service): State<Arc<RssService>>,
+    Path(id): Path<i64>,
+) -> RssResult<Json<SubscriptionRecord>> {
+    Ok(Json(service.db.rss_get_subscription(id).await?))
+}
+async fn create_subscription(
+    State(service): State<Arc<RssService>>,
+    Json(input): Json<SubscriptionInput>,
+) -> RssResult<Json<SubscriptionRecord>> {
+    let record = service.db.rss_save_subscription(None, input).await?;
+    service.wake.notify_one();
+    Ok(Json(record))
+}
+async fn update_subscription(
+    State(service): State<Arc<RssService>>,
+    Path(id): Path<i64>,
+    Json(input): Json<SubscriptionInput>,
+) -> RssResult<Json<SubscriptionRecord>> {
+    let record = service.db.rss_save_subscription(Some(id), input).await?;
+    service.wake.notify_one();
+    Ok(Json(record))
+}
+async fn preview_subscription(
+    State(service): State<Arc<RssService>>,
+    Json(input): Json<SubscriptionPreviewRequest>,
+) -> RssResult<Json<PreviewResponse>> {
+    Ok(Json(service.preview_subscription(input).await?))
 }

@@ -153,16 +153,43 @@ async fn rss_public_api_baseline_delivery_idempotency_and_restart() {
         .unwrap();
     assert_eq!(test["item_count"], 1);
     assert_eq!(read(&client, &base, "/api/rss/feeds").await["total"], 0);
+    let subscription_rule = json!({"name":"Documentary","feed_ids":[],"downloader_id":downloader["id"],
+        "filters":{"include":["Documentary"],"hr_policy":"any"},"options":{"tags":["rss"],"category":"docs"}});
+    let preview: Value = client
+        .post(format!("{base}/api/rss/subscriptions/preview"))
+        .json(&json!({"source":input,"filters":subscription_rule["filters"]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(preview["matched"], 1);
+    assert_eq!(read(&client, &base, "/api/rss/feeds").await["total"], 0);
+    let mut invalid_rule = subscription_rule.clone();
+    invalid_rule["downloader_id"] = json!(-1);
+    let invalid = client
+        .post(format!("{base}/api/rss/subscriptions"))
+        .json(&json!({"feed":input,"rule":invalid_rule,"request_id":"atomic-rejected"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::NOT_FOUND);
+    assert_eq!(read(&client, &base, "/api/rss/feeds").await["total"], 0);
     let mut id = 0;
     for _ in 0..2 {
         let response = client
-            .post(format!("{base}/api/rss/feeds"))
-            .json(&input)
+            .post(format!("{base}/api/rss/subscriptions"))
+            .json(&json!({"feed":input,"rule":subscription_rule,"request_id":"create-subscription-once"}))
             .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let feed: Value = response.json().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let record: Value = response.json().await.unwrap();
+        let feed = &record["feed"];
+        assert_eq!(record["rule"]["feed_ids"][0], feed["id"]);
         assert!(!feed.to_string().contains("private-test"));
         if id == 0 {
             id = feed["id"].as_i64().unwrap();
@@ -196,14 +223,6 @@ async fn rss_public_api_baseline_delivery_idempotency_and_restart() {
         .unwrap();
     assert_eq!(preview["matched"], 1);
     assert_eq!(read(&client, &base, "/api/rss/downloads").await["total"], 0);
-    client
-        .post(format!("{base}/api/rss/rules"))
-        .json(&rule)
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
     remote.entries.store(2, Ordering::SeqCst);
     let check = json!({"expected_version":feed["version"],"request_id":"check-once"});
     let response = client
