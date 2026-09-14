@@ -4,7 +4,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use reqwest::header::{
     AUTHORIZATION, COOKIE, ETAG, HeaderMap, HeaderValue, IF_MODIFIED_SINCE, IF_NONE_MATCH,
-    LAST_MODIFIED,
+    LAST_MODIFIED, LOCATION,
 };
 use reqwest::{Client, Proxy, Response, StatusCode, Url};
 use scraper::{Html, Selector};
@@ -130,8 +130,6 @@ impl RssFetcher {
     pub async fn fetch(&self, feed: &StoredFeed, conditional: bool) -> RssResult<FetchedFeed> {
         let url = checked_url(&feed.url)?;
         let context = self.context(feed, &url).await?;
-        let gate = self.indexers.access_gate_for_url(&url).await;
-        let _operation = gate.lock_operation().await;
         let mut request = context.client.get(url.clone()).headers(context.headers);
         if conditional && feed.record.initialized_at.is_some() {
             if let Some(value) = feed
@@ -149,10 +147,10 @@ impl RssFetcher {
                 request = request.header(IF_MODIFIED_SINCE, value);
             }
         }
-        let response = gate
-            .send_with_same_origin_redirects(&context.client, request, &url)
-            .await
-            .map_err(public_indexer_error)?;
+        let response = self
+            .fetch_following_redirects(&context.client, request, url)
+            .await?;
+        let gate = self.indexers.access_gate_for_url(response.url()).await;
         let etag = header_string(&response, ETAG);
         let last_modified = header_string(&response, LAST_MODIFIED);
         if response.status() == StatusCode::NOT_MODIFIED {
@@ -187,6 +185,55 @@ impl RssFetcher {
         parsed.etag = etag;
         parsed.last_modified = last_modified;
         Ok(parsed)
+    }
+
+    /// RSS feeds may move to HTTPS or another host. Gate every hop and never
+    /// forward site credentials or custom headers across origins.
+    async fn fetch_following_redirects(
+        &self,
+        client: &Client,
+        mut request: reqwest::RequestBuilder,
+        mut url: Url,
+    ) -> RssResult<Response> {
+        const MAX_REDIRECTS: usize = 3;
+        for redirects in 0..=MAX_REDIRECTS {
+            let headers = request
+                .try_clone()
+                .ok_or_else(|| RssError::Invalid("无法重建 RSS 请求".into()))?
+                .build()
+                .map_err(|_| RssError::Invalid("RSS 请求无效".into()))?
+                .headers()
+                .clone();
+            let gate = self.indexers.access_gate_for_url(&url).await;
+            let response = {
+                let _operation = gate.lock_operation().await;
+                gate.send(request).await.map_err(public_indexer_error)?
+            };
+            if !matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
+                return Ok(response);
+            }
+            if redirects == MAX_REDIRECTS {
+                return Err(RssError::Invalid(
+                    "RSS 已跟随 3 次重定向，仍要求跳转，请检查订阅地址".into(),
+                ));
+            }
+            let next = response
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|location| response.url().join(location).ok())
+                .ok_or_else(|| RssError::Invalid("RSS 重定向地址缺失或无效".into()))?;
+            let mut next = checked_url(next.as_str())?;
+            next.set_fragment(None);
+            let headers = if same_origin(&url, &next) {
+                headers
+            } else {
+                browser_request_header_map(&headers)
+            };
+            request = client.get(next.clone()).headers(headers);
+            url = next;
+        }
+        unreachable!("bounded redirect loop always returns")
     }
 
     pub async fn torrent(
@@ -872,6 +919,85 @@ mod tests {
                 .find(|item| item.site_torrent_id.as_deref() == Some(torrent_id))
                 .unwrap()
         }
+    }
+
+    #[tokio::test]
+    async fn rss_redirects_allow_three_hops_and_strip_cross_origin_credentials() {
+        use axum::extract::Path;
+        use axum::response::Redirect;
+        let fixture = TorrentFixture::new(
+            "nexusphp",
+            r#"{"auth_type":"cookie","cookie":"session=1"}"#,
+            false,
+        )
+        .await;
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = hits.clone();
+        let app = Router::new().route(
+            "/{remaining}",
+            get(move |Path(remaining): Path<usize>, headers: HeaderMap| {
+                let recorded = recorded.clone();
+                async move {
+                    recorded.lock().unwrap().push(remaining);
+                    for name in ["cookie", "authorization", "x-api-key", "x-custom-secret"] {
+                        assert!(!headers.contains_key(name));
+                    }
+                    if remaining == 0 {
+                        axum::response::IntoResponse::into_response(TEST_FEED)
+                    } else {
+                        axum::response::IntoResponse::into_response(Redirect::temporary(&format!(
+                            "/{}",
+                            remaining - 1
+                        )))
+                    }
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        for (remaining, succeeds) in [(2, true), (3, false)] {
+            hits.lock().unwrap().clear();
+            let destination = format!("{endpoint}/{remaining}");
+            let source = Router::new().route(
+                "/start",
+                get(move || {
+                    let destination = destination.clone();
+                    async move { Redirect::permanent(&destination) }
+                }),
+            );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url =
+                Url::parse(&format!("http://{}/start", listener.local_addr().unwrap())).unwrap();
+            let source_server =
+                tokio::spawn(async move { axum::serve(listener, source).await.unwrap() });
+            let client = Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap();
+            let request = client
+                .get(url.clone())
+                .header("cookie", "session=secret")
+                .header("authorization", "Bearer secret")
+                .header("x-api-key", "secret")
+                .header("x-custom-secret", "secret");
+            let result = fixture
+                .fetcher
+                .fetch_following_redirects(&client, request, url)
+                .await;
+            if succeeds {
+                let response = result.unwrap();
+                assert!(response.url().path().ends_with("/0"));
+                assert_eq!(response.text().await.unwrap(), TEST_FEED);
+                assert_eq!(*hits.lock().unwrap(), vec![2, 1, 0]);
+            } else {
+                assert!(result.unwrap_err().to_string().contains("3 次重定向"));
+                assert_eq!(*hits.lock().unwrap(), vec![3, 2, 1]);
+            }
+            source_server.abort();
+        }
+        server.abort();
     }
 
     #[test]
