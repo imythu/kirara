@@ -2,6 +2,7 @@
 //! saved request configuration is disclosed only through an explicit no-store endpoint.
 use crate::db::Database;
 use chrono::{DateTime, FixedOffset, Utc};
+use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, sync::Arc, time::Duration};
 
@@ -174,6 +175,25 @@ impl Scheduler {
             match self.db.list_scheduled_tasks().await {
                 Ok(tasks) => {
                     for task in tasks {
+                        if task.running {
+                            if let (Some(run), Some(config)) = (&task.last_run, &task.http) {
+                                if let Ok(started) = DateTime::parse_from_rfc3339(&run.started_at) {
+                                    let elapsed =
+                                        Utc::now().signed_duration_since(started).num_seconds();
+                                    // Execution has a hard deadline; allow extra time for result writes.
+                                    if elapsed > config.timeout_seconds as i64 + 60 {
+                                        if let Err(error) = self.db.finish_scheduled_run(
+                                            run.id, task.id, "interrupted".into(), None,
+                                            elapsed as u64 * 1000,
+                                            "执行超时或结果保存中断，结果未知；本次不会自动重试".into(),
+                                        ).await {
+                                            tracing::error!("scheduled task recovery: {error}");
+                                        }
+                                    }
+                                }
+                            }
+                            continue;
+                        }
                         if task.enabled
                             && !task.running
                             && task
@@ -206,15 +226,29 @@ impl Scheduler {
         tokio::spawn(async move {
             let _permit = permit;
             let start = std::time::Instant::now();
-            let config = task.http.expect("stored HTTP config");
-            let result = match db.get_settings().await {
-                Ok(settings) => execute_with_settings(&config, &settings).await,
-                Err(_) => Err("无法读取全局代理和浏览器配置".into()),
+            let config = task.http.as_ref();
+            let timeout = Duration::from_secs(config.map_or(300, |c| c.timeout_seconds));
+            let execution = async {
+                let config = config.ok_or("请求配置不存在")?;
+                match db.get_settings().await {
+                    Ok(settings) => execute_with_settings(config, &settings).await,
+                    Err(_) => Err("无法读取全局代理和浏览器配置".into()),
+                }
+            };
+            let result = match tokio::time::timeout(
+                timeout,
+                std::panic::AssertUnwindSafe(execution).catch_unwind(),
+            )
+            .await
+            {
+                Ok(Ok(result)) => result,
+                Ok(Err(_)) => Err("任务执行异常，结果未知；不会自动重试".into()),
+                Err(_) => Err("请求超时，结果未知；不会自动重试".into()),
             };
             let (status_code, status, message) = match result {
                 Ok(code) => {
                     let ok = config
-                        .expected_status
+                        .and_then(|c| c.expected_status)
                         .map_or((200..300).contains(&code), |expected| code == expected);
                     (
                         Some(code),
@@ -228,18 +262,27 @@ impl Scheduler {
                 }
                 Err(message) => (None, "failed", message),
             };
-            if let Err(error) = db
-                .finish_scheduled_run(
-                    run.id,
-                    task.id,
-                    status.into(),
-                    status_code,
-                    start.elapsed().as_millis() as u64,
-                    message,
-                )
-                .await
-            {
-                tracing::error!("scheduled task record: {error}");
+            // Retry only persistence, never resend a potentially non-idempotent request.
+            for attempt in 0..3 {
+                match db
+                    .finish_scheduled_run(
+                        run.id,
+                        task.id,
+                        status.into(),
+                        status_code,
+                        start.elapsed().as_millis() as u64,
+                        message.clone(),
+                    )
+                    .await
+                {
+                    Ok(()) => break,
+                    Err(error) => {
+                        tracing::error!("scheduled task record (attempt {}): {error}", attempt + 1);
+                        if attempt < 2 {
+                            tokio::time::sleep(Duration::from_millis(250)).await;
+                        }
+                    }
+                }
             }
         });
         Ok(())

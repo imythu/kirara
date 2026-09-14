@@ -581,3 +581,115 @@ async fn live_browser_delivery_preserves_auth_files_methods_and_redirects() {
     assert!(body.is_empty());
     server.abort();
 }
+
+#[tokio::test]
+async fn late_completion_cannot_unlock_a_new_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open(dir.path()).await.unwrap();
+    let id = db.save_scheduled_task(None, request()).await.unwrap();
+    let (_, old) = db.claim_scheduled_task(id, true).await.unwrap();
+    db.recover_scheduled_tasks().await.unwrap();
+    let (_, current) = db.claim_scheduled_task(id, true).await.unwrap();
+    db.finish_scheduled_run(old.id, id, "success".into(), Some(200), 1, "late".into())
+        .await
+        .unwrap();
+    assert!(db.list_scheduled_tasks().await.unwrap()[0].running);
+    let runs = db.scheduled_runs(id).await.unwrap();
+    assert_eq!(runs[0].id, current.id);
+    assert_eq!(runs[0].status, "running");
+    assert_eq!(runs[1].status, "interrupted");
+}
+
+#[tokio::test]
+async fn scheduler_recovers_stale_runs_but_preserves_live_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open(dir.path()).await.unwrap();
+    let id = db.save_scheduled_task(None, request()).await.unwrap();
+    let (_, mut stale) = db.claim_scheduled_task(id, true).await.unwrap();
+    db.set_scheduled_enabled(id, false).await.unwrap();
+    stale.started_at = (Utc::now() - chrono::Duration::minutes(10)).to_rfc3339();
+    let conn = rusqlite::Connection::open(dir.path().join("kirara.db")).unwrap();
+    conn.execute(
+        "UPDATE scheduled_task_runs SET record=? WHERE id=?",
+        rusqlite::params![serde_json::to_string(&stale).unwrap(), stale.id],
+    )
+    .unwrap();
+    drop(conn);
+    let live = db.save_scheduled_task(None, request()).await.unwrap();
+    db.claim_scheduled_task(live, true).await.unwrap();
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let worker = tokio::spawn(Scheduler::new(db.clone()).start(shutdown.clone()));
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if db.scheduled_runs(id).await.unwrap()[0].status == "interrupted" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    shutdown.cancel();
+    worker.await.unwrap();
+    let tasks = db.list_scheduled_tasks().await.unwrap();
+    assert!(!tasks.iter().find(|t| t.id == id).unwrap().running);
+    assert!(tasks.iter().find(|t| t.id == live).unwrap().running);
+    assert!(db.claim_scheduled_task(id, true).await.is_ok());
+}
+
+#[tokio::test]
+async fn stalled_http_finishes_and_releases_task() {
+    use axum::{Router, routing::get};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = Router::new().route(
+        "/",
+        get(|| async { std::future::pending::<String>().await }),
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open(dir.path()).await.unwrap();
+    let mut body = request();
+    body.http.as_mut().unwrap().url = format!("http://{address}/");
+    body.http.as_mut().unwrap().timeout_seconds = 1;
+    let id = db.save_scheduled_task(None, body).await.unwrap();
+    Scheduler::new(db.clone()).trigger(id, true).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let task = db.list_scheduled_tasks().await.unwrap().remove(0);
+            if !task.running {
+                let run = task.last_run.unwrap();
+                assert_eq!(run.status, "failed");
+                assert!(run.message.contains("超时"));
+                assert!(run.finished_at.is_some());
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    server.abort();
+}
+
+#[tokio::test]
+async fn completion_waits_for_concurrent_database_writer() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open(dir.path()).await.unwrap();
+    let id = db.save_scheduled_task(None, request()).await.unwrap();
+    let (_, run) = db.claim_scheduled_task(id, true).await.unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join("kirara.db")).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let writing = db.clone();
+    let completion = tokio::spawn(async move {
+        writing
+            .finish_scheduled_run(run.id, id, "success".into(), Some(200), 1, "ok".into())
+            .await
+    });
+    // A deferred read-then-write transaction fails immediately here despite busy_timeout.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    conn.execute_batch("COMMIT").unwrap();
+    completion.await.unwrap().unwrap();
+    assert!(!db.list_scheduled_tasks().await.unwrap()[0].running);
+    assert_eq!(db.scheduled_runs(id).await.unwrap()[0].status, "success");
+}

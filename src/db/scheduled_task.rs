@@ -219,9 +219,11 @@ impl Database {
         message: String,
     ) -> Result<(), AppError> {
         self.scheduled_db(move |conn| {
-            let tx = conn.transaction().map_err(sql_error)?;
+            let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(sql_error)?;
             let json: String = tx.query_row("SELECT record FROM scheduled_task_runs WHERE id=?", [run_id], |r| r.get(0)).map_err(sql_error)?;
             let mut run: Run = serde_json::from_str(&json).map_err(|_| invalid("执行记录损坏"))?;
+            // A delayed writer must not overwrite recovery or unlock a newer run.
+            if run.status != "running" || run.task_id != task_id { return Ok(()); }
             run.finished_at = Some(Utc::now().to_rfc3339()); run.status = status; run.status_code = code; run.duration_ms = Some(duration_ms); run.message = message;
             tx.execute("UPDATE scheduled_task_runs SET record=? WHERE id=?", params![serde_json::to_string(&run).unwrap(), run_id]).map_err(sql_error)?;
             tx.execute("UPDATE scheduled_tasks SET running=0 WHERE id=?", [task_id]).map_err(sql_error)?;
