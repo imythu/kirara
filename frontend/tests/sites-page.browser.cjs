@@ -6,10 +6,10 @@ const fs = require('node:fs');
 const url = process.env.SITES_TEST_URL || 'http://127.0.0.1:5173';
 const screenshots = process.env.SITES_SCREENSHOTS;
 const now = '2026-09-05T10:00:00Z';
-const stats = { site_id: 1, uid: '12345', username: '测试账户', uploaded: 8e12, downloaded: 2e12, ratio: 4, bonus: 12345, seeding_count: 20, leeching_count: 0, updated_at: now, last_checked_at: now, last_error: null };
+const stats = { site_id: 1, uid: '12345', username: '测试账户', uploaded: 8e12, downloaded: 2e12, ratio: 4, bonus: 12345, seeding_count: 20, seeding_size: 4e12, leeching_count: 0, updated_at: now, last_checked_at: now, last_error: null };
 const sites = [
   { id: 1, name: '云海测试站', site_type: 'nexusphp', base_url: 'https://site.example.test', auth_type: 'cookie', auth_configured: true, use_proxy: false, stats },
-  { id: 2, name: '连接失败测试站', site_type: 'mteam', base_url: 'https://failed.example.test', auth_type: 'api_key', auth_configured: true, use_proxy: true, stats: { ...stats, site_id: 2, last_error: '认证已失效，请更新凭据后重新测试连接。' } },
+  { id: 2, name: '连接失败测试站', site_type: 'mteam', base_url: 'https://failed.example.test', auth_type: 'api_key', auth_configured: true, use_proxy: true, stats: { ...stats, site_id: 2, seeding_count: 0, seeding_size: null, last_error: '认证已失效，请更新凭据后重新测试连接。' } },
   { id: 3, name: '等待刷新测试站', site_type: 'gazelle', base_url: 'https://pending.example.test', auth_type: 'cookie', auth_configured: false, use_proxy: false, stats: null },
 ];
 (async () => {
@@ -69,9 +69,31 @@ const sites = [
     assert.equal(await dialog('PT 数据总览').getByText('暂无站点统计数据', { exact: true }).count(), 0);
     overviewFailure = false;
     await dialog('PT 数据总览').getByRole('button', { name: '重新加载总览' }).click();
-    const accountDataMetric = dialog('PT 数据总览').getByText('有账户数据', { exact: true }).locator('..').locator('..');
-    await accountDataMetric.getByText('2', { exact: true }).waitFor();
-    assert.equal(await accountDataMetric.getByText('/ 3', { exact: true }).innerText(), '/ 3');
+    const overview = dialog('PT 数据总览');
+    const metric = label => overview.getByText(label, { exact: true }).locator('..');
+    await metric('站点数').getByText('3', { exact: true }).waitFor();
+    await metric('总做种数').getByText('20', { exact: true }).waitFor();
+    assert.match(await metric('总做种数').innerText(), /已获取 2\/3 站/);
+    assert.match(await metric('总做种量').innerText(), /已获取 1\/3 站/);
+    assert.equal(await overview.getByText('状态 / 最近检查', { exact: true }).count(), 0);
+    assert.equal(await overview.locator('details').getAttribute('open'), null);
+    const seedRow = overview.getByRole('row').filter({ hasText: '连接失败测试站' });
+    assert.equal(await seedRow.getByRole('cell').nth(1).innerText(), '0');
+    assert.equal(await seedRow.getByRole('cell').nth(2).innerText(), '—');
+    await capture('overview-desktop');
+    const downloadPromise = page.waitForEvent('download');
+    await overview.getByRole('button', { name: '下载图片', exact: true }).click();
+    const download = await downloadPromise;
+    const imagePath = await download.path();
+    assert.ok(fs.statSync(imagePath).size > 1000, 'PNG export contains data');
+    if (screenshots) fs.copyFileSync(imagePath, `${screenshots}/overview-export.png`);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await noOverflow(width);
+      assert.equal(await overview.evaluate(el => el.scrollWidth <= el.clientWidth), true, 'overview fits mobile');
+      await capture(`overview-${width}`);
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await close('PT 数据总览');
     await page.getByLabel('搜索站点', { exact: true }).fill('不存在');
     await visibleButton('清除筛选').click();
