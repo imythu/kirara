@@ -81,7 +81,7 @@ fn snapshot_sign_in_tasks(conn: &Connection) -> Result<Vec<SignInTaskRecord>, Ap
                      browserless_solve_timeout, browserless_action_timeout,
                      browserless_post_click_wait_ms, enabled,
                      last_status, last_message, last_run_at, created_at, updated_at,
-                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules
+                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules, manual_override
                      FROM sign_in_tasks ORDER BY id",
                 )
                 .map_err(sql_error)?;

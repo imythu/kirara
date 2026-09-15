@@ -88,7 +88,12 @@ pub(super) fn resolve(
     method: &str,
     config: &BrowserlessTaskConfig,
 ) -> Box<dyn Signer> {
-    known(base_url).unwrap_or_else(|| {
+    let preset = if config.manual_override {
+        None
+    } else {
+        known(base_url)
+    };
+    preset.unwrap_or_else(|| {
         if method == SIGN_IN_METHOD_OCR_CAPTCHA {
             Box::new(captcha::Captcha)
         } else if method == SIGN_IN_METHOD_CLOUDFLARE || browser == SIGN_IN_BROWSER_BROWSERLESS {
@@ -112,7 +117,8 @@ pub fn normalize_request(base_url: &str, request: &mut SignInTaskRequest) {
         request.sign_in_method.as_deref().unwrap_or("open_page"),
         &config,
     );
-    let profile = signer.profile(&config);
+    let mut profile = signer.profile(&config);
+    profile.browserless.manual_override = config.manual_override;
     request.browser = Some(profile.browser.into());
     request.sign_in_method = Some(profile.sign_in_method.into());
     request.browserless = Some(profile.browserless);
@@ -235,6 +241,50 @@ mod tests {
         }
         assert!(known_profile("https://open.cd.evil.example").is_none());
         assert!(known_profile("https://fakeopen.cd").is_none());
+    }
+
+    #[test]
+    fn manual_choice_survives_normalization_and_execution_routing() {
+        for url in [
+            "https://check.open.cd",
+            "https://u2.dmhy.org",
+            "https://dstudio.me",
+        ] {
+            for (method, expected) in [
+                ("open_page", "nexus"),
+                ("ocr_captcha", "captcha"),
+                ("cloudflare", "nexus_cf_turnstile"),
+            ] {
+                let mut request = SignInTaskRequest {
+                    name: "manual".into(),
+                    site_id: 1,
+                    cron_expression: "0 0 */8 * * *".into(),
+                    browser: Some("lightpanda".into()),
+                    sign_in_method: Some(method.into()),
+                    browserless: Some(BrowserlessTaskConfig {
+                        manual_override: true,
+                        cf_mode: "turnstile".into(),
+                        selector: "#custom".into(),
+                        ..Default::default()
+                    }),
+                };
+                normalize_request(url, &mut request);
+                normalize_request(url, &mut request);
+                let config = request.browserless.unwrap();
+                assert!(config.manual_override);
+                let profile = resolve(
+                    url,
+                    request.browser.as_deref().unwrap(),
+                    request.sign_in_method.as_deref().unwrap(),
+                    &config,
+                )
+                .profile(&config);
+                assert_eq!(profile.id, expected);
+                if method == "ocr_captcha" {
+                    assert_eq!(profile.browserless.selector, "#custom");
+                }
+            }
+        }
     }
 
     #[test]

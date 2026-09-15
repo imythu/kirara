@@ -625,7 +625,7 @@ impl Database {
                      browserless_solve_timeout, browserless_action_timeout,
                      browserless_post_click_wait_ms, enabled,
                      last_status, last_message, last_run_at, created_at, updated_at,
-                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules
+                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules, manual_override
                      FROM sign_in_tasks ORDER BY id",
                 )
                 .map_err(sql_error)?;
@@ -650,7 +650,7 @@ impl Database {
                  browserless_solve_timeout, browserless_action_timeout,
                  browserless_post_click_wait_ms, enabled,
                  last_status, last_message, last_run_at, created_at, updated_at,
-                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules
+                 attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules, manual_override
                  FROM sign_in_tasks WHERE id = ?",
                 params![id],
                 map_sign_in_task,
@@ -675,8 +675,8 @@ impl Database {
                   lightpanda_region, browser, proxy, country, sign_in_method,
                   browserless_selector, browserless_cf_mode, browserless_wait_ms,
                   browserless_solve_timeout, browserless_action_timeout,
-                  browserless_post_click_wait_ms, enabled, created_at, updated_at, attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules)
-                  VALUES (?, ?, ?, NULL, '', 'euwest', ?, 'fast_dc', NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  browserless_post_click_wait_ms, enabled, created_at, updated_at, attendance_path, captcha_selector, captcha_input_selector, already_keywords, submit_method, result_rules, manual_override)
+                  VALUES (?, ?, ?, NULL, '', 'euwest', ?, 'fast_dc', NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     req.name,
                     req.site_id,
@@ -699,6 +699,7 @@ impl Database {
                     browserless.already_keywords,
                     browserless.submit_method,
                     serde_json::to_string(&browserless.result_rules).expect("serializable result rules"),
+                    browserless.manual_override,
                 ],
             )
             .map_err(sign_in_write_error)?;
@@ -724,7 +725,7 @@ impl Database {
                  name = ?, site_id = ?, cron_expression = ?, browser = ?, sign_in_method = ?,
                  browserless_selector = ?, browserless_cf_mode = ?, browserless_wait_ms = ?,
                  browserless_solve_timeout = ?, browserless_action_timeout = ?,
-                 browserless_post_click_wait_ms = ?, updated_at = ?, attendance_path = ?, captcha_selector = ?, captcha_input_selector = ?, already_keywords = ?, submit_method = ?, result_rules = ?
+                 browserless_post_click_wait_ms = ?, updated_at = ?, attendance_path = ?, captcha_selector = ?, captcha_input_selector = ?, already_keywords = ?, submit_method = ?, result_rules = ?, manual_override = ?
                  WHERE id = ?",
                 params![
                     req.name,
@@ -747,6 +748,7 @@ impl Database {
                     browserless.already_keywords,
                     browserless.submit_method,
                     serde_json::to_string(&browserless.result_rules).expect("serializable result rules"),
+                    browserless.manual_override,
                     id,
                 ],
             )
@@ -2766,6 +2768,7 @@ impl Database {
                 ("captcha_input_selector", "ALTER TABLE sign_in_tasks ADD COLUMN captcha_input_selector TEXT NOT NULL DEFAULT ''"),
                 ("already_keywords", "ALTER TABLE sign_in_tasks ADD COLUMN already_keywords TEXT NOT NULL DEFAULT ''"),
                 ("submit_method", "ALTER TABLE sign_in_tasks ADD COLUMN submit_method TEXT NOT NULL DEFAULT 'click'"),
+                ("manual_override", "ALTER TABLE sign_in_tasks ADD COLUMN manual_override INTEGER NOT NULL DEFAULT 0"),
                 ("result_rules", "ALTER TABLE sign_in_tasks ADD COLUMN result_rules TEXT NOT NULL DEFAULT '[]'"),
             ] {
                 ensure_column(&conn, "sign_in_tasks", column, sql)?;
@@ -3540,6 +3543,7 @@ fn map_sign_in_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<SignInTaskRecor
         browser: row.get(4)?,
         sign_in_method: row.get(5)?,
         browserless: crate::sign_in::BrowserlessTaskConfig {
+            manual_override: row.get(24)?,
             selector: row.get(6)?,
             cf_mode: row.get(7)?,
             wait_ms: optional_u64(row, 8)?,
@@ -4478,6 +4482,7 @@ mod migration_tests {
                 browser: Some(crate::sign_in::SIGN_IN_BROWSER_BROWSERLESS.to_string()),
                 sign_in_method: Some(crate::sign_in::SIGN_IN_METHOD_OPEN_PAGE.to_string()),
                 browserless: Some(crate::sign_in::BrowserlessTaskConfig {
+                    manual_override: true,
                     selector: "button.check-in".to_string(),
                     cf_mode: crate::sign_in::BROWSERLESS_CF_MODE_PAGE.to_string(),
                     wait_ms: None,
@@ -4513,6 +4518,7 @@ mod migration_tests {
 
         let task = reopened.get_sign_in_task(task_id).await.unwrap().unwrap();
         assert_eq!(task.browser, crate::sign_in::SIGN_IN_BROWSER_BROWSERLESS);
+        assert!(task.browserless.manual_override);
         assert_eq!(task.browserless.submit_method, "ajax");
         assert_eq!(task.browserless.result_rules[0].value, "false");
         assert_eq!(task.browserless.result_rules[0].value_type, "string");

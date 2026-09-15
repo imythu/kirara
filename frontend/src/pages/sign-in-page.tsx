@@ -206,16 +206,17 @@ export function SignInPage() {
   const activeSearch = activeView === "tasks" ? taskSearch : recordSearch;
   const filteredTasks = useMemo(() => taskSearch.records.map((task) => {
     const profile = profiles.find((item) => item.site_id === task.site_id)?.profile;
-    return profile ? { ...task, browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless } : task;
+    return profile && !task.browserless?.manual_override ? { ...task, browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless } : task;
   }), [taskSearch.records, profiles]);
   const filteredRecords = recordSearch.records;
   const suggestedTaskName = editingId === null
     ? nexusSites.find((site) => site.id === form.site_id)?.name.trim() ?? ""
     : "";
   const selectedProfile = profiles.find(item => item.site_id === form.site_id)?.profile;
+  const usingPreset = Boolean(selectedProfile && !form.browserless?.manual_override);
   const imageCaptcha = form.sign_in_method === "ocr_captcha";
   const browserlessTask = { ...DEFAULT_BROWSERLESS_TASK, ...form.browserless };
-  const signerChoice = imageCaptcha ? "captcha" : form.browser === "browserless" || form.sign_in_method === "cloudflare"
+  const signerChoice = usingPreset ? "preset" : imageCaptcha ? "captcha" : form.browser === "browserless" || form.sign_in_method === "cloudflare"
     ? browserlessTask.cf_mode === "turnstile" ? "cf_turnstile" : "cf_challenge" : "nexus";
 
   function siteSignInPreset(site: SiteRecord | undefined) {
@@ -223,10 +224,16 @@ export function SignInPage() {
   }
 
   function chooseSigner(value: string) {
+    if (value === "preset" && selectedProfile) {
+      setForm(current => ({ ...current, browser: selectedProfile.browser, sign_in_method: selectedProfile.sign_in_method, browserless: { ...selectedProfile.browserless, manual_override: false } }));
+      setSubmitError("");
+      return;
+    }
     setForm(current => ({ ...current,
       browser: value === "nexus" ? "lightpanda" : "browserless",
       sign_in_method: value === "nexus" ? "open_page" : value === "captcha" ? "ocr_captcha" : "cloudflare",
       browserless: { ...DEFAULT_BROWSERLESS_TASK,
+        manual_override: true,
         selector: value === "captcha" ? "" : "input[type='submit']",
         cf_mode: value === "cf_turnstile" ? "turnstile" : "page",
       },
@@ -361,7 +368,7 @@ export function SignInPage() {
     setEditingId(task.id);
     const next = taskToForm(task);
     const profile = siteSignInPreset(nexusSites.find(site => site.id === task.site_id));
-    if (profile) Object.assign(next, { browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless });
+    if (profile && !next.browserless?.manual_override) Object.assign(next, { browser: profile.browser, sign_in_method: profile.sign_in_method, browserless: profile.browserless });
     else if (next.sign_in_method === "cloudflare" || next.sign_in_method === "ocr_captcha") next.browser = "browserless";
     setForm(next);
     setIntervalHours(cronToInterval(task.cron_expression));
@@ -472,7 +479,7 @@ export function SignInPage() {
       cron_expression: intervalToCron(intervalHours),
       browser: form.browser ?? "lightpanda",
       sign_in_method: form.sign_in_method ?? "open_page",
-      browserless: form.browser !== "browserless" && !form.browserless?.selector.trim() ? null : {
+      browserless: form.browser !== "browserless" && !form.browserless?.manual_override && !form.browserless?.selector.trim() ? null : {
         ...(form.browserless ?? DEFAULT_BROWSERLESS_TASK),
         selector: (form.browserless?.selector ?? DEFAULT_BROWSERLESS_TASK.selector).trim(),
       },
@@ -1055,7 +1062,7 @@ export function SignInPage() {
         open={formOpen}
         onClose={closeForm}
         title={editingId !== null ? "编辑自动签到任务" : "添加自动签到任务"}
-        description="选择站点和执行间隔，已支持站点会自动匹配签到方式。"
+        description="选择站点和执行间隔，已支持站点默认使用系统适配，也可手动选择签到方式。"
         escMode="double"
         panelClassName="max-w-3xl"
       >
@@ -1107,24 +1114,20 @@ export function SignInPage() {
                 options={SIGN_IN_INTERVAL_HOURS.map((hours) => ({ value: String(hours), label: `每 ${hours} 小时` }))}
               />
             </div>
-            {selectedProfile ? (
-              <div className="space-y-1 sm:col-span-2" role="status">
-                <p className="text-sm font-medium">{selectedProfile.label}</p>
-                <p className="text-sm text-muted-foreground">已自动适配，无需配置签到参数。</p>
-              </div>
-            ) : (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="sign-in-method">签到方式</Label>
-                <Select id="sign-in-method" value={signerChoice} onChange={chooseSigner} options={[
-                  { value: "nexus", label: "打开页面签到" },
-                  { value: "cf_challenge", label: "CF 页面挑战签到" },
-                  { value: "cf_turnstile", label: "CF Turnstile 签到" },
-                  { value: "captcha", label: "通用图片验证码签到" },
-                ]} />
-                <p className="text-xs text-muted-foreground">此站尚未自动适配，默认尝试打开页面签到。如需其他方式，请按站点实际情况选择。</p>
-              </div>
-            )}
-            {!selectedProfile && imageCaptcha ? <>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="sign-in-method">签到方式</Label>
+              <Select id="sign-in-method" value={signerChoice} onChange={chooseSigner} options={[
+                ...(selectedProfile ? [{ value: "preset", label: `系统适配：${selectedProfile.label}` }] : []),
+                { value: "nexus", label: "打开页面签到" },
+                { value: "cf_challenge", label: "CF 页面挑战签到" },
+                { value: "cf_turnstile", label: "CF Turnstile 签到" },
+                { value: "captcha", label: "通用图片验证码签到" },
+              ]} />
+              <p className="text-xs text-muted-foreground">{selectedProfile
+                ? "默认使用系统适配，可手动选择其他方式；选择系统适配可恢复预设。"
+                : "此站尚未自动适配，默认尝试打开页面签到。如需其他方式，请按站点实际情况选择。"}</p>
+            </div>
+            {!usingPreset && imageCaptcha ? <>
               <p id="sign-in-image-guidance" className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
                 以下五项需要了解站点页面结构。普通用户可通过 <a href="https://github.com/imythu/kirara/issues/new" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">GitHub 联系作者适配站点</a>。
               </p>

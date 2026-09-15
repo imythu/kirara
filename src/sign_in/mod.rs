@@ -51,6 +51,8 @@ fn default_submit_method() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserlessTaskConfig {
+    #[serde(default)]
+    pub manual_override: bool,
     #[serde(default = "default_browserless_selector")]
     pub selector: String,
     #[serde(default = "default_attendance_path")]
@@ -80,6 +82,7 @@ pub struct BrowserlessTaskConfig {
 impl Default for BrowserlessTaskConfig {
     fn default() -> Self {
         Self {
+            manual_override: false,
             selector: default_browserless_selector(),
             attendance_path: default_attendance_path(),
             captcha_selector: String::new(),

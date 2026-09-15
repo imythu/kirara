@@ -356,6 +356,7 @@ export type BrowserlessTaskConfig = {
   captcha_input_selector: string;
   already_keywords: string;
   selector: string;
+  manual_override?: boolean;
   cf_mode: "auto" | "page" | "turnstile";
   wait_ms: number | null;
   solve_timeout: number | null;
