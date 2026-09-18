@@ -8,6 +8,7 @@ use scraper::{Element, Html, Selector};
 use serde_json::Value;
 use tracing::{debug, warn};
 
+use super::rules::{self, BonusPageRule, SiteRule};
 use super::{SiteAdapter, SiteAuth, TorrentAttributes, UserStats, UserStatsDetails};
 use std::error::Error as _;
 use std::future::Future;
@@ -81,6 +82,42 @@ impl NexusPhpAdapter {
                     .to_string(),
             );
         }
+        let ptd_site = Url::parse(&self.base_url)
+            .ok()
+            .and_then(|url| url.host_str().and_then(crate::ptd_sites::site_id_for_host));
+        let rule = ptd_site.and_then(rules::rule_for_site);
+        if let Some(api) = rule.and_then(|rule| rule.json_user_stats)
+            && api.dialect == "keepfrds"
+            && let Some(mut stats) = self.fetch_keepfrds_json_stats(api.path).await
+        {
+            // Rates stay on the profile page for this fork.
+            if let Some(uid) = stats.uid.clone() {
+                let profile_url =
+                    format!("{}/userdetails.php?id={}", self.base_url.trim_end_matches('/'), uid);
+                if let Ok(html) = self.fetch_html_page(&profile_url, "用户详情页").await {
+                    if stats.details.bonus_per_hour.is_none()
+                        && let Some(rule) = rule
+                    {
+                        stats.details.bonus_per_hour = rules::extract_number_by_selectors(
+                            &html,
+                            rule.bonus_per_hour_selectors,
+                        );
+                    }
+                    if stats.details.message_count.is_none() {
+                        stats.details.message_count = parse_message_count(&html);
+                    }
+                    if stats.details.bonus_per_hour.is_none() {
+                        stats.details.bonus_per_hour =
+                            parse_bonus_rates(&html, false).0.or_else(|| {
+                                // Some themes keep the rate only on mybonus.php.
+                                None
+                            });
+                    }
+                }
+            }
+            stats.fill_derived();
+            return Ok(stats);
+        }
         // Match PT-Depiler's generic NexusPHP process: reuse the stable id first and only visit
         // /index.php when no id is known (or when the profile cannot supply complete totals). Cookie-derived
         // ids take precedence over cached ids so changing accounts cannot silently reuse stale data.
@@ -105,7 +142,7 @@ impl NexusPhpAdapter {
                 .await
             {
                 Ok(html) => {
-                    if !has_transfer_totals(&html) {
+                    if !has_transfer_totals_with_rule(&html, rule) {
                         page_errors.push("用户详情页没有完整的上传量和下载量".to_string());
                     }
                     detail_html = Some(html);
@@ -121,7 +158,7 @@ impl NexusPhpAdapter {
 
         if detail_html
             .as_deref()
-            .is_none_or(|html| !has_transfer_totals(html))
+            .is_none_or(|html| !has_transfer_totals_with_rule(html, rule))
         {
             let index_url = format!("{}/index.php", self.base_url);
             debug!("NexusPHP HTML request: {}", index_url);
@@ -189,10 +226,55 @@ impl NexusPhpAdapter {
 
         let detail_text = extract_visible_text(detail_html);
         let index_text = extract_visible_text(index_html);
-        let uploaded = parse_labeled_size(&detail_text, &["上传量", "上傳量", "Uploaded"])
-            .or_else(|| parse_labeled_size(&index_text, &["上传量", "上傳量", "Uploaded"]));
-        let downloaded = parse_labeled_size(&detail_text, &["下载量", "下載量", "Downloaded"])
-            .or_else(|| parse_labeled_size(&index_text, &["下载量", "下載量", "Downloaded"]));
+        let is_u2 = ptd_site == Some("u2");
+        let empty: &[&'static str] = &[];
+        let uploaded_labels = rules::merge_labels(
+            &["上传量", "上傳量", "Uploaded"],
+            rule.map(|r| r.uploaded_labels).unwrap_or(empty),
+        );
+        let downloaded_labels = rules::merge_labels(
+            &["下载量", "下載量", "Downloaded"],
+            rule.map(|r| r.downloaded_labels).unwrap_or(empty),
+        );
+        let bonus_labels = rules::merge_labels(
+            &[
+                "魔力值",
+                "Karma Points",
+                "魅力值",
+                "星焱",
+                "沙粒",
+                "魔力",
+                "Bonus",
+                "蝌蚪",
+                "U币",
+                "UBits Coin",
+                "UCoin",
+                "憨豆",
+            ],
+            rule.map(|r| r.bonus_labels).unwrap_or(empty),
+        );
+
+        let mut uploaded =
+            parse_labeled_size(&detail_text, &uploaded_labels)
+                .or_else(|| parse_labeled_size(&index_text, &uploaded_labels));
+        if uploaded.is_none()
+            && let Some(rule) = rule
+        {
+            uploaded = rules::extract_size_by_selectors(detail_html, rule.uploaded_selectors)
+                .or_else(|| rules::extract_size_by_selectors(index_html, rule.uploaded_selectors));
+        }
+        let mut downloaded =
+            parse_labeled_size(&detail_text, &downloaded_labels)
+                .or_else(|| parse_labeled_size(&index_text, &downloaded_labels));
+        if downloaded.is_none()
+            && let Some(rule) = rule
+        {
+            downloaded =
+                rules::extract_size_by_selectors(detail_html, rule.downloaded_selectors)
+                    .or_else(|| {
+                        rules::extract_size_by_selectors(index_html, rule.downloaded_selectors)
+                    });
+        }
 
         let page_label = match (detail_page_loaded, homepage_loaded) {
             (true, true) => "用户详情页和首页",
@@ -209,37 +291,67 @@ impl NexusPhpAdapter {
         let uploaded = uploaded.ok_or_else(|| missing_field("上传量"))?;
         let downloaded = downloaded.ok_or_else(|| missing_field("下载量"))?;
 
-        let ratio = ratio_from_totals(Some(uploaded), Some(downloaded));
-        let bonus = parse_profile_number(
-            detail_html,
-            &[
-                "魔力值",
-                "Karma Points",
-                "魅力值",
-                "星焱",
-                "沙粒",
-                "魔力",
-                "Bonus",
-                "蝌蚪",
-                "U币",
-                "UBits Coin",
-                "UCoin",
-                "憨豆",
-            ],
-        );
+        let ratio = ratio_from_totals(Some(uploaded), Some(downloaded)).or_else(|| {
+            rule.and_then(|rule| {
+                rules::extract_number_by_selectors(detail_html, rule.ratio_selectors)
+                    .or_else(|| {
+                        rules::extract_number_by_selectors(index_html, rule.ratio_selectors)
+                    })
+            })
+        });
+        let mut bonus = parse_profile_number(detail_html, &bonus_labels);
+        if bonus.is_none()
+            && let Some(rule) = rule
+        {
+            bonus = rules::extract_number_by_selectors(detail_html, rule.bonus_selectors)
+                .or_else(|| rules::extract_number_by_selectors(index_html, rule.bonus_selectors));
+        }
         let mut seeding_count = parse_labeled_integer(
             &detail_text,
             &["当前做种", "當前做種", "做种数", "做種數", "Seeding"],
         );
-        let leeching_count = parse_labeled_integer(
+        if seeding_count.is_none()
+            && let Some(rule) = rule
+        {
+            seeding_count =
+                rules::extract_u32_by_selectors(detail_html, rule.seeding_selectors).or_else(
+                    || rules::extract_u32_by_selectors(index_html, rule.seeding_selectors),
+                );
+        }
+        let mut leeching_count = parse_labeled_integer(
             &detail_text,
             &["当前下载", "當前下載", "下载数", "下載數", "Leeching"],
         );
+        if leeching_count.is_none()
+            && let Some(rule) = rule
+        {
+            leeching_count =
+                rules::extract_u32_by_selectors(detail_html, rule.leeching_selectors).or_else(
+                    || rules::extract_u32_by_selectors(index_html, rule.leeching_selectors),
+                );
+        }
 
         let (hnr_pre_warning, hnr_unsatisfied) = parse_hnr_counts(index_html);
+        let mut level_name = parse_profile_level(detail_html);
+        if level_name.is_none()
+            && let Some(rule) = rule
+            && let Some(text) =
+                rules::extract_text_by_selectors(detail_html, rule.level_selectors)
+        {
+            level_name = Some(text);
+        }
+        let mut message_count = parse_message_count(index_html);
+        if message_count.is_none()
+            && let Some(rule) = rule
+        {
+            message_count =
+                rules::extract_u64_by_selectors(detail_html, rule.message_selectors).or_else(
+                    || rules::extract_u64_by_selectors(index_html, rule.message_selectors),
+                );
+        }
         let mut details = UserStatsDetails {
             is_donor: detail_page_loaded.then(|| detect_donor(detail_html)),
-            level_name: parse_profile_level(detail_html),
+            level_name,
             join_time: parse_profile_value(
                 detail_html,
                 &["加入日期", "加入時間", "Join date", "Joined"],
@@ -252,7 +364,7 @@ impl NexusPhpAdapter {
             )
             .as_deref()
             .and_then(parse_user_datetime_millis),
-            message_count: parse_message_count(index_html),
+            message_count,
             invites: parse_invite_count(detail_html),
             avatar: extract_avatar(detail_html)
                 .and_then(|avatar| self.resolve_same_origin_url(&avatar).ok().or(Some(avatar))),
@@ -312,20 +424,23 @@ impl NexusPhpAdapter {
         };
 
         // PT-Depiler 的 NexusPHP 通用 schema 会用 AJAX 补充做种量和发布数。
-        if let Some(user_id) = uid.as_deref() {
-            if let Some((count, size)) = self.fetch_user_torrent_summary(user_id, "seeding").await {
+        let ajax_disabled = rule.is_some_and(|rule| rule.user_torrent_ajax.disabled);
+        if !ajax_disabled && let Some(user_id) = uid.as_deref() {
+            if let Some((count, size)) =
+                self.fetch_user_torrent_summary(user_id, "seeding", rule)
+                    .await
+            {
                 seeding_count = Some(count);
                 details.seeding_size = size;
             }
-            if let Some((count, _)) = self.fetch_user_torrent_summary(user_id, "uploaded").await {
+            if let Some((count, _)) =
+                self.fetch_user_torrent_summary(user_id, "uploaded", rule)
+                    .await
+            {
                 details.uploads = Some(count as u64);
             }
         }
 
-        let ptd_site = Url::parse(&self.base_url)
-            .ok()
-            .and_then(|url| url.host_str().and_then(crate::ptd_sites::site_id_for_host));
-        let is_u2 = ptd_site == Some("u2");
         details.level_id = details
             .level_name
             .as_deref()
@@ -337,32 +452,55 @@ impl NexusPhpAdapter {
         if ptd_site == Some("ilolicon") {
             details.ptd_user_id = profile_uuid(detail_html);
         }
-        let bonus_url = if is_u2 {
-            format!(
-                "{}/mprecent.php?user={}",
-                self.base_url,
-                uid.as_deref().unwrap_or("")
+
+        if let Some(rule) = rule
+            && !rule.bonus_per_hour_selectors.is_empty()
+            && let Some(rate) = rules::extract_number_by_selectors(
+                detail_html,
+                rule.bonus_per_hour_selectors,
             )
-        } else {
-            format!("{}/mybonus.php", self.base_url)
-        };
-        match self.fetch_html_page(&bonus_url, "魔力值页面").await {
-            Ok(bonus_html) => {
-                let (bonus_per_hour, seeding_bonus_per_hour) =
-                    parse_bonus_rates(&bonus_html, is_u2);
-                details.bonus_per_hour = bonus_per_hour;
-                details.seeding_bonus_per_hour = seeding_bonus_per_hour;
-                if ptd_site == Some("hhanclub") {
-                    if let (Some(user_id), Some(base)) = (uid.as_deref(), seeding_bonus_per_hour) {
-                        // A missing settlement page must not masquerade as a complete rate.
-                        details.seeding_bonus_per_hour = self
-                            .fetch_rescue_daily_bonus(user_id)
-                            .await
-                            .map(|daily| base + daily / 24.0);
+            .or_else(|| {
+                rules::extract_number_by_selectors(index_html, rule.bonus_per_hour_selectors)
+            })
+        {
+            details.bonus_per_hour = Some(rate);
+        }
+
+        let force_bonus_page = rule.is_some_and(|rule| {
+            matches!(rule.bonus_page, BonusPageRule::Path { .. })
+        });
+        if details.bonus_per_hour.is_none() || force_bonus_page {
+            let base = self.base_url.trim_end_matches('/');
+            let bonus_url = if is_u2 {
+                format!(
+                    "{base}/mprecent.php?user={}",
+                    uid.as_deref().unwrap_or("")
+                )
+            } else {
+                rules::bonus_page_url(rule, base, uid.as_deref())
+            };
+            match self.fetch_html_page(&bonus_url, "魔力值页面").await {
+                Ok(bonus_html) => {
+                    let (bonus_per_hour, seeding_bonus_per_hour) =
+                        parse_bonus_rates(&bonus_html, is_u2);
+                    if details.bonus_per_hour.is_none() {
+                        details.bonus_per_hour = bonus_per_hour;
+                    }
+                    details.seeding_bonus_per_hour = seeding_bonus_per_hour;
+                    if ptd_site == Some("hhanclub") {
+                        if let (Some(user_id), Some(base_rate)) =
+                            (uid.as_deref(), details.seeding_bonus_per_hour)
+                        {
+                            // A missing settlement page must not masquerade as a complete rate.
+                            details.seeding_bonus_per_hour = self
+                                .fetch_rescue_daily_bonus(user_id)
+                                .await
+                                .map(|daily| base_rate + daily / 24.0);
+                        }
                     }
                 }
+                Err(error) => debug!(%error, "NexusPHP 魔力值页面获取失败"),
             }
-            Err(error) => debug!(%error, "NexusPHP 魔力值页面获取失败"),
         }
 
         let mut stats = UserStats {
@@ -378,6 +516,27 @@ impl NexusPhpAdapter {
         };
         stats.fill_derived();
         Ok(stats)
+    }
+
+    /// KeepFRDS modern fork: core stats from JSON, rates still from profile selectors.
+    async fn fetch_keepfrds_json_stats(&self, path: &str) -> Option<UserStats> {
+        let url = format!("{}{}", self.base_url.trim_end_matches('/'), path);
+        let response = self
+            .client
+            .get(&url)
+            .headers(self.build_headers())
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let text = response.text().await.ok()?;
+        if looks_like_cloudflare_challenge(&text) {
+            return None;
+        }
+        let value: Value = serde_json::from_str(&text).ok()?;
+        parse_keepfrds_user_details_json(&value)
     }
 
     async fn fetch_rescue_daily_bonus(&self, user_id: &str) -> Option<f64> {
@@ -499,15 +658,38 @@ impl NexusPhpAdapter {
         &self,
         user_id: &str,
         torrent_type: &str,
+        rule: Option<&'static SiteRule>,
     ) -> Option<(u32, Option<u64>)> {
         let mut url = Url::parse(&format!("{}/getusertorrentlistajax.php", self.base_url)).ok()?;
         url.query_pairs_mut()
             .append_pair("userid", user_id)
             .append_pair("type", torrent_type);
-        let html = self
-            .fetch_html_page(url.as_str(), "用户种子列表")
+        let mut headers = self.build_headers();
+        if let Some(rule) = rule {
+            for (name, value) in rule.user_torrent_ajax.headers {
+                if let (Ok(name), Ok(value)) = (
+                    reqwest::header::HeaderName::from_bytes(name.as_bytes()),
+                    reqwest::header::HeaderValue::from_str(value),
+                ) {
+                    headers.insert(name, value);
+                }
+            }
+        }
+        let response = self
+            .client
+            .get(url.as_str())
+            .headers(headers)
+            .send()
             .await
             .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let final_url = response.url().clone();
+        let html = response.text().await.ok()?;
+        if looks_like_cloudflare_challenge(&html) || looks_like_login_page(&html, &final_url) {
+            return None;
+        }
         let summary = parse_user_torrent_ajax_summary(&html);
         if summary.is_none() {
             warn!(
@@ -921,6 +1103,18 @@ fn has_transfer_totals(html: &str) -> bool {
         && parse_labeled_size(&text, &["下载量", "下載量", "Downloaded"]).is_some()
 }
 
+fn has_transfer_totals_with_rule(html: &str, rule: Option<&SiteRule>) -> bool {
+    if has_transfer_totals(html) {
+        return true;
+    }
+    rule.is_some_and(|rule| {
+        !rule.uploaded_selectors.is_empty()
+            && !rule.downloaded_selectors.is_empty()
+            && rules::extract_size_by_selectors(html, rule.uploaded_selectors).is_some()
+            && rules::extract_size_by_selectors(html, rule.downloaded_selectors).is_some()
+    })
+}
+
 pub(super) fn parse_labeled_size(text: &str, labels: &[&str]) -> Option<u64> {
     labels.iter().find_map(|label| {
         let expression = format!(
@@ -1133,7 +1327,7 @@ pub(crate) fn parse_profile_value(html: &str, labels: &[&str]) -> Option<String>
     })
 }
 
-fn first_number(text: &str) -> Option<f64> {
+pub(super) fn first_number(text: &str) -> Option<f64> {
     Regex::new(r"[0-9][0-9,.]*")
         .ok()?
         .find(text)?
@@ -1329,7 +1523,7 @@ fn parse_message_count(html: &str) -> Option<u64> {
     Some(0)
 }
 
-fn first_integer(value: &str) -> Option<u64> {
+pub(super) fn first_integer(value: &str) -> Option<u64> {
     Regex::new(r"[0-9][0-9,]*")
         .ok()?
         .find(value)?
@@ -1479,12 +1673,121 @@ fn looks_like_login_page(html: &str, final_url: &Url) -> bool {
         && extract_current_user(html).is_none()
 }
 
-fn looks_like_cloudflare_challenge(html: &str) -> bool {
+pub(super) fn looks_like_cloudflare_challenge(html: &str) -> bool {
     let lower = html.to_ascii_lowercase();
     lower.contains("cf-chl-")
         || lower.contains("challenge-platform")
         || lower.contains("just a moment...")
         || lower.contains("cloudflare ray id")
+}
+
+/// Parse KeepFRDS `/api/userdetails.php` payload.
+fn parse_keepfrds_user_details_json(value: &Value) -> Option<UserStats> {
+    let user = value.get("user")?;
+    let torrent = value.get("torrentStats");
+    let uid = user
+        .get("id")
+        .and_then(|id| id.as_u64().map(|id| id.to_string()).or_else(|| {
+            id.as_str()
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+        }));
+    let username = user
+        .get("username")
+        .and_then(Value::as_str)
+        .filter(|name| !name.trim().is_empty())?
+        .to_string();
+    let uploaded = json_u64(user.get("uploadedBytes")?)?;
+    let downloaded = json_u64(user.get("downloadedBytes")?)?;
+    let bonus = user.get("bonus").and_then(json_f64);
+    let class = user.get("class").and_then(|class| {
+        class
+            .as_i64()
+            .or_else(|| class.as_str().and_then(|s| s.parse().ok()))
+    });
+    let (level_id, level_name) = class
+        .map(keepfrds_level_from_class)
+        .map(|(id, name)| (Some(id), Some(name.to_string())))
+        .unwrap_or((None, None));
+    let join_time = user
+        .get("joinedAt")
+        .and_then(Value::as_str)
+        .and_then(parse_user_datetime_millis)
+        .or_else(|| {
+            user.get("joinedAt")
+                .and_then(Value::as_i64)
+                .and_then(normalize_timestamp_millis)
+        });
+    let mut details = UserStatsDetails {
+        level_id,
+        level_name,
+        join_time,
+        ..Default::default()
+    };
+    if let Some(torrent) = torrent {
+        if let Some(bytes) = torrent.get("seedingBytes") {
+            details.seeding_size = json_u64(bytes);
+        }
+        if let Some(uploads) = torrent.get("uploaded") {
+            details.uploads = json_u64(uploads);
+        }
+    }
+    let mut stats = UserStats {
+        uid,
+        username,
+        uploaded,
+        downloaded,
+        ratio: ratio_from_totals(Some(uploaded), Some(downloaded)),
+        bonus,
+        seeding_count: torrent
+            .and_then(|torrent| torrent.get("seeding"))
+            .and_then(json_u64)
+            .and_then(|value| u32::try_from(value).ok()),
+        leeching_count: torrent
+            .and_then(|torrent| torrent.get("leeching"))
+            .and_then(json_u64)
+            .and_then(|value| u32::try_from(value).ok()),
+        details,
+    };
+    stats.fill_derived();
+    Some(stats)
+}
+
+fn json_u64(value: &Value) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_i64().filter(|v| *v >= 0).map(|v| v as u64))
+        .or_else(|| value.as_str().and_then(|s| s.parse().ok()))
+}
+
+fn json_f64(value: &Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|s| s.parse().ok()))
+        .filter(|n| n.is_finite())
+}
+
+fn keepfrds_level_from_class(class: i64) -> (i64, &'static str) {
+    match class {
+        0 => (0, "Peasant"),
+        1 => (1, "User"),
+        2 => (2, "Power User"),
+        3 => (3, "Elite User"),
+        4 => (4, "Crazy User"),
+        5 => (5, "Insane User"),
+        6 => (6, "Veteran User"),
+        7 => (7, "Extreme User"),
+        8 => (8, "Ultimate User"),
+        9 => (9, "Nexus Master"),
+        10 => (100, "贵宾"),
+        11 => (200, "养老族"),
+        12 => (201, "发布员"),
+        13 => (202, "总版主"),
+        14 => (203, "管理员"),
+        15 => (204, "维护开发员"),
+        16 => (205, "主管"),
+        other => (other, ""),
+    }
 }
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
@@ -1588,7 +1891,7 @@ fn looks_like_datetime(value: &str) -> bool {
         })
 }
 
-fn size_from_parts(number: &str, unit: &str) -> Option<u64> {
+pub(crate) fn size_from_parts(number: &str, unit: &str) -> Option<u64> {
     let number: f64 = number.replace(',', "").parse().ok()?;
     if !number.is_finite() || number < 0.0 {
         return None;
@@ -2193,6 +2496,54 @@ mod tests {
             Some(1234)
         );
         assert_eq!(parse_labeled_integer("Seeding: 0", &["Seeding"]), Some(0));
+    }
+
+    #[test]
+    fn keepfrds_json_api_maps_core_user_stats() {
+        let payload = serde_json::json!({
+            "version": 1,
+            "user": {
+                "id": 42,
+                "username": "alice",
+                "class": 4,
+                "joinedAt": "2024-01-02 03:04:05",
+                "uploadedBytes": 2199023255552u64,
+                "downloadedBytes": 1099511627776u64,
+                "bonus": 3200.5
+            },
+            "torrentStats": {
+                "seeding": 12,
+                "seedingBytes": 549755813888u64,
+                "leeching": 2,
+                "uploaded": 3,
+                "updatedAt": 1
+            }
+        });
+        let stats = super::parse_keepfrds_user_details_json(&payload).expect("keepfrds json");
+        assert_eq!(stats.uid.as_deref(), Some("42"));
+        assert_eq!(stats.username, "alice");
+        assert_eq!(stats.uploaded, 2199023255552);
+        assert_eq!(stats.downloaded, 1099511627776);
+        assert_eq!(stats.bonus, Some(3200.5));
+        assert_eq!(stats.seeding_count, Some(12));
+        assert_eq!(stats.leeching_count, Some(2));
+        assert_eq!(stats.details.level_id, Some(4));
+        assert_eq!(stats.details.level_name.as_deref(), Some("Crazy User"));
+        assert_eq!(stats.details.uploads, Some(3));
+        assert_eq!(stats.details.seeding_size, Some(549755813888));
+        assert!(stats.ratio.is_some());
+    }
+
+    #[test]
+    fn transfer_totals_accept_rule_selectors_when_labels_are_absent() {
+        let html = r#"
+            <div class="site-userbar__compact-metric--uploaded">1.50 TiB</div>
+            <div class="site-userbar__compact-metric--downloaded">300.00 GiB</div>
+        "#;
+        assert!(!super::has_transfer_totals(html));
+        let rule = crate::site::rules::rule_for_site("audiences").unwrap();
+        assert!(super::has_transfer_totals_with_rule(html, Some(rule)));
+        assert!(!super::has_transfer_totals_with_rule(html, None));
     }
 
     #[test]

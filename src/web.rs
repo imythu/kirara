@@ -2810,13 +2810,15 @@ fn validate_site_auth_type(site_type: SiteType, auth: &SiteAuth) -> Result<(), A
     if site_type == SiteType::MTeam && !matches!(auth, SiteAuth::ApiKey { .. }) {
         return Err(ApiError::bad_request("M-Team 站点必须使用 API Key 认证"));
     }
-    if site_type == SiteType::Gazelle
+    if matches!(site_type, SiteType::Gazelle | SiteType::Unit3D)
         && !matches!(
             auth,
             SiteAuth::Cookie { .. } | SiteAuth::CookiePasskey { .. }
         )
     {
-        return Err(ApiError::bad_request("Gazelle 账户统计需要 Cookie 认证"));
+        return Err(ApiError::bad_request(
+            "Gazelle / Unit3D 账户统计需要 Cookie 认证",
+        ));
     }
     Ok(())
 }

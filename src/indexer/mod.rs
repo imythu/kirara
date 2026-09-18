@@ -2,6 +2,7 @@ pub(crate) mod access;
 pub mod mteam;
 pub mod nexusphp;
 pub mod pool;
+pub mod unit3d;
 
 use std::fmt;
 use std::future::Future;
@@ -256,6 +257,15 @@ pub(crate) fn create_indexer(
         SiteType::Gazelle => Err(IndexerError::Configuration(
             "Gazelle 当前仅支持用户统计，尚未支持种子搜索".to_string(),
         )),
+        SiteType::Unit3D => Ok(Arc::new(unit3d::Unit3DIndexer::new(
+            record.id,
+            record.name.clone(),
+            &record.base_url,
+            auth,
+            request_headers,
+            client,
+            Arc::clone(&access_gate),
+        )?)),
         SiteType::NexusPhp => Ok(Arc::new(nexusphp::NexusPhpIndexer::new(
             record.id,
             record.name.clone(),

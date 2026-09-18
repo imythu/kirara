@@ -1,0 +1,342 @@
+{
+  "source_commit": "master",
+  "count": 12,
+  "sites": [
+    {
+      "ptd_id": "audiences",
+      "schema": "nexusphp",
+      "urls": [],
+      "base_url": null,
+      "bonus_labels": [
+        "爆米花"
+      ],
+      "uploaded_selectors": [
+        ".site-userbar__compact-metric--uploaded",
+        ".site-userbar__compact-metric--downloaded",
+        ".site-userbar__compact-metric--ratio",
+        "div.ud-hero span.ud-class > b"
+      ],
+      "downloaded_selectors": [
+        ".site-userbar__compact-metric--downloaded",
+        ".site-userbar__compact-metric--ratio",
+        "div.ud-hero span.ud-class > b",
+        ".site-userbar__compact-metric--bonus",
+        ".mybonus-side__rate"
+      ],
+      "bonus_selectors": [
+        ".site-userbar__compact-metric--bonus",
+        ".mybonus-side__rate",
+        ".site-userbar__compact-metric--seeding-bonus"
+      ],
+      "ratio_selectors": [
+        ".site-userbar__compact-metric--ratio",
+        "div.ud-hero span.ud-class > b",
+        ".site-userbar__compact-metric--bonus",
+        ".mybonus-side__rate",
+        ".site-userbar__compact-metric--seeding-bonus"
+      ],
+      "seeding_selectors": [
+        ".site-userbar__compact-metric-inline-link--seeding",
+        ".site-userbar__compact-metric-inline-link--leeching",
+        ".site-userbar__compact-metric--hr"
+      ],
+      "leeching_selectors": [
+        ".site-userbar__compact-metric-inline-link--leeching",
+        ".site-userbar__compact-metric--hr"
+      ],
+      "message_selectors": [
+        ".site-userbar__compact-tool--has-unread .site-userbar__compact-tool-badge--unread",
+        ".site-userbar__compact-metric--uploaded",
+        ".site-userbar__compact-metric--downloaded"
+      ],
+      "bonus_per_hour_selectors": [
+        ".mybonus-side__rate",
+        ".site-userbar__compact-metric--seeding-bonus"
+      ],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": "https://audiences.me/userdetails.php",
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "byrbt",
+      "schema": "nexusphp",
+      "urls": [
+        "https://byr.pt/",
+        "https://bt.byr.cn/"
+      ],
+      "base_url": "https://byr.pt/",
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": "/mybonus.php",
+      "bonus_page_query": "show=seed",
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": [
+        "/mybonus.php"
+      ]
+    },
+    {
+      "ptd_id": "keepfrds",
+      "schema": "nexusphp",
+      "urls": [
+        "https://pt.keepfrds.com/",
+        "https://pt.keepfrds.com/static/favicon-64x64.png"
+      ],
+      "base_url": "https://pt.keepfrds.com/",
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [
+        "#info_block #perBonus",
+        "#perBonus"
+      ],
+      "bonus_per_hour_selectors": [
+        "#info_block #perBonus",
+        "#perBonus"
+      ],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": {
+        "path": "/api/userdetails.php",
+        "dialect": "keepfrds"
+      },
+      "process_urls": [
+        "/api/userdetails.php",
+        "/userdetails.php"
+      ]
+    },
+    {
+      "ptd_id": "ourbits",
+      "schema": "nexusphp",
+      "urls": [
+        "https://ourbits.club/",
+        "https://www.ourbits.club/",
+        "https://pt.ourhelp.club/"
+      ],
+      "base_url": "https://pt.ourhelp.club/",
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "hdchina",
+      "schema": "nexusphp",
+      "urls": [
+        "https://hdchina.org/"
+      ],
+      "base_url": "https://hdchina.org/",
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "hdsky",
+      "schema": "nexusphp",
+      "urls": [
+        "https://hdsky.me/"
+      ],
+      "base_url": "https://hdsky.me/",
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "chdbits",
+      "schema": "nexusphp",
+      "urls": [
+        "https://chdbits.co/"
+      ],
+      "base_url": null,
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "blutopia",
+      "schema": "unit3d",
+      "urls": [
+        "https://blutopia.xyz/"
+      ],
+      "base_url": null,
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "aither",
+      "schema": "unit3d",
+      "urls": [],
+      "base_url": null,
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "huno",
+      "schema": "unit3d",
+      "urls": [],
+      "base_url": null,
+      "bonus_labels": [],
+      "uploaded_selectors": [
+        "span.deep-space-user-card__user-id"
+      ],
+      "downloaded_selectors": [
+        "span.deep-space-user-card__user-id"
+      ],
+      "bonus_selectors": [
+        "span.deep-space-user-card__user-id"
+      ],
+      "ratio_selectors": [],
+      "seeding_selectors": [
+        "span.deep-space-user-card__user-id"
+      ],
+      "leeching_selectors": [
+        "span.deep-space-user-card__user-id"
+      ],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": [
+        "/api/torrents/filter",
+        "/api/profile",
+        "/",
+        "/users/$name$/hub/hunos"
+      ]
+    },
+    {
+      "ptd_id": "fearnopeer",
+      "schema": "unit3d",
+      "urls": [],
+      "base_url": null,
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    },
+    {
+      "ptd_id": "shareisland",
+      "schema": "unit3d",
+      "urls": [],
+      "base_url": null,
+      "bonus_labels": [],
+      "uploaded_selectors": [],
+      "downloaded_selectors": [],
+      "bonus_selectors": [],
+      "ratio_selectors": [],
+      "seeding_selectors": [],
+      "leeching_selectors": [],
+      "message_selectors": [],
+      "bonus_per_hour_selectors": [],
+      "bonus_page_path": null,
+      "bonus_page_query": null,
+      "ajax_referer": null,
+      "ajax_disabled": false,
+      "json_user_stats": null,
+      "process_urls": []
+    }
+  ]
+}

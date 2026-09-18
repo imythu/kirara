@@ -1191,6 +1191,42 @@ pub const SITE_PRESETS: &[PtdSitePreset] = &[
         base_url: "https://zrpt.cc",
         aliases: &["探索自然美", "专注纪录片"],
     },
+    // Unit3D adapters (user stats; search not yet supported).
+    PtdSitePreset {
+        ptd_id: "blutopia",
+        name: "Blutopia",
+        site_type: "unit3d",
+        base_url: "https://blutopia.cc",
+        aliases: &["BLU"],
+    },
+    PtdSitePreset {
+        ptd_id: "aither",
+        name: "Aither",
+        site_type: "unit3d",
+        base_url: "https://aither.cc",
+        aliases: &[],
+    },
+    PtdSitePreset {
+        ptd_id: "huno",
+        name: "HUNO",
+        site_type: "unit3d",
+        base_url: "https://hawke.uno",
+        aliases: &[],
+    },
+    PtdSitePreset {
+        ptd_id: "fearnopeer",
+        name: "FearNoPeer",
+        site_type: "unit3d",
+        base_url: "https://fearnopeer.com",
+        aliases: &["FNP"],
+    },
+    PtdSitePreset {
+        ptd_id: "shareisland",
+        name: "ShareIsland",
+        site_type: "unit3d",
+        base_url: "https://shareisland.org",
+        aliases: &[],
+    },
 ];
 
 #[cfg(test)]
@@ -1199,16 +1235,21 @@ mod tests {
 
     #[test]
     fn exposes_only_site_types_supported_by_kirara() {
-        assert_eq!(SITE_PRESETS.len(), 168);
+        assert_eq!(SITE_PRESETS.len(), 173);
         assert!(
             SITE_PRESETS
                 .iter()
-                .all(|site| matches!(site.site_type, "nexusphp" | "mteam" | "gazelle"))
+                .all(|site| matches!(site.site_type, "nexusphp" | "mteam" | "gazelle" | "unit3d"))
         );
         let mteam = SITE_PRESETS
             .iter()
             .find(|site| site.ptd_id == "mteam")
             .unwrap();
         assert_eq!(mteam.base_url, "https://api.m-team.cc");
+        let blutopia = SITE_PRESETS
+            .iter()
+            .find(|site| site.ptd_id == "blutopia")
+            .unwrap();
+        assert_eq!(blutopia.site_type, "unit3d");
     }
 }

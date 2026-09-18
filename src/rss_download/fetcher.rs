@@ -35,7 +35,7 @@ pub(crate) fn supports_torrent_resolution(site_type: &str, auth_config: &str) ->
     let credential = match (SiteType::from_str(site_type.trim()), auth) {
         (Some(SiteType::NexusPhp | SiteType::MTeam), SiteAuth::ApiKey { api_key }) => api_key,
         (
-            Some(SiteType::NexusPhp),
+            Some(SiteType::NexusPhp | SiteType::Unit3D),
             SiteAuth::Cookie { cookie } | SiteAuth::CookiePasskey { cookie, .. },
         ) => cookie,
         _ => return false,

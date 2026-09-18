@@ -3,7 +3,9 @@ pub mod mteam;
 pub mod nexusphp;
 mod nexusphp_levels;
 pub mod gazelle;
+pub mod rules;
 pub mod u2_shoutbox;
+pub mod unit3d;
 pub mod user_email;
 
 use serde::{Deserialize, Serialize};
@@ -193,6 +195,7 @@ pub enum SiteType {
     NexusPhp,
     MTeam,
     Gazelle,
+    Unit3D,
 }
 
 impl SiteType {
@@ -201,6 +204,7 @@ impl SiteType {
             "nexusphp" | "nexus_php" => Some(SiteType::NexusPhp),
             "mteam" | "m_team" => Some(SiteType::MTeam),
             "gazelle" => Some(SiteType::Gazelle),
+            "unit3d" | "unit_3d" | "UNIT3D" => Some(SiteType::Unit3D),
             _ => None,
         }
     }

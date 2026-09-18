@@ -2,7 +2,7 @@ use reqwest::Client;
 
 use super::{
     SiteAdapter, SiteAuth, SiteRecord, SiteType, mteam, nexusphp, parse_site_request_headers,
-    site_request_header_map,
+    site_request_header_map, unit3d,
 };
 
 pub fn create_adapter(record: &SiteRecord, client: Client) -> Result<Box<dyn SiteAdapter>, String> {
@@ -30,6 +30,12 @@ pub fn create_adapter_with_cached_user_id(
                 .with_cached_user_id(cached_user_id),
         ),
         SiteType::MTeam => Box::new(mteam::MTeamAdapter::new(
+            record.base_url.clone(),
+            auth,
+            request_headers,
+            client,
+        )),
+        SiteType::Unit3D => Box::new(unit3d::Unit3DAdapter::new(
             record.base_url.clone(),
             auth,
             request_headers,

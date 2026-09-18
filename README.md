@@ -112,7 +112,7 @@ KIRARA_DATA_DIR=/data
 
 点击界面中 GitHub 旁的书本图标，在新标签页查看内置使用文档，包含各功能的操作步骤与常见问题。文档随应用打包，也可阅读[文档源文件](frontend/public/docs/index.html)。
 
-PTD 用户可点击站点管理中的「导入 PTD 配置」，按页面说明导出并选择 PTD 备份，手动导入站点 Cookie。也可在「站点管理 → 备份与同步 → Cookie 自动同步」启用内置 WebDAV 接收服务，让 PTD 定时推送后自动更新站点 Cookie。与现有 Web 服务共用端口，接收路径为 `/dav/ptd/`，首次保存生成独立连接密码；Docker 无需额外映射端口。配置方法、同步规则和部署说明见 [WebDAV Cookie 自动同步](doc/webdav-cookie-sync.md)。
+PTD 用户可点击站点管理中的「导入 PTD 配置」，按页面说明导出并选择 PTD 备份，手动导入站点 Cookie。也可在「站点管理 → 备份与同步 → Cookie 自动同步」启用内置 WebDAV 接收服务，让 PTD 定时推送后自动更新站点 Cookie。与现有 Web 服务共用端口，接收路径为 `/dav/ptd/`，首次保存生成独立连接密码；Docker 无需额外映射端口。配置方法、同步规则和部署说明见 [WebDAV Cookie 自动同步](doc/webdav-cookie-sync.md)。站点解析规则、Unit3D 适配与 PTD definition 生成流程见 [站点适配与 PTD 规则同步](doc/ptd-site-rules.md)。
 
 建议按以下顺序完成配置：
 
@@ -388,5 +388,6 @@ Tauri 会自动运行前端构建。安装包输出到 `target/release/bundle/ns
 
 - [Sonarr](https://github.com/Sonarr/Sonarr)：参考了剧集订阅、季集目标推进、质量配置、发布名称解析、候选筛选以及自动下载的整体产品思路。
 - [pt_mate](https://github.com/JustLookAtNow/pt_mate)：参考了 PT 多站资源聚合搜索、NexusPHP 与 M-Team 站点适配、搜索结果归一化和资源获取流程。
+- [PT-depiler](https://github.com/pt-plugins/PT-depiler)（MIT）：站点 definition 与适配思路的重要参考。云母从其公开站点定义中提炼可序列化的解析规则（选择器、魔力页路径、接口路径等），用于补强 NexusPHP / Unit3D 等站点的用户统计与搜索；Cookie 备份与导入也兼容其导出格式。生成与合并流程见 [站点适配与 PTD 规则同步](doc/ptd-site-rules.md)。
 
 云母没有直接照搬这些项目的实现，而是结合当前 Rust 后端、SQLite 状态管理、React 前端和已有 PT 站点配置体系重新设计并独立实现。感谢相关项目及其贡献者提供的思路和开源成果。
