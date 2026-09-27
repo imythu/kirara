@@ -11,7 +11,7 @@
 | | PT-depiler | kirara |
 | --- | --- | --- |
 | 形态 | 浏览器扩展 | Rust 服务端（桌面 / Docker） |
-| 站点模型 | Schema + 300+ `definitions/*.ts` | 硬编码适配器 + 站点规则表 |
+| 站点模型 | Schema + 340 个 `definitions/*.ts` | 通用引擎适配器 + 全站规则快照 |
 | 更新方式 | 随扩展 Release 发版；用户可 `merge` 覆盖 | 改代码 / 规则后编译发版 |
 | 请求上下文 | 真实浏览器 Cookie、CF clearance | Cookie / API Key + reqwest |
 
@@ -24,18 +24,18 @@ PT-depiler 能修站，是因为**每个站点有独立 definition**（选择器
 ## 架构总览
 
 ```text
-PT-depiler definitions/*.ts
+PT-depiler definitions/*.ts (pinned commit)
         │
         │  tools/gen_ptd_site_rules.py
         ▼
-tools/ptd_site_rules.json / .rs   （草稿，需 review）
+tools/ptd_site_rules.json / .rs   （340 个 definition 的可审查快照）
         │
-        │  人工合并
+        │  生成运行时声明
         ▼
-src/site/rules.rs  SITE_RULES
+src/site/ptd_rules_generated.rs
         │
-        ├─► NexusPHP 适配器（标签 + CSS 回退 + 请求路径）
-        └─► Unit3D / M-Team / Gazelle 走各自适配器
+        ├─► NexusPHP / Unit3D 适配器（选择器 + process 请求）
+        └─► rules.rs::SITE_RULES 手工覆盖；M-Team / Gazelle 使用专用适配器
 ```
 
 ### 站点类型（`src/site/mod.rs`）
@@ -60,12 +60,12 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 
 文件：`src/site/rules.rs`
 
-规则是**数据**，不是代码。NexusPHP 适配器在抓用户统计时：
+`SITE_RULES` 保存手工覆盖；PTD 快照保存站点声明。运行时按字段优先读取手工规则，缺失字段再回退到生成规则。NexusPHP 与 Unit3D 适配器会按定义中的 `userInfo.process` 顺序请求页面，并使用每一步的响应类型和字段选择器：
 
 1. 用 `base_url` 的 host 查 `ptd_sites::site_id_for_host`
 2. 用 site id 查 `rules::rule_for_site`
-3. 默认标签解析 → 失败则用规则里的 CSS 选择器
-4. 魔力页 / AJAX / JSON 按规则决定请求方式
+3. 先使用站点字段选择器，缺失时回退通用标签解析
+4. 依定义请求 profile、JSON、魔力页等流程；做种与发布数缺失时按 PTD 规则请求 AJAX
 
 ### 规则字段
 
@@ -76,8 +76,11 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 | `*_selectors` | 标签失败后的 CSS 回退 |
 | `bonus_page` | `Default` 或 `Path { path, query }`（支持 `{uid}`） |
 | `user_torrent_ajax` | `disabled` + 额外请求头（如 Referer） |
-| `json_user_stats` | JSON 用户信息接口（`dialect: "keepfrds"`） |
+| `json_user_stats` | JSON 用户信息接口（支持 `ptd` 与 `keepfrds` dialect） |
 | `bonus_per_hour_selectors` | 资料页上直接给出的时魔选择器 |
+| `user_info_processes` | 请求路径、查询参数、方法、响应类型及该步字段选择器 |
+
+当前快照覆盖全部 340 个 definition；运行时生成 68 条含自定义数据的 NexusPHP / Unit3D 规则，其余这两类站点使用 PTD 通用 schema 流程。Gazelle 与 M-Team 使用独立适配器。其他 PTD schema 的 definition 保存在 JSON 快照中，但 kirara 尚未实现对应引擎。
 
 ### 已内置的高价值规则（示意）
 
@@ -102,6 +105,7 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 - 首页提取用户名（`a[href*='/users/'][href*='settings']`）
 - 详情页 `/users/{name}`：ratio-bar 与标签文本回退
 - 收益页 `/users/{name}/earnings`：时魔
+- 使用定义覆盖字段选择器和分步请求；HUNO、NordicBytes 等会按自己的 API / profile 路径读取
 - 识别 Cloudflare / 登录页
 
 ### 种子搜索 `src/indexer/unit3d.rs`
@@ -134,7 +138,7 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 
 解析实现：`src/site/nexusphp.rs` 中 `parse_keepfrds_user_details_json`。
 
-新出现的同类 JSON 分站：在规则里声明 `json_user_stats`，并**手写或扩展 dialect 解析**；仅改路径不够。
+PTD 标准 JSON 字段路径可使用 `dialect: "ptd"`；KeepFRDS 使用专用解析。响应结构不同的 JSON 分站仍需扩展 dialect 解析，仅改路径不够。
 
 ---
 
@@ -148,18 +152,19 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 
 | 产物 | 用途 |
 | --- | --- |
-| `tools/ptd_site_rules.json` | 结构化结果，便于 diff / review |
-| `tools/ptd_site_rules.rs` | Rust `SiteRule` 草稿片段 |
+| `tools/ptd_site_rules.json` | 全量结构化结果，便于 diff / review |
+| `tools/ptd_site_rules.rs` | 全量 Rust 规则预览 |
+| `src/site/ptd_rules_generated.rs` | NexusPHP / Unit3D 运行时规则，不手工编辑 |
 | `tools/ptd_unit3d_presets.rs` | 可选的 Unit3D catalog 草稿 |
 
-**生成物不可直接覆盖** `src/site/rules.rs`，必须人工 review。
+更新生成物后 review JSON 和 Rust diff；运行时规则由 `rules.rs` 自动查找，不需要粘贴进手工覆盖表。
 
 ### 可抽取的内容
 
 - `schema`、`urls` / base_url
 - 额外魔力标签（如「爆米花」）
 - `userInfo.selectors` 中的 CSS 选择器
-- `process.requestConfig` 的路径与 params（如 `show=seed`）
+- `userInfo.process` 的请求路径、查询参数、方法、响应类型和字段选择器
 - `/api/userdetails.php`
 - AJAX `Referer` / `rot13` URL
 
@@ -173,10 +178,13 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 ### 用法
 
 ```powershell
-# 从 GitHub master 批量生成
+# 从固定 PTD commit 生成全量快照和运行时规则
 & $env:MIMO_PYTHON tools/gen_ptd_site_rules.py `
+  --all `
+  --commit 569a2a68cabbeeb1329d0e9ef52f6232e3723f8d `
   --json-out tools/ptd_site_rules.json `
-  --rust-out tools/ptd_site_rules.rs
+  --rust-out tools/ptd_site_rules.rs `
+  --runtime-out src/site/ptd_rules_generated.rs
 
 # 指定站点
 & $env:MIMO_PYTHON tools/gen_ptd_site_rules.py --site audiences --site byrbt
@@ -201,9 +209,9 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
     → 查看 last_error，判断是标签 miss / 结构变化 / CF / 过期
     → 对照 PT-depiler definitions/<id>.ts（或最新 master / 本地修改）
     → 跑生成器
-    → review tools/ptd_site_rules.json 与 .rs
-    → 合并进 src/site/rules.rs 的 SITE_RULES
-    → cargo test
+    → review tools/ptd_site_rules.json、.rs 和 runtime diff
+    → 保留规则生成结果；只有运行时例外才添加 `SITE_RULES` 覆盖
+    → cargo check --lib
     → 界面中「刷新站点统计」验证
 ```
 
@@ -215,23 +223,8 @@ Unit3D 示例预设：`blutopia` / `aither` / `huno` / `fearnopeer` / `shareisla
 4. **bonus_page / ajax / json** 与 PTD process 一致
 5. **Referer** 域名与站点 base_url 一致
 6. **Unit3D 站**不要塞进 NexusPHP 规则字段（走 Unit3D 适配器）
-7. **已手调过的规则**（audiences / keepfrds 等）不要整段被生成结果覆盖
+7. **已手调过的规则**（audiences / keepfrds 等）保留在 `SITE_RULES`，不要编辑生成文件
 8. **空规则**（全 `&[]`）通常不必写入
-
-### 合并示例
-
-`tools/ptd_site_rules.rs` 草稿：
-
-```rust
-SiteRule {
-    ptd_id: "byrbt",
-    bonus_page: BonusPageRule::Path { path: "/mybonus.php", query: "show=seed" },
-    ..
-    ..SiteRule::empty("byrbt")
-},
-```
-
-确认后粘贴进 `src/site/rules.rs` 的 `SITE_RULES` 数组；若站点已存在，只更新差异字段。
 
 ### 验证
 

@@ -1,5 +1,6 @@
 //! Unit3D user-stats adapter distilled from PT-depiler `schemas/Unit3D.ts`.
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -18,6 +19,11 @@ pub struct Unit3DAdapter {
     auth: SiteAuth,
     headers: HeaderMap,
     client: Client,
+}
+
+enum Unit3DProcessData {
+    Html(String),
+    Json(serde_json::Value),
 }
 
 impl Unit3DAdapter {
@@ -82,9 +88,20 @@ impl Unit3DAdapter {
         let index_html = self.fetch_html("/", "首页").await?;
         let username = extract_unit3d_username(&index_html)
             .ok_or_else(|| "Unit3D 首页未找到当前用户名".to_string())?;
+        let ptd_site = Url::parse(&self.base_url)
+            .ok()
+            .and_then(|url| url.host_str().and_then(crate::ptd_sites::site_id_for_host));
+        let rule = ptd_site.and_then(rules::rule_for_site);
+        if let Some(mut stats) = self
+            .fetch_ptd_processed_stats(&index_html, &username, rule)
+            .await
+        {
+            stats.fill_derived();
+            return Ok(stats);
+        }
         let profile_path = format!("/users/{username}");
         let profile_html = self.fetch_html(&profile_path, "用户详情页").await?;
-        let mut stats = parse_unit3d_profile(&profile_html, &username)?;
+        let mut stats = parse_unit3d_profile(&profile_html, &username, rule)?;
         let earnings_path = format!("/users/{username}/earnings");
         match self.fetch_html(&earnings_path, "收益页").await {
             Ok(earnings_html) => {
@@ -96,6 +113,104 @@ impl Unit3DAdapter {
         }
         stats.fill_derived();
         Ok(stats)
+    }
+
+    async fn fetch_ptd_processed_stats(
+        &self,
+        index_html: &str,
+        username: &str,
+        rule: Option<&SiteRule>,
+    ) -> Option<UserStats> {
+        let generated = rule.and_then(|rule| rules::generated_rule_for_site(rule.ptd_id))?;
+        if generated.user_info_processes.is_empty() {
+            return None;
+        }
+        let mut pages = HashMap::<(String, String, String), Unit3DProcessData>::new();
+        let mut values = HashMap::<String, String>::new();
+        for process in generated.user_info_processes {
+            let url = rules::user_info_process_url(
+                &self.base_url,
+                process.path,
+                process.query,
+                None,
+                Some(username),
+            );
+            let page_key = (
+                url.clone(),
+                process.method.to_ascii_uppercase(),
+                process.response_type.to_ascii_lowercase(),
+            );
+            if !pages.contains_key(&page_key) {
+                let page = if process.path == "/" && process.query.is_empty() {
+                    Some(Unit3DProcessData::Html(index_html.to_string()))
+                } else {
+                    self.fetch_user_info_process_page(&url, process.method, process.response_type)
+                        .await
+                };
+                if let Some(page) = page {
+                    pages.insert(page_key.clone(), page);
+                }
+            }
+            let Some(page) = pages.get(&page_key) else {
+                continue;
+            };
+            for field in process.fields {
+                let field_rule = if !field.selectors.is_empty()
+                    || field.json_path.is_some()
+                    || field.attr.is_some()
+                {
+                    field
+                } else if let Some(global) = rules::user_info_field(rule, field.field) {
+                    global
+                } else {
+                    field
+                };
+                let value = match page {
+                    Unit3DProcessData::Html(html) => {
+                        rules::extract_user_info_field_with_rule(html, field_rule)
+                    }
+                    Unit3DProcessData::Json(json) => {
+                        rules::extract_user_info_json_value(json, field_rule)
+                    }
+                };
+                if let Some(value) = value {
+                    values.insert(field.field.to_string(), value);
+                }
+            }
+        }
+        parse_unit3d_process_stats(&values, username)
+    }
+
+    async fn fetch_user_info_process_page(
+        &self,
+        url: &str,
+        method: &str,
+        response_type: &str,
+    ) -> Option<Unit3DProcessData> {
+        let headers = self.build_headers().ok()?;
+        let request = if method.eq_ignore_ascii_case("POST") {
+            self.client.post(url)
+        } else {
+            self.client.get(url)
+        }
+        .headers(headers);
+        let response = request.send().await.ok()?;
+        let status = response.status();
+        let final_url = response.url().clone();
+        let body = response.text().await.ok()?;
+        if !status.is_success()
+            || looks_like_cloudflare_challenge(&body)
+            || looks_like_unit3d_login(&body, &final_url)
+        {
+            return None;
+        }
+        if response_type.eq_ignore_ascii_case("json") {
+            serde_json::from_str(&body)
+                .ok()
+                .map(Unit3DProcessData::Json)
+        } else {
+            Some(Unit3DProcessData::Html(body))
+        }
     }
 }
 
@@ -142,29 +257,46 @@ fn username_from_users_href(href: &str) -> Option<String> {
     Some(name.to_string())
 }
 
-pub(super) fn parse_unit3d_profile(html: &str, username: &str) -> Result<UserStats, String> {
+pub(super) fn parse_unit3d_profile(
+    html: &str,
+    username: &str,
+    rule: Option<&SiteRule>,
+) -> Result<UserStats, String> {
     let document = Html::parse_document(html);
-    let uploaded = extract_size(&document, &[
-        "li.ratio-bar__uploaded",
-        "span.ratio-bar__uploaded",
-        "li.ratio-bar__uploaded a",
-    ])
-    .or_else(|| {
-        extract_size(
-            &document,
-            &["i.fa-arrow-up"],
-        )
+    let ptd_field = |field: &str| rules::extract_user_info_field(html, rule, field);
+    let uploaded = ptd_field("uploaded")
+        .as_deref()
+        .and_then(parse_size_text)
         .or_else(|| {
-            // sibling span next to the upload icon
-            find_text_near_icon(&document, "i.fa-arrow-up")
+            extract_size(
+                &document,
+                &[
+                    "li.ratio-bar__uploaded",
+                    "span.ratio-bar__uploaded",
+                    "li.ratio-bar__uploaded a",
+                ],
+            )
         })
-    });
-    let downloaded = extract_size(&document, &[
-        "li.ratio-bar__downloaded",
-        "span.ratio-bar__downloaded",
-        "li.ratio-bar__downloaded a",
-    ])
-    .or_else(|| find_text_near_icon(&document, "i.fa-arrow-down"));
+        .or_else(|| {
+            extract_size(&document, &["i.fa-arrow-up"]).or_else(|| {
+                // sibling span next to the upload icon
+                find_text_near_icon(&document, "i.fa-arrow-up")
+            })
+        });
+    let downloaded = ptd_field("downloaded")
+        .as_deref()
+        .and_then(parse_size_text)
+        .or_else(|| {
+            extract_size(
+                &document,
+                &[
+                    "li.ratio-bar__downloaded",
+                    "span.ratio-bar__downloaded",
+                    "li.ratio-bar__downloaded a",
+                ],
+            )
+        })
+        .or_else(|| find_text_near_icon(&document, "i.fa-arrow-down"));
 
     let (uploaded, downloaded) = match (uploaded, downloaded) {
         (Some(u), Some(d)) => (u, d),
@@ -182,54 +314,167 @@ pub(super) fn parse_unit3d_profile(html: &str, username: &str) -> Result<UserSta
         }
     };
 
-    let ratio = extract_number(&document, &[
-        "li.ratio-bar__ratio",
-        "span.ratio-bar__ratio",
-        "li.ratio-bar__ratio a",
-    ]);
-    let bonus = extract_number(&document, &[
-        "li.ratio-bar__points",
-        "span.ratio-bar__points",
-        "li.ratio-bar__points a",
-    ]);
-    let seeding_count = extract_u32(&document, &[
-        "li.ratio-bar__seeding",
-        "span.ratio-bar__seeding",
-        "li.ratio-bar__seeding a",
-    ]);
-    let leeching_count = extract_u32(&document, &[
-        "li.ratio-bar__leeching",
-        "span.ratio-bar__leeching",
-        "li.ratio-bar__leeching a",
-    ]);
-    let level_name = extract_attr_or_text(&document, &[
-        "div.content span.badge-user",
-        "a.user-tag__link[title]",
-        "span.badge-user",
-    ]);
-    let uid = extract_profile_number_pair(&document, &[
-        "dt:contains('User ID') + dd",
-        "td:contains('User ID') + td",
-        "dt:contains('用户 ID') + dd",
-        "dt:contains('用户ID') + dd",
-    ]);
-    let join_time = extract_unit3d_time(&document, &[
-        "time.profile__registration",
-        "time[class*='registration']",
-    ]);
-    let invites = extract_profile_number_pair(&document, &[
-        "dt:contains('Invites') + dd",
-        "dt:contains('邀请') + dd",
-        "dt:contains('邀請') + dd",
-    ]);
+    let ratio = ptd_field("ratio")
+        .as_deref()
+        .and_then(super::nexusphp::first_number)
+        .or_else(|| {
+            extract_number(
+                &document,
+                &[
+                    "li.ratio-bar__ratio",
+                    "span.ratio-bar__ratio",
+                    "li.ratio-bar__ratio a",
+                ],
+            )
+        });
+    let bonus = ptd_field("bonus")
+        .as_deref()
+        .and_then(super::nexusphp::first_number)
+        .or_else(|| {
+            extract_number(
+                &document,
+                &[
+                    "li.ratio-bar__points",
+                    "span.ratio-bar__points",
+                    "li.ratio-bar__points a",
+                ],
+            )
+        });
+    let seeding_count = ptd_field("seeding")
+        .as_deref()
+        .and_then(super::nexusphp::first_integer)
+        .and_then(|value| u32::try_from(value).ok())
+        .or_else(|| {
+            extract_u32(
+                &document,
+                &[
+                    "li.ratio-bar__seeding",
+                    "span.ratio-bar__seeding",
+                    "li.ratio-bar__seeding a",
+                ],
+            )
+        });
+    let leeching_count = ptd_field("leeching")
+        .as_deref()
+        .and_then(super::nexusphp::first_integer)
+        .and_then(|value| u32::try_from(value).ok())
+        .or_else(|| {
+            extract_u32(
+                &document,
+                &[
+                    "li.ratio-bar__leeching",
+                    "span.ratio-bar__leeching",
+                    "li.ratio-bar__leeching a",
+                ],
+            )
+        });
+    let level_name = ptd_field("levelName").or_else(|| {
+        extract_attr_or_text(
+            &document,
+            &[
+                "div.content span.badge-user",
+                "a.user-tag__link[title]",
+                "span.badge-user",
+            ],
+        )
+    });
+    let uid = ptd_field("id")
+        .as_deref()
+        .and_then(super::nexusphp::first_integer)
+        .or_else(|| {
+            extract_profile_number_pair(
+                &document,
+                &[
+                    "dt:contains('User ID') + dd",
+                    "td:contains('User ID') + td",
+                    "dt:contains('用户 ID') + dd",
+                    "dt:contains('用户ID') + dd",
+                ],
+            )
+        });
+    let join_time = ptd_field("joinTime")
+        .as_deref()
+        .and_then(|value| parse_unit3d_datetime(value))
+        .or_else(|| {
+            extract_unit3d_time(
+                &document,
+                &["time.profile__registration", "time[class*='registration']"],
+            )
+        });
+    let invites = ptd_field("invites")
+        .as_deref()
+        .and_then(super::nexusphp::first_integer)
+        .or_else(|| {
+            extract_profile_number_pair(
+                &document,
+                &[
+                    "dt:contains('Invites') + dd",
+                    "dt:contains('邀请') + dd",
+                    "dt:contains('邀請') + dd",
+                ],
+            )
+        });
 
     let mut details = UserStatsDetails {
         level_name,
         join_time,
         invites,
-        uploads: extract_profile_number_pair(&document, &[
-            "dl.key-value:has(a[href*='/uploads'])",
-        ]),
+        last_access_at: ptd_field("lastAccessAt")
+            .as_deref()
+            .and_then(parse_unit3d_datetime)
+            .or_else(|| {
+                extract_unit3d_time(&document, &["dt:contains('Last Activity') + dd time"])
+            }),
+        true_ratio: ptd_field("trueRatio")
+            .as_deref()
+            .and_then(super::nexusphp::first_number),
+        true_uploaded: ptd_field("trueUploaded")
+            .as_deref()
+            .and_then(parse_size_text),
+        true_downloaded: ptd_field("trueDownloaded")
+            .as_deref()
+            .and_then(parse_size_text),
+        seeding_size: ptd_field("seedingSize")
+            .as_deref()
+            .and_then(parse_size_text),
+        seeding_time: ptd_field("seedingTime")
+            .as_deref()
+            .and_then(|value| {
+                super::nexusphp::parse_labeled_duration_seconds(
+                    value,
+                    &["Seeding Time", "做种时间", "做種時間"],
+                )
+            })
+            .or_else(|| {
+                ptd_field("seedingTime")
+                    .as_deref()
+                    .and_then(parse_unit3d_duration)
+            }),
+        average_seeding_time: ptd_field("averageSeedingTime")
+            .as_deref()
+            .and_then(|value| {
+                super::nexusphp::parse_labeled_duration_seconds(
+                    value,
+                    &["Average Seeding Time", "平均做种时间", "平均做種時間"],
+                )
+            })
+            .or_else(|| {
+                ptd_field("averageSeedingTime")
+                    .as_deref()
+                    .and_then(parse_unit3d_duration)
+            }),
+        uploads: ptd_field("uploads")
+            .as_deref()
+            .and_then(super::nexusphp::first_integer)
+            .or_else(|| {
+                extract_profile_number_pair(&document, &["dl.key-value:has(a[href*='/uploads'])"])
+            }),
+        seeding_bonus: ptd_field("seedingBonus")
+            .as_deref()
+            .and_then(super::nexusphp::first_number),
+        bonus_per_hour: ptd_field("bonusPerHour")
+            .as_deref()
+            .and_then(super::nexusphp::first_number),
         ..Default::default()
     };
     details.extra.insert(
@@ -254,6 +499,144 @@ pub(super) fn parse_unit3d_profile(html: &str, username: &str) -> Result<UserSta
         leeching_count,
         details,
     })
+}
+
+fn parse_unit3d_process_stats(
+    values: &HashMap<String, String>,
+    username: &str,
+) -> Option<UserStats> {
+    let get = |field: &str| values.get(field).map(String::as_str);
+    let uploaded = get("uploaded").and_then(parse_unit3d_size)?;
+    let downloaded = get("downloaded").and_then(parse_unit3d_size)?;
+    let mut details = UserStatsDetails {
+        is_donor: get("isDonor").and_then(|value| {
+            match value.trim().to_ascii_lowercase().as_str() {
+                "true" | "1" | "yes" => Some(true),
+                "false" | "0" | "no" => Some(false),
+                _ => None,
+            }
+        }),
+        level_id: get("levelId")
+            .and_then(super::nexusphp::first_integer)
+            .and_then(|value| i64::try_from(value).ok()),
+        level_name: get("levelName")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        join_time: get("joinTime").and_then(parse_unit3d_datetime),
+        last_access_at: get("lastAccessAt").and_then(parse_unit3d_datetime),
+        message_count: get("messageCount").and_then(super::nexusphp::first_integer),
+        invites: get("invites").and_then(super::nexusphp::first_integer),
+        avatar: get("avatar")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        total_traffic: get("totalTraffic").and_then(parse_unit3d_size),
+        true_downloaded: get("trueDownloaded").and_then(parse_unit3d_size),
+        true_uploaded: get("trueUploaded").and_then(parse_unit3d_size),
+        true_ratio: get("trueRatio").and_then(super::nexusphp::first_number),
+        seeding_size: get("seedingSize").and_then(parse_unit3d_size),
+        seeding_time: get("seedingTime").and_then(parse_unit3d_duration),
+        average_seeding_time: get("averageSeedingTime").and_then(parse_unit3d_duration),
+        seeding_bonus: get("seedingBonus").and_then(super::nexusphp::first_number),
+        bonus_per_hour: get("bonusPerHour").and_then(super::nexusphp::first_number),
+        seeding_bonus_per_hour: get("seedingBonusPerHour").and_then(super::nexusphp::first_number),
+        uploads: get("uploads").and_then(super::nexusphp::first_integer),
+        snatches: get("snatches").and_then(super::nexusphp::first_integer),
+        posts: get("posts").and_then(super::nexusphp::first_integer),
+        adoptions: get("adoptions").and_then(super::nexusphp::first_integer),
+        hnr_unsatisfied: get("hnrUnsatisfied").and_then(super::nexusphp::first_integer),
+        hnr_pre_warning: get("hnrPreWarning").and_then(super::nexusphp::first_integer),
+        email: get("email")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        ..Default::default()
+    };
+    let known = [
+        "id",
+        "name",
+        "uploaded",
+        "downloaded",
+        "ratio",
+        "bonus",
+        "isDonor",
+        "levelId",
+        "levelName",
+        "joinTime",
+        "lastAccessAt",
+        "messageCount",
+        "invites",
+        "avatar",
+        "totalTraffic",
+        "trueDownloaded",
+        "trueUploaded",
+        "trueRatio",
+        "seedingSize",
+        "seedingTime",
+        "averageSeedingTime",
+        "seedingBonus",
+        "bonusPerHour",
+        "seedingBonusPerHour",
+        "uploads",
+        "snatches",
+        "posts",
+        "adoptions",
+        "hnrUnsatisfied",
+        "hnrPreWarning",
+        "email",
+        "seeding",
+        "leeching",
+    ];
+    for (field, value) in values {
+        if !known.contains(&field.as_str()) {
+            details
+                .extra
+                .insert(field.clone(), serde_json::Value::String(value.clone()));
+        }
+    }
+    details.extra.insert(
+        "schema".to_string(),
+        serde_json::Value::String("unit3d".to_string()),
+    );
+    let stats = UserStats {
+        uid: get("id")
+            .and_then(super::nexusphp::first_integer)
+            .map(|value| value.to_string()),
+        username: get("name")
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(username)
+            .to_string(),
+        uploaded,
+        downloaded,
+        ratio: get("ratio")
+            .and_then(super::nexusphp::first_number)
+            .or_else(|| (downloaded > 0).then_some(uploaded as f64 / downloaded as f64)),
+        bonus: get("bonus").and_then(super::nexusphp::first_number),
+        seeding_count: get("seeding")
+            .and_then(super::nexusphp::first_integer)
+            .and_then(|value| u32::try_from(value).ok()),
+        leeching_count: get("leeching")
+            .and_then(super::nexusphp::first_integer)
+            .and_then(|value| u32::try_from(value).ok()),
+        details,
+    };
+    Some(stats)
+}
+
+fn parse_unit3d_size(value: &str) -> Option<u64> {
+    parse_size_text(value).or_else(|| {
+        let digits = value.trim().replace(',', "");
+        digits.parse::<u64>().ok()
+    })
+}
+
+fn parse_unit3d_duration(value: &str) -> Option<u64> {
+    let digits = value.trim();
+    digits
+        .parse::<u64>()
+        .ok()
+        .or_else(|| super::nexusphp::parse_duration_seconds(digits))
 }
 
 pub(super) fn parse_unit3d_bonus_per_hour(html: &str) -> Option<f64> {
@@ -323,8 +706,7 @@ fn extract_size(document: &Html, selectors: &[&str]) -> Option<u64> {
 
 fn parse_size_text(text: &str) -> Option<u64> {
     let scrubbed = text.replace(',', "");
-    let expression =
-        regex::Regex::new(r"(?i)([0-9][0-9,.]*)\s*(bytes?|[kmgtpez]i?b)").ok()?;
+    let expression = regex::Regex::new(r"(?i)([0-9][0-9,.]*)\s*(bytes?|[kmgtpez]i?b)").ok()?;
     let captures = expression.captures(&scrubbed)?;
     super::nexusphp::size_from_parts(captures.get(1)?.as_str(), captures.get(2)?.as_str())
 }
@@ -554,7 +936,7 @@ mod tests {
               <dt>Registration date</dt><dd><time class="profile__registration" datetime="2024-01-02T03:04:05Z">Jan 2 2024</time></dd>
             </dl>
         "##;
-        let stats = parse_unit3d_profile(html, "alice").expect("parse profile");
+        let stats = parse_unit3d_profile(html, "alice", None).expect("parse profile");
         assert_eq!(stats.username, "alice");
         assert_eq!(stats.uploaded, 1649267441664);
         assert_eq!(stats.downloaded, 322122547200);
@@ -586,7 +968,7 @@ mod tests {
         let html = r#"
             <div>上传量 2.00 TiB 下载量 1.00 TiB</div>
         "#;
-        let stats = parse_unit3d_profile(html, "bob").expect("parse");
+        let stats = parse_unit3d_profile(html, "bob", None).expect("parse");
         assert_eq!(stats.uploaded, 2199023255552);
         assert_eq!(stats.downloaded, 1099511627776);
     }

@@ -10,9 +10,16 @@ use tracing::{debug, warn};
 
 use super::rules::{self, BonusPageRule, SiteRule};
 use super::{SiteAdapter, SiteAuth, TorrentAttributes, UserStats, UserStatsDetails};
+use std::collections::HashMap;
 use std::error::Error as _;
 use std::future::Future;
 use std::pin::Pin;
+
+#[derive(Clone)]
+enum UserInfoProcessData {
+    Html(String),
+    Json(Value),
+}
 
 pub struct NexusPhpAdapter {
     base_url: String,
@@ -86,37 +93,37 @@ impl NexusPhpAdapter {
             .ok()
             .and_then(|url| url.host_str().and_then(crate::ptd_sites::site_id_for_host));
         let rule = ptd_site.and_then(rules::rule_for_site);
-        if let Some(api) = rule.and_then(|rule| rule.json_user_stats)
-            && api.dialect == "keepfrds"
-            && let Some(mut stats) = self.fetch_keepfrds_json_stats(api.path).await
-        {
-            // Rates stay on the profile page for this fork.
-            if let Some(uid) = stats.uid.clone() {
-                let profile_url =
-                    format!("{}/userdetails.php?id={}", self.base_url.trim_end_matches('/'), uid);
-                if let Ok(html) = self.fetch_html_page(&profile_url, "用户详情页").await {
-                    if stats.details.bonus_per_hour.is_none()
-                        && let Some(rule) = rule
-                    {
-                        stats.details.bonus_per_hour = rules::extract_number_by_selectors(
-                            &html,
-                            rule.bonus_per_hour_selectors,
-                        );
-                    }
-                    if stats.details.message_count.is_none() {
-                        stats.details.message_count = parse_message_count(&html);
-                    }
-                    if stats.details.bonus_per_hour.is_none() {
-                        stats.details.bonus_per_hour =
-                            parse_bonus_rates(&html, false).0.or_else(|| {
-                                // Some themes keep the rate only on mybonus.php.
-                                None
-                            });
+        if let Some(api) = rule.and_then(|rule| rule.json_user_stats) {
+            let parsed = match api.dialect {
+                "keepfrds" => self.fetch_keepfrds_json_stats(api.path).await,
+                "ptd" => self.fetch_ptd_json_stats(api.path, rule).await,
+                _ => None,
+            };
+            if let Some(mut stats) = parsed {
+                // Rates stay on the profile page for this fork.
+                if let Some(uid) = stats.uid.clone() {
+                    let profile_url =
+                        site_profile_url(&self.base_url, rule, &uid, Some(&stats.username));
+                    if let Ok(html) = self.fetch_html_page(&profile_url, "用户详情页").await {
+                        if stats.details.bonus_per_hour.is_none()
+                            && let Some(rule) = rule
+                        {
+                            stats.details.bonus_per_hour = rules::extract_number_by_selectors(
+                                &html,
+                                rule.bonus_per_hour_selectors,
+                            );
+                        }
+                        if stats.details.message_count.is_none() {
+                            stats.details.message_count = parse_message_count(&html);
+                        }
+                        if stats.details.bonus_per_hour.is_none() {
+                            stats.details.bonus_per_hour = parse_bonus_rates(&html, false).0;
+                        }
                     }
                 }
+                stats.fill_derived();
+                return Ok(stats);
             }
-            stats.fill_derived();
-            return Ok(stats);
         }
         // Match PT-Depiler's generic NexusPHP process: reuse the stable id first and only visit
         // /index.php when no id is known (or when the profile cannot supply complete totals). Cookie-derived
@@ -135,7 +142,8 @@ impl NexusPhpAdapter {
         let mut attempted_detail_url = None;
 
         if let Some(current_user) = identity.as_ref() {
-            let detail_url = self.resolve_same_origin_url(&current_user.href)?;
+            let href = profile_href_for_current_user(rule, current_user);
+            let detail_url = self.resolve_same_origin_url(&href)?;
             attempted_detail_url = Some(detail_url.clone());
             match self
                 .fetch_user_profile_page(&detail_url, &current_user.uid)
@@ -160,7 +168,7 @@ impl NexusPhpAdapter {
             .as_deref()
             .is_none_or(|html| !has_transfer_totals_with_rule(html, rule))
         {
-            let index_url = format!("{}/index.php", self.base_url);
+            let index_url = site_identity_url(&self.base_url, rule);
             debug!("NexusPHP HTML request: {}", index_url);
             let homepage = match self.fetch_html_page(&index_url, "首页").await {
                 Ok(homepage) => homepage,
@@ -183,7 +191,8 @@ impl NexusPhpAdapter {
             index_html = Some(homepage);
 
             if let Some(current_user) = identity.as_ref() {
-                let detail_url = self.resolve_same_origin_url(&current_user.href)?;
+                let href = profile_href_for_current_user(rule, current_user);
+                let detail_url = self.resolve_same_origin_url(&href)?;
                 // Some installations use user.php for the same id. Compare URLs, not just ids,
                 // and do not immediately retry the exact request that already failed.
                 if attempted_detail_url.as_deref() != Some(detail_url.as_str()) {
@@ -212,17 +221,39 @@ impl NexusPhpAdapter {
         let index_html = index_html.as_deref().unwrap_or(detail_html);
 
         let detail_identity = extract_current_user(detail_html);
+        let ptd_uid = rules::extract_user_info_field(detail_html, rule, "id")
+            .or_else(|| rules::extract_user_info_field(index_html, rule, "id"))
+            .and_then(|value| user_id_from_field(&value));
         let uid = identity
             .as_ref()
             .map(|value| value.uid.clone())
-            .or_else(|| detail_identity.as_ref().map(|value| value.uid.clone()));
+            .or_else(|| detail_identity.as_ref().map(|value| value.uid.clone()))
+            .or(ptd_uid);
         let username = detail_identity
             .as_ref()
             .and_then(|value| value.username.clone())
             .or_else(|| identity.as_ref().and_then(|value| value.username.clone()))
+            .or_else(|| rules::extract_user_info_field(detail_html, rule, "name"))
+            .or_else(|| rules::extract_user_info_field(index_html, rule, "name"))
             .or_else(|| extract_username(detail_html))
             .or_else(|| extract_username(index_html))
             .unwrap_or_else(|| uid.clone().unwrap_or_else(|| "unknown".to_string()));
+
+        let ptd_process_values = self
+            .fetch_user_info_process_values(
+                rule,
+                uid.as_deref(),
+                Some(&username),
+                detail_html,
+                detail_page_loaded,
+                homepage_loaded.then_some(index_html),
+            )
+            .await;
+        let uid = uid.or_else(|| {
+            ptd_process_values
+                .get("id")
+                .and_then(|value| user_id_from_field(value))
+        });
 
         let detail_text = extract_visible_text(detail_html);
         let index_text = extract_visible_text(index_html);
@@ -236,6 +267,25 @@ impl NexusPhpAdapter {
             &["下载量", "下載量", "Downloaded"],
             rule.map(|r| r.downloaded_labels).unwrap_or(empty),
         );
+        let selected_field = |field: &str, selectors: &[&str]| {
+            ptd_process_values
+                .get(field)
+                .cloned()
+                .or_else(|| extract_site_field(detail_html, rule, field))
+                .or_else(|| extract_site_field(index_html, rule, field))
+                .or_else(|| rules::extract_text_by_selectors(detail_html, selectors))
+                .or_else(|| rules::extract_text_by_selectors(index_html, selectors))
+        };
+        let selected_number = |field: &str, selectors: &[&str]| {
+            selected_field(field, selectors)
+                .as_deref()
+                .and_then(first_number)
+        };
+        let selected_u64 = |field: &str, selectors: &[&str]| {
+            selected_number(field, selectors)
+                .filter(|value| value.is_finite() && *value >= 0.0 && *value <= u64::MAX as f64)
+                .map(|value| value as u64)
+        };
         let bonus_labels = rules::merge_labels(
             &[
                 "魔力值",
@@ -254,27 +304,30 @@ impl NexusPhpAdapter {
             rule.map(|r| r.bonus_labels).unwrap_or(empty),
         );
 
-        let mut uploaded =
+        let uploaded = selected_field(
+            "uploaded",
+            rule.map(|rule| rule.uploaded_selectors).unwrap_or(empty),
+        )
+        .as_deref()
+        .and_then(|text| {
+            parse_labeled_size(text, &uploaded_labels).or_else(|| parse_size_value(text))
+        })
+        .or_else(|| {
             parse_labeled_size(&detail_text, &uploaded_labels)
-                .or_else(|| parse_labeled_size(&index_text, &uploaded_labels));
-        if uploaded.is_none()
-            && let Some(rule) = rule
-        {
-            uploaded = rules::extract_size_by_selectors(detail_html, rule.uploaded_selectors)
-                .or_else(|| rules::extract_size_by_selectors(index_html, rule.uploaded_selectors));
-        }
-        let mut downloaded =
+                .or_else(|| parse_labeled_size(&index_text, &uploaded_labels))
+        });
+        let downloaded = selected_field(
+            "downloaded",
+            rule.map(|rule| rule.downloaded_selectors).unwrap_or(empty),
+        )
+        .as_deref()
+        .and_then(|text| {
+            parse_labeled_size(text, &downloaded_labels).or_else(|| parse_size_value(text))
+        })
+        .or_else(|| {
             parse_labeled_size(&detail_text, &downloaded_labels)
-                .or_else(|| parse_labeled_size(&index_text, &downloaded_labels));
-        if downloaded.is_none()
-            && let Some(rule) = rule
-        {
-            downloaded =
-                rules::extract_size_by_selectors(detail_html, rule.downloaded_selectors)
-                    .or_else(|| {
-                        rules::extract_size_by_selectors(index_html, rule.downloaded_selectors)
-                    });
-        }
+                .or_else(|| parse_labeled_size(&index_text, &downloaded_labels))
+        });
 
         let page_label = match (detail_page_loaded, homepage_loaded) {
             (true, true) => "用户详情页和首页",
@@ -291,194 +344,346 @@ impl NexusPhpAdapter {
         let uploaded = uploaded.ok_or_else(|| missing_field("上传量"))?;
         let downloaded = downloaded.ok_or_else(|| missing_field("下载量"))?;
 
-        let ratio = ratio_from_totals(Some(uploaded), Some(downloaded)).or_else(|| {
-            rule.and_then(|rule| {
-                rules::extract_number_by_selectors(detail_html, rule.ratio_selectors)
-                    .or_else(|| {
-                        rules::extract_number_by_selectors(index_html, rule.ratio_selectors)
-                    })
-            })
+        let ratio = selected_field(
+            "ratio",
+            rule.map(|rule| rule.ratio_selectors).unwrap_or(empty),
+        )
+        .as_deref()
+        .and_then(first_number)
+        .or_else(|| ratio_from_totals(Some(uploaded), Some(downloaded)));
+        let bonus = selected_field(
+            "bonus",
+            rule.map(|rule| rule.bonus_selectors).unwrap_or(empty),
+        )
+        .as_deref()
+        .and_then(first_number)
+        .or_else(|| parse_profile_number(detail_html, &bonus_labels));
+        let mut seeding_count = selected_field(
+            "seeding",
+            rule.map(|rule| rule.seeding_selectors).unwrap_or(empty),
+        )
+        .as_deref()
+        .and_then(first_number)
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .and_then(|value| u32::try_from(value as u64).ok())
+        .or_else(|| {
+            parse_labeled_integer(
+                &detail_text,
+                &["当前做种", "當前做種", "做种数", "做種數", "Seeding"],
+            )
         });
-        let mut bonus = parse_profile_number(detail_html, &bonus_labels);
-        if bonus.is_none()
-            && let Some(rule) = rule
-        {
-            bonus = rules::extract_number_by_selectors(detail_html, rule.bonus_selectors)
-                .or_else(|| rules::extract_number_by_selectors(index_html, rule.bonus_selectors));
-        }
-        let mut seeding_count = parse_labeled_integer(
-            &detail_text,
-            &["当前做种", "當前做種", "做种数", "做種數", "Seeding"],
-        );
-        if seeding_count.is_none()
-            && let Some(rule) = rule
-        {
-            seeding_count =
-                rules::extract_u32_by_selectors(detail_html, rule.seeding_selectors).or_else(
-                    || rules::extract_u32_by_selectors(index_html, rule.seeding_selectors),
-                );
-        }
-        let mut leeching_count = parse_labeled_integer(
-            &detail_text,
-            &["当前下载", "當前下載", "下载数", "下載數", "Leeching"],
-        );
-        if leeching_count.is_none()
-            && let Some(rule) = rule
-        {
-            leeching_count =
-                rules::extract_u32_by_selectors(detail_html, rule.leeching_selectors).or_else(
-                    || rules::extract_u32_by_selectors(index_html, rule.leeching_selectors),
-                );
-        }
+        let leeching_count = selected_field(
+            "leeching",
+            rule.map(|rule| rule.leeching_selectors).unwrap_or(empty),
+        )
+        .as_deref()
+        .and_then(first_number)
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .and_then(|value| u32::try_from(value as u64).ok())
+        .or_else(|| {
+            parse_labeled_integer(
+                &detail_text,
+                &["当前下载", "當前下載", "下载数", "下載數", "Leeching"],
+            )
+        });
 
-        let (hnr_pre_warning, hnr_unsatisfied) = parse_hnr_counts(index_html);
-        let mut level_name = parse_profile_level(detail_html);
-        if level_name.is_none()
-            && let Some(rule) = rule
-            && let Some(text) =
-                rules::extract_text_by_selectors(detail_html, rule.level_selectors)
-        {
-            level_name = Some(text);
+        let (mut hnr_pre_warning, mut hnr_unsatisfied) = parse_hnr_counts(index_html);
+        if let Some(text) = selected_field("hnrPreWarning", empty) {
+            hnr_pre_warning = parse_hnr_pair(&text)
+                .map(|counts| counts.0)
+                .or_else(|| first_integer(&text));
         }
-        let mut message_count = parse_message_count(index_html);
-        if message_count.is_none()
-            && let Some(rule) = rule
-        {
-            message_count =
-                rules::extract_u64_by_selectors(detail_html, rule.message_selectors).or_else(
-                    || rules::extract_u64_by_selectors(index_html, rule.message_selectors),
-                );
+        if let Some(text) = selected_field("hnrUnsatisfied", empty) {
+            hnr_unsatisfied = parse_hnr_pair(&text)
+                .map(|counts| counts.1)
+                .or_else(|| first_integer(&text));
         }
+        let level_name = selected_field(
+            "levelName",
+            rule.map(|rule| rule.level_selectors).unwrap_or(empty),
+        )
+        .or_else(|| parse_profile_level(detail_html));
+        let message_count = selected_u64(
+            "messageCount",
+            rule.map(|rule| rule.message_selectors).unwrap_or(empty),
+        )
+        .or_else(|| parse_message_count(index_html));
         let mut details = UserStatsDetails {
-            is_donor: detail_page_loaded.then(|| detect_donor(detail_html)),
+            is_donor: detail_page_loaded
+                .then(|| selected_field("isDonor", empty).is_some() || detect_donor(detail_html)),
             level_name,
-            join_time: parse_profile_value(
-                detail_html,
-                &["加入日期", "加入時間", "Join date", "Joined"],
-            )
-            .as_deref()
-            .and_then(parse_user_datetime_millis),
-            last_access_at: parse_profile_value(
-                detail_html,
-                &["最近动向", "最近動向", "Last Action", "Last access"],
-            )
-            .as_deref()
-            .and_then(parse_user_datetime_millis),
+            join_time: selected_field("joinTime", empty)
+                .as_deref()
+                .and_then(parse_user_datetime_millis)
+                .or_else(|| {
+                    parse_profile_value(
+                        detail_html,
+                        &["加入日期", "加入時間", "Join date", "Joined"],
+                    )
+                    .as_deref()
+                    .and_then(parse_user_datetime_millis)
+                }),
+            last_access_at: selected_field("lastAccessAt", empty)
+                .as_deref()
+                .and_then(parse_user_datetime_millis)
+                .or_else(|| {
+                    parse_profile_value(
+                        detail_html,
+                        &["最近动向", "最近動向", "Last Action", "Last access"],
+                    )
+                    .as_deref()
+                    .and_then(parse_user_datetime_millis)
+                }),
             message_count,
-            invites: parse_invite_count(detail_html),
-            avatar: extract_avatar(detail_html)
+            invites: selected_u64("invites", empty).or_else(|| parse_invite_count(detail_html)),
+            avatar: selected_field("avatar", empty)
+                .or_else(|| extract_avatar(detail_html))
                 .and_then(|avatar| self.resolve_same_origin_url(&avatar).ok().or(Some(avatar))),
-            true_downloaded: parse_labeled_size(
-                &detail_text,
-                &[
-                    "实际下载量",
-                    "真实下载量",
-                    "實際下載量",
-                    "真實下載量",
-                    "Real Downloaded",
-                    "Actual Downloaded",
-                ],
-            ),
-            true_uploaded: parse_labeled_size(
-                &detail_text,
-                &[
-                    "实际上傳量",
-                    "实际上传量",
-                    "真实上传量",
-                    "實際上傳量",
-                    "真實上傳量",
-                    "Real Uploaded",
-                    "Actual Uploaded",
-                ],
-            ),
-            seeding_time: parse_labeled_duration_seconds(
-                &detail_text,
-                &["做种时间", "做種時間", "Seeding Time", "Seed Time"],
-            ),
-            average_seeding_time: parse_labeled_duration_seconds(
-                &detail_text,
-                &[
-                    "平均做种时间",
-                    "平均做種時間",
-                    "Average Seeding Time",
-                    "Average Seed Time",
-                ],
-            ),
-            seeding_bonus: parse_profile_number(
-                detail_html,
-                &["做种积分", "做種積分", "Seeding Points", "保种积分"],
-            ),
-            uploads: parse_labeled_u64(
-                &detail_text,
-                &["发布数", "發佈數", "上传种子", "上傳種子", "Uploads"],
-            ),
-            snatches: parse_labeled_u64(
-                &detail_text,
-                &["完成数", "完成數", "下载完成", "下載完成", "Snatches"],
-            ),
-            posts: parse_labeled_u64(&detail_text, &["论坛发帖", "論壇發帖", "Posts"]),
-            adoptions: parse_labeled_u64(&detail_text, &["认领种子", "認領種子", "Adoptions"]),
+            true_downloaded: selected_field("trueDownloaded", empty)
+                .as_deref()
+                .and_then(|text| {
+                    parse_labeled_size(
+                        text,
+                        &[
+                            "实际下载量",
+                            "真实下载量",
+                            "實際下載量",
+                            "真實下載量",
+                            "Real Downloaded",
+                            "Actual Downloaded",
+                        ],
+                    )
+                    .or_else(|| parse_size_value(text))
+                })
+                .or_else(|| {
+                    parse_labeled_size(
+                        &detail_text,
+                        &[
+                            "实际下载量",
+                            "真实下载量",
+                            "實際下載量",
+                            "真實下載量",
+                            "Real Downloaded",
+                            "Actual Downloaded",
+                        ],
+                    )
+                }),
+            true_uploaded: selected_field("trueUploaded", empty)
+                .as_deref()
+                .and_then(|text| {
+                    parse_labeled_size(
+                        text,
+                        &[
+                            "实际上傳量",
+                            "实际上传量",
+                            "真实上传量",
+                            "實際上傳量",
+                            "真實上傳量",
+                            "Real Uploaded",
+                            "Actual Uploaded",
+                        ],
+                    )
+                    .or_else(|| parse_size_value(text))
+                })
+                .or_else(|| {
+                    parse_labeled_size(
+                        &detail_text,
+                        &[
+                            "实际上傳量",
+                            "实际上传量",
+                            "真实上传量",
+                            "實際上傳量",
+                            "真實上傳量",
+                            "Real Uploaded",
+                            "Actual Uploaded",
+                        ],
+                    )
+                }),
+            seeding_time: selected_field("seedingTime", empty)
+                .as_deref()
+                .and_then(|text| {
+                    parse_labeled_duration_seconds(
+                        text,
+                        &["做种时间", "做種時間", "Seeding Time", "Seed Time"],
+                    )
+                    .or_else(|| parse_duration_seconds(text))
+                })
+                .or_else(|| {
+                    parse_labeled_duration_seconds(
+                        &detail_text,
+                        &["做种时间", "做種時間", "Seeding Time", "Seed Time"],
+                    )
+                }),
+            average_seeding_time: selected_field("averageSeedingTime", empty)
+                .as_deref()
+                .and_then(|text| {
+                    parse_labeled_duration_seconds(
+                        text,
+                        &[
+                            "平均做种时间",
+                            "平均做種時間",
+                            "Average Seeding Time",
+                            "Average Seed Time",
+                        ],
+                    )
+                    .or_else(|| parse_duration_seconds(text))
+                })
+                .or_else(|| {
+                    parse_labeled_duration_seconds(
+                        &detail_text,
+                        &[
+                            "平均做种时间",
+                            "平均做種時間",
+                            "Average Seeding Time",
+                            "Average Seed Time",
+                        ],
+                    )
+                }),
+            seeding_bonus: selected_number("seedingBonus", empty).or_else(|| {
+                parse_profile_number(
+                    detail_html,
+                    &["做种积分", "做種積分", "Seeding Points", "保种积分"],
+                )
+            }),
+            uploads: selected_u64("uploads", empty).or_else(|| {
+                parse_labeled_u64(
+                    &detail_text,
+                    &["发布数", "發佈數", "上传种子", "上傳種子", "Uploads"],
+                )
+            }),
+            snatches: selected_u64("snatches", empty).or_else(|| {
+                parse_labeled_u64(
+                    &detail_text,
+                    &["完成数", "完成數", "下载完成", "下載完成", "Snatches"],
+                )
+            }),
+            posts: selected_u64("posts", empty)
+                .or_else(|| parse_labeled_u64(&detail_text, &["论坛发帖", "論壇發帖", "Posts"])),
+            adoptions: selected_u64("adoptions", empty).or_else(|| {
+                parse_labeled_u64(&detail_text, &["认领种子", "認領種子", "Adoptions"])
+            }),
             hnr_unsatisfied,
             hnr_pre_warning,
+            total_traffic: selected_u64("totalTraffic", empty),
+            true_ratio: selected_number("trueRatio", empty),
+            seeding_size: selected_field("seedingSize", empty)
+                .as_deref()
+                .and_then(|text| {
+                    parse_size_value(text).or_else(|| first_number(text).map(|n| n as u64))
+                }),
+            level_id: selected_field("levelId", empty)
+                .and_then(|value| first_integer(&value))
+                .and_then(|value| i64::try_from(value).ok()),
+            email: selected_field("email", empty),
             ..Default::default()
         };
 
+        const KNOWN_PTD_FIELDS: &[&str] = &[
+            "id",
+            "name",
+            "uploaded",
+            "downloaded",
+            "ratio",
+            "bonus",
+            "ptdUserId",
+            "isDonor",
+            "levelId",
+            "levelName",
+            "joinTime",
+            "lastAccessAt",
+            "messageCount",
+            "invites",
+            "avatar",
+            "totalTraffic",
+            "trueDownloaded",
+            "trueUploaded",
+            "trueRatio",
+            "seeding",
+            "seedingSize",
+            "seedingTime",
+            "averageSeedingTime",
+            "seedingBonus",
+            "bonusPerHour",
+            "seedingBonusPerHour",
+            "leeching",
+            "uploads",
+            "snatches",
+            "posts",
+            "adoptions",
+            "hnrUnsatisfied",
+            "hnrPreWarning",
+            "email",
+        ];
+        if let Some(generated) = ptd_site.and_then(rules::generated_rule_for_site) {
+            for field in generated.user_info_fields {
+                if KNOWN_PTD_FIELDS.contains(&field.field) || field.json_path.is_some() {
+                    continue;
+                }
+                if let Some(value) = selected_field(field.field, field.selectors) {
+                    details
+                        .extra
+                        .insert(field.field.to_string(), Value::String(value));
+                }
+            }
+        }
+
         // PT-Depiler 的 NexusPHP 通用 schema 会用 AJAX 补充做种量和发布数。
         let ajax_disabled = rule.is_some_and(|rule| rule.user_torrent_ajax.disabled);
-        if !ajax_disabled && let Some(user_id) = uid.as_deref() {
-            if let Some((count, size)) =
-                self.fetch_user_torrent_summary(user_id, "seeding", rule)
-                    .await
+        if !ajax_disabled
+            && (seeding_count.is_none() || details.seeding_size.is_none())
+            && let Some(user_id) = uid.as_deref()
+        {
+            if let Some((count, size)) = self
+                .fetch_user_torrent_summary(user_id, "seeding", rule)
+                .await
             {
-                seeding_count = Some(count);
-                details.seeding_size = size;
+                if seeding_count.is_none() {
+                    seeding_count = Some(count);
+                }
+                if details.seeding_size.is_none() {
+                    details.seeding_size = size;
+                }
             }
-            if let Some((count, _)) =
-                self.fetch_user_torrent_summary(user_id, "uploaded", rule)
-                    .await
+        }
+        if !ajax_disabled
+            && details.uploads.is_none()
+            && let Some(user_id) = uid.as_deref()
+        {
+            if let Some((count, _)) = self
+                .fetch_user_torrent_summary(user_id, "uploaded", rule)
+                .await
             {
                 details.uploads = Some(count as u64);
             }
         }
 
-        details.level_id = details
-            .level_name
-            .as_deref()
-            .and_then(|name| super::nexusphp_levels::level_id(ptd_site?, name))
-            .or_else(|| {
-                profile_class_level(detail_html)
-                    .and_then(|name| super::nexusphp_levels::level_id(ptd_site?, &name))
-            });
+        details.level_id = details.level_id.or_else(|| {
+            details
+                .level_name
+                .as_deref()
+                .and_then(|name| super::nexusphp_levels::level_id(ptd_site?, name))
+                .or_else(|| {
+                    profile_class_level(detail_html)
+                        .and_then(|name| super::nexusphp_levels::level_id(ptd_site?, &name))
+                })
+        });
         if ptd_site == Some("ilolicon") {
             details.ptd_user_id = profile_uuid(detail_html);
         }
 
-        if let Some(rule) = rule
-            && !rule.bonus_per_hour_selectors.is_empty()
-            && let Some(rate) = rules::extract_number_by_selectors(
-                detail_html,
-                rule.bonus_per_hour_selectors,
-            )
-            .or_else(|| {
-                rules::extract_number_by_selectors(index_html, rule.bonus_per_hour_selectors)
-            })
-        {
-            details.bonus_per_hour = Some(rate);
+        if details.bonus_per_hour.is_none() {
+            details.bonus_per_hour = selected_number(
+                "bonusPerHour",
+                rule.map(|rule| rule.bonus_per_hour_selectors)
+                    .unwrap_or(empty),
+            );
         }
 
-        let force_bonus_page = rule.is_some_and(|rule| {
-            matches!(rule.bonus_page, BonusPageRule::Path { .. })
-        });
+        let force_bonus_page = !ptd_process_values.contains_key("bonusPerHour")
+            && rule.is_some_and(|rule| matches!(rule.bonus_page, BonusPageRule::Path { .. }));
         if details.bonus_per_hour.is_none() || force_bonus_page {
             let base = self.base_url.trim_end_matches('/');
-            let bonus_url = if is_u2 {
-                format!(
-                    "{base}/mprecent.php?user={}",
-                    uid.as_deref().unwrap_or("")
-                )
-            } else {
-                rules::bonus_page_url(rule, base, uid.as_deref())
-            };
+            let bonus_url = rules::bonus_page_url(rule, base, uid.as_deref());
             match self.fetch_html_page(&bonus_url, "魔力值页面").await {
                 Ok(bonus_html) => {
                     let (bonus_per_hour, seeding_bonus_per_hour) =
@@ -486,7 +691,9 @@ impl NexusPhpAdapter {
                     if details.bonus_per_hour.is_none() {
                         details.bonus_per_hour = bonus_per_hour;
                     }
-                    details.seeding_bonus_per_hour = seeding_bonus_per_hour;
+                    if details.seeding_bonus_per_hour.is_none() {
+                        details.seeding_bonus_per_hour = seeding_bonus_per_hour;
+                    }
                     if ptd_site == Some("hhanclub") {
                         if let (Some(user_id), Some(base_rate)) =
                             (uid.as_deref(), details.seeding_bonus_per_hour)
@@ -501,6 +708,21 @@ impl NexusPhpAdapter {
                 }
                 Err(error) => debug!(%error, "NexusPHP 魔力值页面获取失败"),
             }
+        }
+
+        if details.seeding_bonus_per_hour.is_none() {
+            details.seeding_bonus_per_hour = selected_number("seedingBonusPerHour", empty);
+        }
+
+        if details.is_donor == Some(true)
+            && let Some(rate) = details.bonus_per_hour.as_mut()
+        {
+            let multiplier = rule
+                .and_then(|rule| rules::generated_rule_for_site(rule.ptd_id))
+                .map(|rule| rule.donor_bonus_multiplier)
+                .or_else(|| rule.map(|rule| rule.donor_bonus_multiplier))
+                .unwrap_or(2.0);
+            *rate *= multiplier;
         }
 
         let mut stats = UserStats {
@@ -537,6 +759,173 @@ impl NexusPhpAdapter {
         }
         let value: Value = serde_json::from_str(&text).ok()?;
         parse_keepfrds_user_details_json(&value)
+    }
+
+    async fn fetch_ptd_json_stats(
+        &self,
+        path: &str,
+        rule: Option<&'static SiteRule>,
+    ) -> Option<UserStats> {
+        let url = format!("{}{}", self.base_url.trim_end_matches('/'), path);
+        let response = self
+            .client
+            .get(&url)
+            .headers(self.build_headers())
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let text = response.text().await.ok()?;
+        if looks_like_cloudflare_challenge(&text) {
+            return None;
+        }
+        let value: Value = serde_json::from_str(&text).ok()?;
+        parse_ptd_json_user_stats(&value, rule)
+    }
+
+    async fn fetch_user_info_process_values(
+        &self,
+        rule: Option<&SiteRule>,
+        uid: Option<&str>,
+        username: Option<&str>,
+        detail_html: &str,
+        detail_page_loaded: bool,
+        index_html: Option<&str>,
+    ) -> HashMap<String, String> {
+        let Some(generated) = rule.and_then(|rule| rules::generated_rule_for_site(rule.ptd_id))
+        else {
+            return HashMap::new();
+        };
+        if generated.user_info_processes.is_empty() {
+            return HashMap::new();
+        }
+
+        let detail_url = uid.map(|uid| site_profile_url(&self.base_url, rule, uid, username));
+        let identity_url = site_identity_url(&self.base_url, rule);
+        let mut pages = HashMap::<(String, String, String), UserInfoProcessData>::new();
+        let mut values = HashMap::new();
+
+        for process in generated.user_info_processes {
+            if process.fields.is_empty() {
+                continue;
+            }
+            let url = rules::user_info_process_url(
+                &self.base_url,
+                process.path,
+                process.query,
+                uid,
+                username,
+            );
+            let page_key = (
+                url.clone(),
+                process.method.to_ascii_uppercase(),
+                process.response_type.to_ascii_lowercase(),
+            );
+            if !pages.contains_key(&page_key) {
+                if process.path.contains("getusertorrentlistajax")
+                    && rule.is_some_and(|rule| rule.user_torrent_ajax.disabled)
+                {
+                    continue;
+                }
+                let cached_html = if detail_page_loaded && detail_url.as_deref() == Some(&url) {
+                    Some(detail_html)
+                } else if index_html.is_some() && identity_url == url {
+                    index_html
+                } else {
+                    None
+                };
+                let page = if let Some(html) = cached_html {
+                    Some(UserInfoProcessData::Html(html.to_string()))
+                } else {
+                    self.fetch_user_info_process_page(&url, process.method, process.response_type)
+                        .await
+                };
+                if let Some(page) = page {
+                    pages.insert(page_key.clone(), page);
+                }
+            }
+            let Some(page) = pages.get(&page_key) else {
+                continue;
+            };
+            for process_field in process.fields {
+                let field_rule = if !process_field.selectors.is_empty()
+                    || process_field.json_path.is_some()
+                    || process_field.attr.is_some()
+                {
+                    process_field
+                } else if let Some(global) = rules::user_info_field(rule, process_field.field) {
+                    global
+                } else {
+                    process_field
+                };
+                let is_donor_match = process_field.field == "isDonor"
+                    && matches!(page, UserInfoProcessData::Html(html)
+                        if rules::user_info_field_matches_with_rule(html, field_rule));
+                let value = if is_donor_match {
+                    Some("true".to_string())
+                } else if process.response_type.eq_ignore_ascii_case("text")
+                    && process.path.contains("getusertorrentlistajax")
+                {
+                    match page {
+                        UserInfoProcessData::Html(html) => parse_user_torrent_ajax_summary(html)
+                            .and_then(|(count, size)| match process_field.field {
+                                "seeding" | "uploads" => Some(count.to_string()),
+                                "seedingSize" => size.map(|size| size.to_string()),
+                                _ => None,
+                            }),
+                        UserInfoProcessData::Json(_) => None,
+                    }
+                } else {
+                    match page {
+                        UserInfoProcessData::Html(html) => {
+                            rules::extract_user_info_field_with_rule(html, field_rule)
+                        }
+                        UserInfoProcessData::Json(json) => {
+                            rules::extract_user_info_json_value(json, field_rule)
+                        }
+                    }
+                };
+                if let Some(value) = value {
+                    values.insert(process_field.field.to_string(), value);
+                }
+            }
+        }
+        values
+    }
+
+    async fn fetch_user_info_process_page(
+        &self,
+        url: &str,
+        method: &str,
+        response_type: &str,
+    ) -> Option<UserInfoProcessData> {
+        let headers = self.build_headers();
+        let request = if method.eq_ignore_ascii_case("POST") {
+            self.client.post(url)
+        } else {
+            self.client.get(url)
+        }
+        .headers(headers);
+        let response = request.send().await.ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let final_url = response.url().clone();
+        let body = response.text().await.ok()?;
+        if looks_like_cloudflare_challenge(&body) {
+            return None;
+        }
+        if response_type.eq_ignore_ascii_case("json") {
+            serde_json::from_str(&body)
+                .ok()
+                .map(UserInfoProcessData::Json)
+        } else if looks_like_login_page(&body, &final_url) {
+            None
+        } else {
+            Some(UserInfoProcessData::Html(body))
+        }
     }
 
     async fn fetch_rescue_daily_bonus(&self, user_id: &str) -> Option<f64> {
@@ -986,6 +1375,66 @@ fn current_user_from_id(user_id: &str) -> Option<CurrentUser> {
     })
 }
 
+fn site_profile_href(rule: Option<&SiteRule>, user_id: &str, username: Option<&str>) -> String {
+    let generated = rule.and_then(|rule| rules::generated_rule_for_site(rule.ptd_id));
+    let path = rule
+        .and_then(|rule| rule.profile_path)
+        .or_else(|| generated.and_then(|rule| rule.profile_path))
+        .unwrap_or("/userdetails.php");
+    let query = rule
+        .and_then(|rule| rule.profile_query)
+        .or_else(|| generated.and_then(|rule| rule.profile_query))
+        .unwrap_or("id={uid}");
+    rules::user_info_process_url("", path, query, Some(user_id), username)
+        .trim_start_matches('/')
+        .to_string()
+}
+
+fn profile_href_for_current_user(rule: Option<&SiteRule>, user: &CurrentUser) -> String {
+    let generated = rule.and_then(|rule| rules::generated_rule_for_site(rule.ptd_id));
+    let configured_path = rule
+        .and_then(|rule| rule.profile_path)
+        .or_else(|| generated.and_then(|rule| rule.profile_path));
+    let configured_query = rule
+        .and_then(|rule| rule.profile_query)
+        .or_else(|| generated.and_then(|rule| rule.profile_query));
+    if configured_path.is_some() || configured_query.is_some() {
+        site_profile_href(rule, &user.uid, user.username.as_deref())
+    } else {
+        user.href.trim_start_matches('/').to_string()
+    }
+}
+
+fn site_identity_url(base_url: &str, rule: Option<&SiteRule>) -> String {
+    let generated = rule.and_then(|rule| rules::generated_rule_for_site(rule.ptd_id));
+    let path = rule
+        .and_then(|rule| rule.identity_path)
+        .or_else(|| generated.and_then(|rule| rule.identity_path))
+        .unwrap_or("/index.php");
+    let query = rule
+        .and_then(|rule| rule.identity_query)
+        .or_else(|| generated.and_then(|rule| rule.identity_query));
+    rules::user_info_process_url(base_url, path, query.unwrap_or_default(), None, None)
+}
+
+fn site_profile_url(
+    base_url: &str,
+    rule: Option<&SiteRule>,
+    user_id: &str,
+    username: Option<&str>,
+) -> String {
+    let generated = rule.and_then(|rule| rules::generated_rule_for_site(rule.ptd_id));
+    let path = rule
+        .and_then(|rule| rule.profile_path)
+        .or_else(|| generated.and_then(|rule| rule.profile_path))
+        .unwrap_or("/userdetails.php");
+    let query = rule
+        .and_then(|rule| rule.profile_query)
+        .or_else(|| generated.and_then(|rule| rule.profile_query))
+        .unwrap_or("id={uid}");
+    rules::user_info_process_url(base_url, path, query, Some(user_id), username)
+}
+
 fn normalize_user_id(user_id: &str) -> Option<String> {
     let user_id = user_id.trim();
     (!user_id.is_empty() && user_id.chars().all(|ch| ch.is_ascii_digit()))
@@ -1107,12 +1556,100 @@ fn has_transfer_totals_with_rule(html: &str, rule: Option<&SiteRule>) -> bool {
     if has_transfer_totals(html) {
         return true;
     }
-    rule.is_some_and(|rule| {
-        !rule.uploaded_selectors.is_empty()
-            && !rule.downloaded_selectors.is_empty()
-            && rules::extract_size_by_selectors(html, rule.uploaded_selectors).is_some()
-            && rules::extract_size_by_selectors(html, rule.downloaded_selectors).is_some()
-    })
+    let Some(rule) = rule else {
+        return false;
+    };
+    let uploaded_labels =
+        rules::merge_labels(&["上传量", "上傳量", "Uploaded"], rule.uploaded_labels);
+    let downloaded_labels =
+        rules::merge_labels(&["下载量", "下載量", "Downloaded"], rule.downloaded_labels);
+    let field_size = |field: &str, selectors: &[&str], labels: &[&'static str]| {
+        rules::extract_user_info_field(html, Some(rule), field)
+            .or_else(|| rules::extract_text_by_selectors(html, selectors))
+            .as_deref()
+            .and_then(|text| parse_labeled_size(text, labels).or_else(|| parse_size_value(text)))
+    };
+    field_size("uploaded", rule.uploaded_selectors, &uploaded_labels).is_some()
+        && field_size("downloaded", rule.downloaded_selectors, &downloaded_labels).is_some()
+}
+
+fn extract_site_field(html: &str, rule: Option<&SiteRule>, field: &str) -> Option<String> {
+    if field == "isDonor" && rules::user_info_field_matches(html, rule, field) {
+        Some("true".to_string())
+    } else {
+        rules::extract_user_info_field(html, rule, field)
+    }
+}
+
+fn parse_size_value(text: &str) -> Option<u64> {
+    let scrubbed = text.replace(',', "");
+    let captures = Regex::new(r"(?i)([0-9][0-9.]*)\s*(bytes?|[kmgtpez]i?b)")
+        .ok()?
+        .captures(&scrubbed)?;
+    size_from_parts(captures.get(1)?.as_str(), captures.get(2)?.as_str())
+}
+
+pub(super) fn parse_duration_seconds(text: &str) -> Option<u64> {
+    let expression = Regex::new(
+        r"(?i)([0-9]+(?:\.[0-9]+)?)\s*(years?|months?|weeks?|days?|hours?|hrs?|minutes?|mins?|seconds?|secs?|年|个月|個月|月|周|週|天|日|小时|小時|时|時|分钟|分鐘|分|秒)",
+    )
+    .ok()?;
+    let mut total = 0u64;
+    let mut found = false;
+    for capture in expression.captures_iter(text) {
+        let value = capture.get(1)?.as_str().parse::<f64>().ok()?;
+        let unit = capture.get(2)?.as_str().to_ascii_lowercase();
+        let multiplier = if unit.starts_with("year") || unit == "年" {
+            365 * 24 * 60 * 60
+        } else if unit.starts_with("month") || unit == "月" || unit.contains("個月") {
+            30 * 24 * 60 * 60
+        } else if unit.starts_with("week") || unit == "周" || unit == "週" {
+            7 * 24 * 60 * 60
+        } else if unit.starts_with("day") || unit == "天" || unit == "日" {
+            24 * 60 * 60
+        } else if unit.starts_with("hour")
+            || unit.starts_with("hr")
+            || ["小时", "小時", "时", "時"].contains(&unit.as_str())
+        {
+            60 * 60
+        } else if unit.starts_with("minute")
+            || unit.starts_with("min")
+            || ["分钟", "分鐘", "分"].contains(&unit.as_str())
+        {
+            60
+        } else {
+            1
+        };
+        total = total.saturating_add((value * multiplier as f64).max(0.0) as u64);
+        found = true;
+    }
+    found.then_some(total)
+}
+
+fn parse_hnr_pair(text: &str) -> Option<(u64, u64)> {
+    let captures = Regex::new(r"([0-9][0-9,]*)\s*/\s*([0-9][0-9,]*)")
+        .ok()?
+        .captures(text)?;
+    Some((
+        captures.get(1)?.as_str().replace(',', "").parse().ok()?,
+        captures.get(2)?.as_str().replace(',', "").parse().ok()?,
+    ))
+}
+
+fn user_id_from_field(value: &str) -> Option<String> {
+    if let Some(uid) = normalize_user_id(value) {
+        return Some(uid);
+    }
+    let url = Url::parse("https://tracker.invalid/")
+        .ok()?
+        .join(value)
+        .ok()?;
+    url.query_pairs()
+        .find(|(key, value)| {
+            matches!(key.to_ascii_lowercase().as_str(), "id" | "uid" | "userid")
+                && normalize_user_id(value).is_some()
+        })
+        .and_then(|(_, value)| normalize_user_id(&value))
 }
 
 pub(super) fn parse_labeled_size(text: &str, labels: &[&str]) -> Option<u64> {
@@ -1232,7 +1769,7 @@ fn parse_invite_count(html: &str) -> Option<u64> {
     None
 }
 
-fn parse_labeled_duration_seconds(text: &str, labels: &[&str]) -> Option<u64> {
+pub(super) fn parse_labeled_duration_seconds(text: &str, labels: &[&str]) -> Option<u64> {
     labels.iter().find_map(|label| {
         let expression = format!(
             r"(?i){}\s*[^0-9]{{0,48}}([0-9][0-9,.]*)\s*(years?|months?|weeks?|days?|hours?|hrs?|minutes?|mins?|seconds?|secs?|年|月|周|週|天|日|小时|小時|时|時|分钟|分鐘|分|秒)",
@@ -1685,13 +2222,11 @@ pub(super) fn looks_like_cloudflare_challenge(html: &str) -> bool {
 fn parse_keepfrds_user_details_json(value: &Value) -> Option<UserStats> {
     let user = value.get("user")?;
     let torrent = value.get("torrentStats");
-    let uid = user
-        .get("id")
-        .and_then(|id| id.as_u64().map(|id| id.to_string()).or_else(|| {
-            id.as_str()
-                .filter(|id| !id.is_empty())
-                .map(str::to_string)
-        }));
+    let uid = user.get("id").and_then(|id| {
+        id.as_u64()
+            .map(|id| id.to_string())
+            .or_else(|| id.as_str().filter(|id| !id.is_empty()).map(str::to_string))
+    });
     let username = user
         .get("username")
         .and_then(Value::as_str)
@@ -1751,6 +2286,135 @@ fn parse_keepfrds_user_details_json(value: &Value) -> Option<UserStats> {
     };
     stats.fill_derived();
     Some(stats)
+}
+
+fn parse_ptd_json_user_stats(value: &Value, rule: Option<&SiteRule>) -> Option<UserStats> {
+    let get = |field| rules::extract_user_info_json_field(value, rule, field);
+    let uid = get("id").and_then(json_value_to_string);
+    let username = get("name").and_then(json_value_to_string)?;
+    let uploaded = get("uploaded").and_then(json_u64)?;
+    let downloaded = get("downloaded").and_then(json_u64)?;
+    let bonus = get("bonus").and_then(json_f64);
+
+    let mut details = UserStatsDetails {
+        ptd_user_id: get("ptdUserId").and_then(json_value_to_string),
+        is_donor: get("isDonor").and_then(Value::as_bool),
+        level_id: get("levelId").and_then(Value::as_i64),
+        level_name: get("levelName").and_then(json_value_to_string),
+        join_time: get("joinTime").and_then(json_timestamp_millis),
+        last_access_at: get("lastAccessAt").and_then(json_timestamp_millis),
+        message_count: get("messageCount").and_then(json_u64),
+        invites: get("invites").and_then(json_u64),
+        avatar: get("avatar").and_then(json_value_to_string),
+        total_traffic: get("totalTraffic").and_then(json_u64),
+        true_downloaded: get("trueDownloaded").and_then(json_u64),
+        true_uploaded: get("trueUploaded").and_then(json_u64),
+        true_ratio: get("trueRatio").and_then(json_f64),
+        seeding_size: get("seedingSize").and_then(json_u64),
+        seeding_time: get("seedingTime").and_then(json_u64),
+        average_seeding_time: get("averageSeedingTime").and_then(json_u64),
+        seeding_bonus: get("seedingBonus").and_then(json_f64),
+        bonus_per_hour: get("bonusPerHour").and_then(json_f64),
+        seeding_bonus_per_hour: get("seedingBonusPerHour").and_then(json_f64),
+        uploads: get("uploads").and_then(json_u64),
+        snatches: get("snatches").and_then(json_u64),
+        posts: get("posts").and_then(json_u64),
+        adoptions: get("adoptions").and_then(json_u64),
+        hnr_unsatisfied: get("hnrUnsatisfied").and_then(json_u64),
+        hnr_pre_warning: get("hnrPreWarning").and_then(json_u64),
+        email: get("email").and_then(json_value_to_string),
+        ..Default::default()
+    };
+    if let Some(value) = get("seedingBonus")
+        && details.seeding_bonus.is_none()
+    {
+        details.seeding_bonus = json_f64(value);
+    }
+    let seeding_count = get("seeding")
+        .and_then(json_u64)
+        .and_then(|count| u32::try_from(count).ok());
+    let leeching_count = get("leeching")
+        .and_then(json_u64)
+        .and_then(|count| u32::try_from(count).ok());
+
+    const KNOWN_FIELDS: &[&str] = &[
+        "id",
+        "name",
+        "uploaded",
+        "downloaded",
+        "ratio",
+        "bonus",
+        "ptdUserId",
+        "isDonor",
+        "levelId",
+        "levelName",
+        "joinTime",
+        "lastAccessAt",
+        "messageCount",
+        "invites",
+        "avatar",
+        "totalTraffic",
+        "trueDownloaded",
+        "trueUploaded",
+        "trueRatio",
+        "seedingSize",
+        "seedingTime",
+        "averageSeedingTime",
+        "seedingBonus",
+        "bonusPerHour",
+        "seedingBonusPerHour",
+        "uploads",
+        "snatches",
+        "posts",
+        "adoptions",
+        "hnrUnsatisfied",
+        "hnrPreWarning",
+        "email",
+        "seeding",
+        "leeching",
+    ];
+    if let Some(rule) = rule {
+        if let Some(generated) = rules::generated_rule_for_site(rule.ptd_id) {
+            for field in generated.user_info_fields {
+                if KNOWN_FIELDS.contains(&field.field)
+                    || rule
+                        .user_info_fields
+                        .iter()
+                        .any(|manual| manual.field == field.field)
+                {
+                    continue;
+                }
+                if let Some(value) =
+                    rules::extract_user_info_json_field(value, Some(generated), field.field)
+                {
+                    details.extra.insert(field.field.to_string(), value.clone());
+                }
+            }
+        }
+    }
+
+    let mut stats = UserStats {
+        uid,
+        username,
+        uploaded,
+        downloaded,
+        ratio: get("ratio")
+            .and_then(json_f64)
+            .or_else(|| ratio_from_totals(Some(uploaded), Some(downloaded))),
+        bonus,
+        seeding_count,
+        leeching_count,
+        details,
+    };
+    stats.fill_derived();
+    Some(stats)
+}
+
+fn json_timestamp_millis(value: &Value) -> Option<i64> {
+    value
+        .as_str()
+        .and_then(parse_user_datetime_millis)
+        .or_else(|| value.as_i64().and_then(normalize_timestamp_millis))
 }
 
 fn json_u64(value: &Value) -> Option<u64> {
@@ -1934,8 +2598,8 @@ mod tests {
         parse_seeding_ajax_count, parse_table_labeled_value, parse_user_datetime_millis,
         parse_user_torrent_ajax_summary,
     };
-    use crate::site::user_email::UserProfileFailureKind;
     use crate::site::SiteAdapter;
+    use crate::site::user_email::UserProfileFailureKind;
 
     async fn serve_fixture(app: Router) -> (String, tokio::task::JoinHandle<()>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -2604,7 +3268,11 @@ mod tests {
                 <tr><td>加入日期</td><td>2026-09-07</td></tr>
                 </table></td></tr></table>"#
             );
-            assert_eq!(super::parse_invite_count(&html), expected, "{label}: {value}");
+            assert_eq!(
+                super::parse_invite_count(&html),
+                expected,
+                "{label}: {value}"
+            );
         }
         for html in [
             "<table><tr><td>邀请：5</td></tr></table>",
@@ -2618,18 +3286,18 @@ mod tests {
 
     #[tokio::test]
     async fn user_stats_syncs_available_invites_without_reading_the_inviter() {
-        let (base_url, server) = serve_fixture(
-            Router::new().route(
-                "/userdetails.php",
-                get(|| async {
-                    Html(r#"<div id="info_block"><a href="userdetails.php?id=42">Alice</a>邀请 99</div>
+        let (base_url, server) = serve_fixture(Router::new().route(
+            "/userdetails.php",
+            get(|| async {
+                Html(
+                    r#"<div id="info_block"><a href="userdetails.php?id=42">Alice</a>邀请 99</div>
                 <div>上传量 2 GiB 下载量 1 GiB</div><table>
                 <tr><td>邀请人</td><td>user123</td></tr>
                 <tr><td>邀请</td><td>Sent: 12 Available: 5</td></tr>
-                </table>"#)
-                }),
-            ),
-        )
+                </table>"#,
+                )
+            }),
+        ))
         .await;
         let stats = fixture_adapter(base_url)
             .with_cached_user_id(Some("42"))
@@ -2830,7 +3498,7 @@ mod tests {
                         <input type="text" name="username" />
                       </form>
                     </body></html>"#
-                    .to_string(),
+                        .to_string(),
                 )
             }),
         );
