@@ -14,6 +14,10 @@ pub fn create_adapter_with_cached_user_id(
     client: Client,
     cached_user_id: Option<&str>,
 ) -> Result<Box<dyn SiteAdapter>, String> {
+    if record.name.trim() == "修道院" {
+        return Err("修道院站点暂不适配账号数据同步".to_string());
+    }
+
     let site_type = SiteType::from_str(&record.site_type)
         .ok_or_else(|| format!("不支持的站点类型: {}", record.site_type))?;
     let auth = serde_json::from_str::<SiteAuth>(&record.auth_config)

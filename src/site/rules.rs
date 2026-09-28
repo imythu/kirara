@@ -407,6 +407,58 @@ fn element_text(element: scraper::ElementRef<'_>, attr: Option<&str>) -> Option<
 }
 
 fn select_ptd<'a>(document: &'a Html, raw: &str) -> Vec<scraper::ElementRef<'a>> {
+    split_selector_groups(raw)
+        .into_iter()
+        .flat_map(|group| select_ptd_group(document, group))
+        .collect()
+}
+
+fn split_selector_groups(raw: &str) -> Vec<&str> {
+    // PTD selector lists can contain commas inside :contains(...) text.
+    let mut groups = Vec::new();
+    let mut start = 0;
+    let mut parentheses = 0usize;
+    let mut brackets = 0usize;
+    let mut quote = None;
+    let mut escaped = false;
+
+    for (index, ch) in raw.char_indices() {
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+
+        match ch {
+            '\'' | '"' => quote = Some(ch),
+            '(' => parentheses = parentheses.saturating_add(1),
+            ')' => parentheses = parentheses.saturating_sub(1),
+            '[' => brackets = brackets.saturating_add(1),
+            ']' => brackets = brackets.saturating_sub(1),
+            ',' if parentheses == 0 && brackets == 0 => {
+                let group = raw[start..index].trim();
+                if !group.is_empty() {
+                    groups.push(group);
+                }
+                start = index + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+
+    let group = raw[start..].trim();
+    if !group.is_empty() {
+        groups.push(group);
+    }
+    groups
+}
+
+fn select_ptd_group<'a>(document: &'a Html, raw: &str) -> Vec<scraper::ElementRef<'a>> {
     let raw = raw.trim();
     let mut base_end = raw.len();
     let mut needles = Vec::new();
