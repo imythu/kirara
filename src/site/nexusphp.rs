@@ -1019,7 +1019,11 @@ impl NexusPhpAdapter {
                 "UID 无效，必须为纯数字",
             );
         };
-        let url = format!("{}/userdetails.php?id={}", self.base_url, uid);
+        let ptd_site = Url::parse(&self.base_url)
+            .ok()
+            .and_then(|url| url.host_str().and_then(crate::ptd_sites::site_id_for_host));
+        let rule = ptd_site.and_then(rules::rule_for_site);
+        let url = site_profile_url(&self.base_url, rule, &uid, None);
         let html = match self.fetch_html_page(&url, "用户详情页").await {
             Ok(html) => html,
             Err(error) => {

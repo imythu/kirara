@@ -453,7 +453,7 @@ pub trait SiteAdapter: Send + Sync {
         detail_url: &str,
     ) -> Pin<Box<dyn Future<Output = Result<TorrentAttributes, String>> + Send + '_>>;
 
-    /// 抓取本人公开用户资料（用户名/UID/邮箱/流量）。默认不支持，返回空结果。
+    /// 抓取指定 UID 的公开用户资料（用户名/UID/邮箱/流量）。默认不支持，返回空结果。
     fn fetch_user_profile(
         &self,
         user_id: &str,
