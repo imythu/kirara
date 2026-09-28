@@ -258,9 +258,7 @@ impl MTeamAdapter {
                 .get("seeding")
                 .or_else(|| member_count.get("seederCount"))
                 .and_then(json_value_to_u32),
-            seeding_size: member_count
-                .get("seedingSize")
-                .and_then(json_value_to_u64),
+            seeding_size: member_count.get("seedingSize").and_then(json_value_to_u64),
         })
     }
 }
@@ -443,6 +441,7 @@ impl SiteAdapter for MTeamAdapter {
                         two_x_free: download_volume_factor == Some(0.0)
                             && upload_volume_factor.is_some_and(|factor| factor >= 2.0),
                         hit_and_run: false,
+                        hit_and_run_known: true,
                         seeder_count,
                         leecher_count,
                         free_end_timestamp,

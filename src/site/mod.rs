@@ -1,8 +1,8 @@
 pub mod factory;
+pub mod gazelle;
 pub mod mteam;
 pub mod nexusphp;
 mod nexusphp_levels;
-pub mod gazelle;
 pub mod rules;
 pub mod u2_shoutbox;
 pub mod unit3d;
@@ -420,6 +420,9 @@ pub struct TorrentAttributes {
     pub two_x_free: bool,
     /// 是否命中 H&R 规则。
     pub hit_and_run: bool,
+    /// 是否已从站点数据中确认 H&R 状态；false 时 hit_and_run 不代表确认无 H&R。
+    #[serde(default)]
+    pub hit_and_run_known: bool,
     /// 做种数。
     pub seeder_count: Option<i32>,
     /// 下载数（leechers）。

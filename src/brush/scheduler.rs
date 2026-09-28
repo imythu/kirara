@@ -23,7 +23,8 @@ use crate::net::http::AppHttpClient;
 use crate::rss;
 use crate::site::factory as site_factory;
 use crate::site::{
-    SiteAdapter, browser_request_header_map, parse_site_request_headers, site_request_header_map,
+    SiteAdapter, SiteType, browser_request_header_map, parse_site_request_headers,
+    site_request_header_map,
 };
 
 use super::cleaner;
@@ -66,6 +67,7 @@ impl TaskConfigCache {
 #[derive(Clone, Copy)]
 enum FilterStage {
     RssPreFilter,
+    RssPreFilterSiteDetails,
     PostEnhancement,
 }
 
@@ -899,6 +901,7 @@ async fn execute_brush_task_inner(
     // 7. 准备站点详情增强
     let mut site_adapter: Option<Box<dyn SiteAdapter>> = None;
     let mut site_client_binding: Option<Option<i64>> = None;
+    let mut site_type_cache = HashMap::<i64, String>::new();
 
     // 排序：按发布时间降序，优先处理新种子
     let mut sorted_items: Vec<&rss::TorrentItem> = snapshot.items.values().collect();
@@ -921,6 +924,27 @@ async fn execute_brush_task_inner(
 
     for item in &sorted_items {
         let task = snapshot_task(&shared_task).await;
+        let site_policy_requires_detail = if task.promotion != "all" || task.skip_hit_and_run {
+            if let Some(site_id) = task.site_id {
+                let site_type = if let Some(site_type) = site_type_cache.get(&site_id) {
+                    site_type.clone()
+                } else {
+                    let site_type = db
+                        .get_site(site_id)
+                        .await
+                        .map_err(|error| format!("读取刷流站点失败: {error}"))?
+                        .map(|site| site.site_type)
+                        .unwrap_or_default();
+                    site_type_cache.insert(site_id, site_type.clone());
+                    site_type
+                };
+                SiteType::from_str(&site_type) == Some(SiteType::NexusPhp)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
         let size_ranges = task
             .size_ranges
             .as_deref()
@@ -981,7 +1005,11 @@ async fn execute_brush_task_inner(
             &size_ranges,
             &seeder_ranges,
             &downloader_ranges,
-            FilterStage::RssPreFilter,
+            if site_policy_requires_detail {
+                FilterStage::RssPreFilterSiteDetails
+            } else {
+                FilterStage::RssPreFilter
+            },
         );
         if let Some(reason) = pre_filter {
             debug!(
@@ -1076,7 +1104,8 @@ async fn execute_brush_task_inner(
                 }
 
                 // 检查 effective_item（可能已被 U2 详情增强）是否仍需站点适配器
-                let need_fetch = effective_item.download_volume_factor.is_none()
+                let need_fetch = site_policy_requires_detail
+                    || effective_item.download_volume_factor.is_none()
                     || (task.promotion == "free"
                         && task.min_free_hours.is_some()
                         && effective_item.free_end_timestamp.is_none())
@@ -1094,7 +1123,12 @@ async fn execute_brush_task_inner(
                             .unwrap_or(effective_item.guid.as_str());
                         match adapter.get_torrent_attributes(detail_url).await {
                             Ok(attrs) => {
-                                apply_attrs_to_item(&mut effective_item, &attrs);
+                                apply_attrs_to_item(
+                                    &mut effective_item,
+                                    &attrs,
+                                    site_policy_requires_detail && task.promotion != "all",
+                                    site_policy_requires_detail && task.skip_hit_and_run,
+                                );
                             }
                             Err(e) => {
                                 warn!(
@@ -1470,64 +1504,69 @@ fn check_filter_reason(
         }
     }
 
+    // NexusPHP feeds can publish incorrect policy values; use its detail page instead.
+    let use_site_policy = matches!(stage, FilterStage::RssPreFilterSiteDetails);
+
     // 促销筛选
-    match task.promotion.as_str() {
-        "free" => match item.download_volume_factor {
-            Some(download_volume_factor) => {
-                if download_volume_factor > f64::EPSILON {
-                    return Some(format!("非免费(dl={download_volume_factor:?})"));
-                }
-                if let Some(min_free_hours) = task.min_free_hours {
-                    match item.free_end_timestamp {
-                        Some(free_end_timestamp) => {
-                            let remaining_hours =
-                                (free_end_timestamp - Utc::now().timestamp()) as f64 / 3600.0;
-                            if remaining_hours < min_free_hours {
-                                return Some(format!(
-                                    "剩余free时长{remaining_hours:.1}h < {min_free_hours:.1}h"
-                                ));
+    if !use_site_policy {
+        match task.promotion.as_str() {
+            "free" => match item.download_volume_factor {
+                Some(download_volume_factor) => {
+                    if download_volume_factor > f64::EPSILON {
+                        return Some(format!("非免费(dl={download_volume_factor:?})"));
+                    }
+                    if let Some(min_free_hours) = task.min_free_hours {
+                        match item.free_end_timestamp {
+                            Some(free_end_timestamp) => {
+                                let remaining_hours =
+                                    (free_end_timestamp - Utc::now().timestamp()) as f64 / 3600.0;
+                                if remaining_hours < min_free_hours {
+                                    return Some(format!(
+                                        "剩余free时长{remaining_hours:.1}h < {min_free_hours:.1}h"
+                                    ));
+                                }
                             }
+                            None if matches!(stage, FilterStage::PostEnhancement) => {
+                                return Some("缺少free到期时间".to_string());
+                            }
+                            None => {}
                         }
-                        None if matches!(stage, FilterStage::PostEnhancement) => {
-                            return Some("缺少free到期时间".to_string());
-                        }
-                        None => {}
                     }
                 }
-            }
-            None if matches!(stage, FilterStage::PostEnhancement) => {
-                return Some("缺少免费属性".to_string());
-            }
-            None => {}
-        },
-        "normal" => match (item.download_volume_factor, item.upload_volume_factor) {
-            (Some(download_volume_factor), Some(upload_volume_factor)) => {
-                if download_volume_factor < 1.0 - f64::EPSILON
-                    || (upload_volume_factor - 1.0).abs() > f64::EPSILON
-                {
-                    return Some("有促销活动".to_string());
+                None if matches!(stage, FilterStage::PostEnhancement) => {
+                    return Some("缺少免费属性".to_string());
                 }
-            }
-            (Some(download_volume_factor), None) => {
-                if download_volume_factor < 1.0 - f64::EPSILON {
-                    return Some("有促销活动".to_string());
+                None => {}
+            },
+            "normal" => match (item.download_volume_factor, item.upload_volume_factor) {
+                (Some(download_volume_factor), Some(upload_volume_factor)) => {
+                    if download_volume_factor < 1.0 - f64::EPSILON
+                        || (upload_volume_factor - 1.0).abs() > f64::EPSILON
+                    {
+                        return Some("有促销活动".to_string());
+                    }
                 }
-            }
-            (None, Some(upload_volume_factor)) => {
-                if (upload_volume_factor - 1.0).abs() > f64::EPSILON {
-                    return Some("有促销活动".to_string());
+                (Some(download_volume_factor), None) => {
+                    if download_volume_factor < 1.0 - f64::EPSILON {
+                        return Some("有促销活动".to_string());
+                    }
                 }
-            }
-            (None, None) if matches!(stage, FilterStage::PostEnhancement) => {
-                return Some("缺少促销属性".to_string());
-            }
-            (None, None) => {}
-        },
-        _ => {}
+                (None, Some(upload_volume_factor)) => {
+                    if (upload_volume_factor - 1.0).abs() > f64::EPSILON {
+                        return Some("有促销活动".to_string());
+                    }
+                }
+                (None, None) if matches!(stage, FilterStage::PostEnhancement) => {
+                    return Some("缺少促销属性".to_string());
+                }
+                (None, None) => {}
+            },
+            _ => {}
+        }
     }
 
     // H&R 检查
-    if task.skip_hit_and_run {
+    if task.skip_hit_and_run && !use_site_policy {
         match (item.minimum_seed_time, item.minimum_ratio) {
             (Some(seed_time), _) if seed_time > 0 => return Some("H&R种子".to_string()),
             (_, Some(minimum_ratio)) if minimum_ratio > 0.0 => {
@@ -1932,20 +1971,33 @@ fn bytes_to_gb(bytes: u64) -> f64 {
 }
 
 /// 将站点属性应用到 RSS 条目上
-fn apply_attrs_to_item(item: &mut rss::TorrentItem, attrs: &crate::site::TorrentAttributes) {
-    if attrs.download_volume_factor.is_some() {
+fn apply_attrs_to_item(
+    item: &mut rss::TorrentItem,
+    attrs: &crate::site::TorrentAttributes,
+    verify_promotion: bool,
+    verify_hit_and_run: bool,
+) {
+    if verify_promotion {
         item.download_volume_factor = attrs.download_volume_factor;
-    }
-    if attrs.upload_volume_factor.is_some() {
         item.upload_volume_factor = attrs.upload_volume_factor;
+    } else {
+        if attrs.download_volume_factor.is_some() {
+            item.download_volume_factor = attrs.download_volume_factor;
+        }
+        if attrs.upload_volume_factor.is_some() {
+            item.upload_volume_factor = attrs.upload_volume_factor;
+        }
     }
     if attrs.hit_and_run {
         item.minimum_seed_time = Some(1);
         item.minimum_ratio = None;
-    } else if item.minimum_seed_time.is_none() && item.minimum_ratio.is_none() {
-        // 适配器已明确返回“非 H&R”时，用 0 作为共享链路中的显式否定值，
-        // 避免在后置过滤阶段被当成“缺少 H&R 属性”。
+    } else if attrs.hit_and_run_known {
         item.minimum_seed_time = Some(0);
+        item.minimum_ratio = Some(0.0);
+    } else if verify_hit_and_run {
+        // RSS zero values can be wrong; an unrecognized site detail must remain unknown.
+        item.minimum_seed_time = None;
+        item.minimum_ratio = None;
     }
     if attrs.seeder_count.is_some() {
         item.seeders = attrs.seeder_count;

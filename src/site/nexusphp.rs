@@ -1118,7 +1118,6 @@ impl NexusPhpAdapter {
     fn detect_torrent_attributes(html: &str) -> TorrentAttributes {
         let document = Html::parse_document(html);
         let selectors = [
-            "body",
             ".torrentname",
             ".embedded",
             ".sticky",
@@ -1138,6 +1137,11 @@ impl NexusPhpAdapter {
             "b",
             "strong",
             "font",
+            "td",
+            "th",
+            "label",
+            "small",
+            "em",
         ];
         let mut fragments = Vec::new();
         for selector_str in selectors {
@@ -1145,66 +1149,224 @@ impl NexusPhpAdapter {
                 for element in document.select(&selector) {
                     let text = element.text().collect::<Vec<_>>().join(" ");
                     let trimmed = text.trim();
-                    if !trimmed.is_empty() {
+                    if !trimmed.is_empty() && trimmed.len() <= 512 {
                         fragments.push(trimmed.to_string());
-                    }
-                    if let Some(class) = element.value().attr("class") {
-                        fragments.push(class.to_string());
-                    }
-                    if let Some(title) = element.value().attr("title") {
-                        fragments.push(title.to_string());
                     }
                 }
             }
         }
-        let upper = fragments.join(" ").to_ascii_uppercase();
+        let mut metadata = Vec::new();
+        let mut classes = Vec::new();
+        let mut data_download_factor = None;
+        let mut data_upload_factor = None;
+        let mut data_free = None;
+        let mut data_hr = None;
+        let mut data_minimum_ratio = None;
+        let mut data_minimum_seed_time = None;
+        if let Ok(selector) = Selector::parse("*") {
+            for element in document.select(&selector) {
+                let value = element.value();
+                let status_element = matches!(
+                    value.name(),
+                    "a" | "b"
+                        | "em"
+                        | "font"
+                        | "i"
+                        | "img"
+                        | "label"
+                        | "small"
+                        | "span"
+                        | "strong"
+                        | "td"
+                        | "th"
+                );
+                for name in [
+                    "class",
+                    "title",
+                    "alt",
+                    "aria-label",
+                    "data-original-title",
+                    "data-tooltip",
+                    "data-title",
+                    "data-promotion",
+                    "data-discount",
+                    "data-promote",
+                    "data-freeleech",
+                    "data-free",
+                ] {
+                    if let Some(attribute) = value.attr(name) {
+                        if name == "class" {
+                            metadata.push(attribute.to_string());
+                            classes.push(attribute.to_ascii_lowercase());
+                        } else if status_element
+                            || matches!(
+                                name,
+                                "data-promotion"
+                                    | "data-discount"
+                                    | "data-promote"
+                                    | "data-freeleech"
+                                    | "data-free"
+                            )
+                        {
+                            metadata.push(attribute.to_string());
+                        }
+                    }
+                }
+                for (names, target) in [
+                    (
+                        &[
+                            "data-download-volume-factor",
+                            "data-downloadvolumefactor",
+                            "data-dl-factor",
+                        ][..],
+                        &mut data_download_factor,
+                    ),
+                    (
+                        &[
+                            "data-upload-volume-factor",
+                            "data-uploadvolumefactor",
+                            "data-ul-factor",
+                        ][..],
+                        &mut data_upload_factor,
+                    ),
+                    (
+                        &["data-minimum-ratio", "data-minimumratio", "data-min-ratio"][..],
+                        &mut data_minimum_ratio,
+                    ),
+                    (
+                        &[
+                            "data-minimum-seed-time",
+                            "data-minimumseedtime",
+                            "data-min-seed-time",
+                        ][..],
+                        &mut data_minimum_seed_time,
+                    ),
+                ] {
+                    if target.is_none() {
+                        *target = names
+                            .iter()
+                            .find_map(|name| value.attr(name)?.trim().parse::<f64>().ok())
+                            .filter(|number| number.is_finite());
+                    }
+                }
+                if data_hr.is_none() {
+                    data_hr = ["data-hit-and-run", "data-hitandrun", "data-hr"]
+                        .iter()
+                        .find_map(|name| value.attr(name).and_then(parse_html_boolean));
+                }
+                if data_free.is_none() {
+                    data_free = ["data-freeleech", "data-free"]
+                        .iter()
+                        .find_map(|name| value.attr(name).and_then(parse_html_boolean));
+                }
+            }
+        }
+        let upper = fragments
+            .iter()
+            .chain(metadata.iter())
+            .map(|fragment| fragment.to_ascii_uppercase())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let has_free_class = classes.iter().any(|class| {
+            class.split_whitespace().any(|token| {
+                matches!(
+                    token,
+                    "free"
+                        | "freeleech"
+                        | "free-leech"
+                        | "free_leech"
+                        | "pro_free"
+                        | "pro_free2up"
+                        | "twoupfree"
+                )
+            })
+        });
+        let has_two_x_up_class = classes.iter().any(|class| {
+            class
+                .split_whitespace()
+                .any(|token| matches!(token, "twoup" | "2xup" | "2x_up"))
+        });
+        let has_two_x_free_class = classes.iter().any(|class| {
+            class
+                .split_whitespace()
+                .any(|token| matches!(token, "pro_free2up" | "twoupfree" | "pro_free_2up"))
+        });
+        let has_two_x_free = has_two_x_free_class
+            || (has_free_class && has_two_x_up_class)
+            || fragments
+                .iter()
+                .chain(metadata.iter())
+                .any(|fragment| text_is_two_x_free_marker(fragment))
+            || text_is_two_x_free_marker(&fragments.join(" "));
+        let has_free = data_free == Some(true)
+            || has_two_x_free
+            || has_free_class
+            || fragments
+                .iter()
+                .any(|fragment| text_is_free_marker(fragment))
+            || metadata
+                .iter()
+                .any(|fragment| text_is_free_marker(fragment));
 
-        let has_two_x_free = contains_any(
-            &upper,
-            &[
-                "2XFREE",
-                "2X FREE",
-                "FREE 2XUP",
-                "FREE,2XUP",
-                "TWOUPFREE",
-                "PRO_FREE2UP",
-            ],
-        );
-        let has_free = has_two_x_free
-            || contains_any(
+        let class_hr = classes.iter().any(|class| {
+            class.split_whitespace().any(|token| {
+                matches!(
+                    token,
+                    "hr" | "hitandrun" | "hit-and-run" | "hit_and_run" | "hnr"
+                )
+            })
+        });
+        let explicit_hr_row = detect_hr_table_state(&document);
+        let explicit_no_hr = fragments
+            .iter()
+            .chain(metadata.iter())
+            .any(|fragment| text_is_no_hr_marker(fragment));
+        let explicit_hr_negative = data_hr == Some(false)
+            || explicit_no_hr
+            || explicit_hr_row == Some(false)
+            || (data_minimum_ratio.is_some_and(|ratio| ratio <= 0.0)
+                && data_minimum_seed_time.is_some_and(|time| time <= 0.0));
+        let direct_hr_badge = fragments
+            .iter()
+            .chain(metadata.iter())
+            .any(|fragment| text_is_hr_badge(fragment));
+        let positive_hr_text = fragments.iter().chain(metadata.iter()).any(|fragment| {
+            let upper = fragment.to_ascii_uppercase();
+            contains_any(
                 &upper,
                 &[
-                    "FREELEECH",
-                    "FREE LEECH",
-                    " FREE ",
-                    "PRO_FREE",
-                    " 免费 ",
-                    " FREE<",
-                    ">FREE ",
+                    "H&R REQUIRED",
+                    "H&R: YES",
+                    "H&R：YES",
+                    "HIT AND RUN APPLIES",
+                    "HIT AND RUN REQUIRED",
+                    "需要做种",
+                    "需要保种",
+                    "必须做种",
                 ],
-            );
-        let hit_and_run = contains_any(
-            &upper,
-            &[
-                "H&R",
-                "HIT AND RUN",
-                "HIT&RUN",
-                "HR:",
-                "HNR",
-                "HITRUN",
-                "HITANDRUN",
-                " HR ",
-            ],
-        );
+            )
+        });
+        let hit_and_run = class_hr
+            || data_hr == Some(true)
+            || data_minimum_ratio.is_some_and(|ratio| ratio > 0.0)
+            || data_minimum_seed_time.is_some_and(|time| time > 0.0)
+            || explicit_hr_row == Some(true)
+            || positive_hr_text
+            || (direct_hr_badge && !explicit_hr_negative);
+        let hit_and_run_known = hit_and_run || explicit_hr_negative;
 
         let (download_volume_factor, upload_volume_factor) = if has_two_x_free {
             (Some(0.0), Some(2.0))
         } else if has_free {
-            (Some(0.0), Some(1.0))
+            (Some(0.0), data_upload_factor.or(Some(1.0)))
         } else {
             (
-                detect_download_factor(&upper).or(Some(1.0)),
-                detect_upload_factor(&upper).or(Some(1.0)),
+                data_download_factor
+                    .or_else(|| detect_download_factor(&upper))
+                    .or(Some(1.0)),
+                data_upload_factor
+                    .or_else(|| detect_upload_factor(&upper))
+                    .or(Some(1.0)),
             )
         };
 
@@ -1218,6 +1380,7 @@ impl NexusPhpAdapter {
             free: has_free || download_volume_factor == Some(0.0),
             two_x_free: has_two_x_free,
             hit_and_run,
+            hit_and_run_known,
             seeder_count: None,
             leecher_count: None,
             free_end_timestamp,
@@ -2456,6 +2619,227 @@ fn keepfrds_level_from_class(class: i64) -> (i64, &'static str) {
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| haystack.contains(needle))
+}
+
+fn parse_html_boolean(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "y" | "有" | "是" => Some(true),
+        "0" | "false" | "no" | "n" | "无" | "否" => Some(false),
+        _ => None,
+    }
+}
+
+fn text_is_free_marker(value: &str) -> bool {
+    let upper = value.trim().to_ascii_uppercase();
+    let badge = upper.trim_matches(|ch: char| !ch.is_alphanumeric());
+    if matches!(badge, "FREE" | "FREELEECH" | "FREE LEECH")
+        || matches!(
+            upper.as_str(),
+            "2XFREE" | "2X FREE" | "FREE 2XUP" | "FREE,2XUP"
+        )
+    {
+        return true;
+    }
+
+    [
+        "FREELEECH",
+        "FREE LEECH",
+        "FREE UNTIL",
+        "FREE ENDS",
+        "DOWNLOAD IS FREE",
+        "TORRENT IS FREE",
+    ]
+    .iter()
+    .any(|needle| contains_positive_phrase(&upper, needle))
+        || contains_positive_phrase(value, "免费")
+        || contains_positive_phrase(value, "零魔")
+}
+
+fn text_is_two_x_free_marker(value: &str) -> bool {
+    let upper = value.to_ascii_uppercase();
+    [
+        "2XFREE",
+        "2X FREE",
+        "FREE 2XUP",
+        "FREE 2X UP",
+        "FREE,2XUP",
+        "TWOUPFREE",
+        "PRO_FREE2UP",
+    ]
+    .iter()
+    .any(|needle| contains_positive_phrase(&upper, needle))
+}
+
+fn text_is_hr_badge(value: &str) -> bool {
+    let upper = value.trim().to_ascii_uppercase();
+    let badge = upper.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '&');
+    matches!(
+        badge,
+        "H&R" | "HIT AND RUN" | "HIT&RUN" | "HNR" | "HITANDRUN"
+    )
+}
+
+fn contains_positive_phrase(value: &str, needle: &str) -> bool {
+    let upper_value = value.to_ascii_uppercase();
+    let upper_needle = needle.to_ascii_uppercase();
+    upper_value
+        .match_indices(&upper_needle)
+        .any(|(position, _)| {
+            let prefix = &value[..position];
+            let trimmed = prefix.trim_end();
+            if ["NOT", "NO", "NON", "WITHOUT"]
+                .iter()
+                .any(|negative| trimmed.to_ascii_uppercase().ends_with(negative))
+            {
+                return false;
+            }
+            if matches!(needle, "免费" | "零魔") {
+                return !trimmed
+                    .chars()
+                    .next_back()
+                    .is_some_and(|ch| matches!(ch, '不' | '非' | '未' | '无' | '無'));
+            }
+            true
+        })
+}
+
+fn text_is_no_hr_marker(value: &str) -> bool {
+    let upper = value.to_ascii_uppercase();
+    contains_any(
+        &upper,
+        &[
+            "NO H&R",
+            "NO HIT AND RUN",
+            "WITHOUT H&R",
+            "H&R: NO",
+            "H&R：NO",
+            "H&R: NONE",
+            "H&R：NONE",
+            "H&R: FALSE",
+            "H&R: 0",
+            "NO HNR",
+            "无H&R",
+            "沒有H&R",
+            "没有H&R",
+            "无需H&R",
+            "不需要H&R",
+            "免除H&R",
+            "免H&R",
+            "H&R：无",
+            "H&R: 无",
+            "免做种",
+            "免保种",
+        ],
+    )
+}
+
+fn detect_hr_table_state(document: &Html) -> Option<bool> {
+    let row_selector = Selector::parse("tr").ok()?;
+    let cell_selector = Selector::parse("th, td").ok()?;
+    let mut ratio_state = None;
+    let mut seed_time_state = None;
+    for row in document.select(&row_selector) {
+        let cells = row
+            .select(&cell_selector)
+            .map(|cell| cell.text().collect::<Vec<_>>().join(" ").trim().to_string())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>();
+        if cells.len() < 2 {
+            continue;
+        }
+        let value = cells[1..].join(" ");
+        if is_hr_label(&cells[0]) {
+            if let Some(state) = parse_hr_value(&value) {
+                return Some(state);
+            }
+        } else if is_minimum_ratio_label(&cells[0]) {
+            ratio_state = parse_hr_value(&value);
+            if ratio_state == Some(true) {
+                return Some(true);
+            }
+        } else if is_minimum_seed_time_label(&cells[0]) {
+            seed_time_state = parse_hr_value(&value);
+            if seed_time_state == Some(true) {
+                return Some(true);
+            }
+        }
+    }
+    (ratio_state == Some(false) && seed_time_state == Some(false)).then_some(false)
+}
+
+fn is_hr_label(value: &str) -> bool {
+    let compact = value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_uppercase)
+        .collect::<String>();
+    matches!(
+        compact.as_str(),
+        "HR" | "HNR" | "HITANDRUN" | "HITRUN" | "HRREQUIREMENT"
+    ) || compact.contains("HITANDRUN")
+}
+
+fn is_minimum_ratio_label(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    [
+        "minimum ratio",
+        "min ratio",
+        "minimum share ratio",
+        "最低分享率",
+        "最小分享率",
+        "最低比例",
+        "最小比例",
+    ]
+    .iter()
+    .any(|label| lower.contains(label))
+}
+
+fn is_minimum_seed_time_label(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    [
+        "minimum seed time",
+        "minimum seeding time",
+        "min seed time",
+        "最低做种时间",
+        "最小做种时间",
+        "最低保种时间",
+        "最小保种时间",
+        "最低种子时间",
+    ]
+    .iter()
+    .any(|label| lower.contains(label))
+}
+
+fn parse_hr_value(value: &str) -> Option<bool> {
+    let upper = value.trim().to_ascii_uppercase();
+    if let Some(state) = parse_html_boolean(&upper) {
+        return Some(state);
+    }
+    if contains_any(
+        &upper,
+        &[
+            "NONE",
+            "N/A",
+            "免除",
+            "无需",
+            "不需要",
+            "无",
+            "沒有",
+            "没有",
+        ],
+    ) {
+        return Some(false);
+    }
+    if contains_any(
+        &upper,
+        &["REQUIRED", "YES", "TRUE", "需要", "必须", "是", "有"],
+    ) {
+        return Some(true);
+    }
+    upper
+        .split(|ch: char| !ch.is_ascii_digit() && ch != '.')
+        .find_map(|number| number.parse::<f64>().ok())
+        .map(|number| number > 0.0)
 }
 
 fn detect_download_factor(upper: &str) -> Option<f64> {
