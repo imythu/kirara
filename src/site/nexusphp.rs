@@ -402,6 +402,7 @@ impl NexusPhpAdapter {
             "levelName",
             rule.map(|rule| rule.level_selectors).unwrap_or(empty),
         )
+        .map(|value| level_name_from_class(&value))
         .or_else(|| parse_profile_level(detail_html));
         let message_count = selected_u64(
             "messageCount",
@@ -559,8 +560,10 @@ impl NexusPhpAdapter {
             }),
             posts: selected_u64("posts", empty)
                 .or_else(|| parse_labeled_u64(&detail_text, &["论坛发帖", "論壇發帖", "Posts"])),
+            // Menu links such as "[已认领种子]" precede unrelated numbers, so require an adjacent count.
             adoptions: selected_u64("adoptions", empty).or_else(|| {
-                parse_labeled_u64(&detail_text, &["认领种子", "認領種子", "Adoptions"])
+                parse_labeled_integer(&detail_text, &["认领种子", "認領種子", "Adoptions"])
+                    .map(u64::from)
             }),
             hnr_unsatisfied,
             hnr_pre_warning,
@@ -672,11 +675,16 @@ impl NexusPhpAdapter {
         }
 
         if details.bonus_per_hour.is_none() {
-            details.bonus_per_hour = selected_number(
-                "bonusPerHour",
-                rule.map(|rule| rule.bonus_per_hour_selectors)
-                    .unwrap_or(empty),
-            );
+            let bonus_per_hour_selectors = rule
+                .map(|rule| rule.bonus_per_hour_selectors)
+                .unwrap_or(empty);
+            details.bonus_per_hour = if is_u2 {
+                // PTD's U2 filter turns the "最近24小时获得种子UCoin…" summary into an hourly rate.
+                selected_field("bonusPerHour", bonus_per_hour_selectors)
+                    .and_then(|text| parse_bonus_rates(&text, true).0)
+            } else {
+                selected_number("bonusPerHour", bonus_per_hour_selectors)
+            };
         }
 
         let force_bonus_page = !ptd_process_values.contains_key("bonusPerHour")
@@ -2067,6 +2075,15 @@ fn parse_profile_level(html: &str) -> Option<String> {
         .or_else(|| profile_class_level(html))
 }
 
+/// PTD reads some levels from `class="User_Name"` and strips the suffix with a filter we do not port.
+fn level_name_from_class(value: &str) -> String {
+    value
+        .split_whitespace()
+        .find_map(|class| class.strip_suffix("_Name").filter(|name| !name.is_empty()))
+        .unwrap_or(value)
+        .to_string()
+}
+
 fn profile_class_level(html: &str) -> Option<String> {
     let document = Html::parse_document(html);
     let selector = Selector::parse("a[href*='userdetails.php'][class*='_Name']").ok()?;
@@ -2981,10 +2998,10 @@ mod tests {
     use super::{
         NexusPhpAdapter, SiteAuth, describe_reqwest_error, detect_donor, extract_avatar,
         extract_current_user, extract_user_id_from_cookie, extract_username, extract_visible_text,
-        looks_like_login_page, parse_hnr_counts, parse_labeled_duration_seconds,
-        parse_labeled_integer, parse_labeled_number, parse_labeled_size, parse_message_count,
-        parse_seeding_ajax_count, parse_table_labeled_value, parse_user_datetime_millis,
-        parse_user_torrent_ajax_summary,
+        level_name_from_class, looks_like_login_page, parse_bonus_rates, parse_hnr_counts,
+        parse_labeled_duration_seconds, parse_labeled_integer, parse_labeled_number,
+        parse_labeled_size, parse_message_count, parse_seeding_ajax_count,
+        parse_table_labeled_value, parse_user_datetime_millis, parse_user_torrent_ajax_summary,
     };
     use crate::site::SiteAdapter;
     use crate::site::user_email::UserProfileFailureKind;
@@ -3005,6 +3022,33 @@ mod tests {
             HeaderMap::new(),
             Client::builder().no_proxy().build().unwrap(),
         )
+    }
+
+    #[test]
+    fn ptd_class_level_names_drop_the_name_suffix() {
+        assert_eq!(level_name_from_class("User_Name"), "User");
+        assert_eq!(level_name_from_class("torrent-uploader VIP_Name"), "VIP");
+        assert_eq!(level_name_from_class("初级魔法少女"), "初级魔法少女");
+    }
+
+    #[test]
+    fn u2_hourly_rate_comes_from_the_daily_ucoin_summary() {
+        let (rate, _) = parse_bonus_rates(
+            "1­小时­44­分钟­前47 最近24小时获得种子UCoin1306.593，计算次数48",
+            true,
+        );
+        assert!((rate.unwrap() - 1306.593 / 24.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn adoption_menu_links_do_not_borrow_the_next_number() {
+        let labels = &["认领种子", "認領種子", "Adoptions"];
+        assert_eq!(
+            parse_labeled_integer("[已认领种子] 猫粮 [使用]: 57,547.7", labels),
+            None
+        );
+        assert_eq!(parse_labeled_integer("认领种子\n 候选 (1)", labels), None);
+        assert_eq!(parse_labeled_integer("认领种子: 12", labels), Some(12));
     }
 
     #[test]

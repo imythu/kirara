@@ -1136,6 +1136,13 @@ pub const SITE_PRESETS: &[PtdSitePreset] = &[
         aliases: &[],
     },
     PtdSitePreset {
+        ptd_id: "xdypt",
+        name: "修道院",
+        site_type: "nexusphp",
+        base_url: "https://xdypt.vip",
+        aliases: &[],
+    },
+    PtdSitePreset {
         ptd_id: "xingtan",
         name: "杏坛",
         site_type: "nexusphp",
@@ -1235,7 +1242,7 @@ mod tests {
 
     #[test]
     fn exposes_only_site_types_supported_by_kirara() {
-        assert_eq!(SITE_PRESETS.len(), 173);
+        assert_eq!(SITE_PRESETS.len(), 174);
         assert!(
             SITE_PRESETS
                 .iter()

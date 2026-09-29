@@ -203,6 +203,17 @@ pub static SITE_RULES: &[SiteRule] = &[
         ],
         ..SiteRule::empty("hdchina")
     },
+    // iloli: PTD addresses the profile by UUID; the numeric cookie uid only works as ?id=.
+    SiteRule {
+        ptd_id: "ilolicon",
+        profile_path: Some("/userdetails.php"),
+        profile_query: Some("id={uid}"),
+        bonus_page: BonusPageRule::Path {
+            path: "/mybonus.php",
+            query: "",
+        },
+        ..SiteRule::empty("ilolicon")
+    },
     // OurBits: primarily standard NexusPHP; keep empty extras.
     SiteRule {
         ptd_id: "ourbits",

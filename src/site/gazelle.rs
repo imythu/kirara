@@ -186,7 +186,8 @@ fn parse_stats(index: &Value, user: &Value, offset_hours: i32) -> Result<UserSta
         username,
         uploaded: integer(&totals["uploaded"]).ok_or("Gazelle 上传量缺失")?,
         downloaded: integer(&totals["downloaded"]).ok_or("Gazelle 下载量缺失")?,
-        ratio: number(&totals["ratio"]),
+        // Gazelle reports an infinite ratio as -1; store it like NexusPHP's "无限" (no ratio).
+        ratio: number(&totals["ratio"]).filter(|ratio| *ratio >= 0.0),
         bonus: number(&totals["bonusPoints"]),
         seeding_count: integer(&community["seeding"]).and_then(|v| u32::try_from(v).ok()),
         leeching_count: integer(&community["leeching"]).and_then(|v| u32::try_from(v).ok()),
@@ -255,7 +256,7 @@ mod tests {
             "community":{"seeding":1,"uploaded":0,"groups":0,"invited":0}});
         let stats = parse_stats(&index, &user, 8).unwrap();
         assert_eq!(stats.uploaded, 59388701716);
-        assert_eq!(stats.ratio, Some(-1.0));
+        assert_eq!(stats.ratio, None);
         assert_eq!(stats.details.join_time, Some(1782398663000));
         assert_eq!(stats.details.bonus_per_hour, Some(0.7445));
         assert_eq!(stats.details.extra["groups"], 0);

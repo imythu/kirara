@@ -322,6 +322,7 @@ pub fn site_id_for_host(host: &str) -> Option<&'static str> {
         "wintersakura.net" => Some("wintersakura"),
         "wukongwendao.top" => Some("wukongwendao"),
         "pt.xauat6.edu.cn" => Some("xauat6"),
+        "pt.1ctrl.cn" | "xdypt.vip" => Some("xdypt"),
         "xinglin.one" | "xingtan.one" => Some("xingtan"),
         "xingwan.cc" => Some("xingwan"),
         "pt.xingyungept.cn" | "pt.xingyungept.org" | "xingyunge.top" => Some("xingyunge"),
@@ -348,6 +349,8 @@ mod tests {
         assert_eq!(site_id_for_host("kp.m-team.cc"), Some("mteam"));
         assert_eq!(site_id_for_host("chdbits.co"), Some("chdbits"));
         assert_eq!(site_id_for_host("www.chdbits.co"), Some("chdbits"));
+        assert_eq!(site_id_for_host("xdypt.vip"), Some("xdypt"));
+        assert_eq!(site_id_for_host("pt.1ctrl.cn"), Some("xdypt"));
         assert_eq!(site_id_for_host("tracker.invalid"), None);
     }
 }

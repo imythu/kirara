@@ -578,6 +578,7 @@ def parse_definition(site_id: str, source: str) -> dict[str, Any]:
     json_api = None
     profile_path = None
     profile_query = None
+    profile_has_stats = False
     identity_path = None
     identity_query = None
     process_selectors: dict[str, dict[str, Any]] = {}
@@ -650,18 +651,29 @@ def parse_definition(site_id: str, source: str) -> dict[str, Any]:
         if "id" in field_names and identity_path is None and entry.get("response_type") != "json":
             identity_path = path
             identity_query = query or None
-        if set(field_names) & {
+        profile_fields = set(field_names) & {
             "name", "uploaded", "downloaded", "trueUploaded", "trueDownloaded", "levelName"
-        } and entry.get("response_type") != "json" and not ("bonus" in path.lower() or "mprecent" in path.lower()) and profile_path is None:
-            profile_path = path
-            profile_query = query or None
+        }
+        if profile_fields and entry.get("response_type") != "json" and not ("bonus" in path.lower() or "mprecent" in path.lower()):
+            # An identity request that only yields the name (e.g. /index.php with id+name) must not
+            # shadow a later request that carries the transfer totals.
+            has_stats = profile_fields != {"name"}
+            if profile_path is None or (has_stats and not profile_has_stats):
+                profile_path = path
+                profile_query = query or None
+                profile_has_stats = has_stats
         process_selectors.update(entry["selectors"])
 
     field_selectors.update(process_selectors)
     if "getusertorrentlistajax" not in source and site_id == "keepfrds":
         ajax_disabled = True
     if "getusertorrentlistajax" not in source and "parseUserInfoForSeedingStatus" in source:
-        if re.search(r"return flushUserInfo", source):
+        # Overrides that still call requestUserSeedingPage (or fall back to super) keep using the AJAX list.
+        # A custom requestUserSeedingPage targets another endpoint, so the default AJAX would be wrong.
+        uses_seeding_page = "override async requestUserSeedingPage" not in source and (
+            "requestUserSeedingPage" in source or "super.parseUserInfoForSeedingStatus" in source
+        )
+        if re.search(r"return flushUserInfo", source) and not uses_seeding_page:
             ajax_disabled = True
 
     def selectors(field: str) -> list[str]:
