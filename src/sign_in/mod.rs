@@ -424,11 +424,16 @@ mutation CheckIn($cookies: [CookieInput!]! $url: String! {submit_variables}
     )
 }
 
-fn browserless_submit_condition(selector: &str, image_captcha: bool) -> String {
+fn browserless_submit_condition(selector: &str, image_captcha: bool, turnstile: bool) -> String {
     if image_captcha {
         "html:not([data-rflush-stop])[data-rflush-image-ready]".to_string()
     } else {
-        format!("html:not([data-rflush-stop]) :is({selector})")
+        let turnstile_guard = if turnstile {
+            "[data-rflush-turnstile-ready]"
+        } else {
+            ""
+        };
+        format!("html:not([data-rflush-stop]){turnstile_guard} :is({selector})")
     }
 }
 
@@ -467,6 +472,11 @@ fn result_rule_script(
     before: bool,
     image_input: Option<&str>,
 ) -> String {
+    let turnstile_ready_script = if config.cf_mode == BROWSERLESS_CF_MODE_TURNSTILE {
+        "document.documentElement.toggleAttribute('data-rflush-turnstile-ready', !!document.querySelector(\"input[name='cf-turnstile-response']\")?.value?.trim());"
+    } else {
+        ""
+    };
     format!(
         r#"(() => {{
  const rules = {};
@@ -475,6 +485,7 @@ fn result_rule_script(
  const input = {};
  const ready = input && !!document.querySelector(input)?.value?.trim();
  document.documentElement.toggleAttribute('data-rflush-image-ready', !!ready);
+ {turnstile_ready_script}
  const visible = el => !!el && !!el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
  const text = selector => Array.from(document.querySelectorAll(selector || 'body')).filter(visible).map(el => el.innerText || '').join('\n');
  const response = window.__rflushResponse;
@@ -642,6 +653,7 @@ async fn run_browserless_sign_in(
         .host_str()
         .ok_or_else(|| "签到地址缺少域名".to_string())?;
     let script_submit = task_config.submit_method != "click";
+    let turnstile = !image_captcha && task_config.cf_mode == BROWSERLESS_CF_MODE_TURNSTILE;
     let cookies = browserless_cookies(&cookie_header, domain, target_url.as_str());
     if cookies.is_empty() {
         return Err("Cookie 不能为空".to_string());
@@ -664,9 +676,9 @@ async fn run_browserless_sign_in(
         .saturating_add(30_000);
     // Only top-level BQL mutations are ordered. In a nested conditional,
     // a sibling wait can finish before the conditional's click executes.
-    // Keep submit and its wait at the top level, and include both guards in
-    // the selector so stopped tasks and unsolved image captchas cannot submit.
-    let submit_condition = browserless_submit_condition(selector, image_captcha);
+    // Keep submit and its wait at the top level; the condition carries the
+    // stop and CAPTCHA readiness guards before any form action can run.
+    let submit_condition = browserless_submit_condition(selector, image_captcha, turnstile);
     let result = post_browserless_bql(
         service_config,
         proxy,
@@ -691,7 +703,7 @@ async fn run_browserless_sign_in(
     )
     .await?;
 
-    summarize_configured_result(&result, !task_config.result_rules.is_empty())
+    summarize_configured_result_for_mode(&result, !task_config.result_rules.is_empty(), turnstile)
 }
 
 async fn post_browserless_bql(
@@ -908,7 +920,16 @@ fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
     })
 }
 
+#[cfg(test)]
 fn summarize_configured_result(result: &Value, configured: bool) -> Result<SignInOutput, String> {
+    summarize_configured_result_for_mode(result, configured, false)
+}
+
+fn summarize_configured_result_for_mode(
+    result: &Value,
+    configured: bool,
+    turnstile: bool,
+) -> Result<SignInOutput, String> {
     for path in [
         "/data/result/value",
         "/data/checkAfter/value",
@@ -938,10 +959,18 @@ fn summarize_configured_result(result: &Value, configured: bool) -> Result<SignI
             message: "结果未知：未命中任何签到结果规则".into(),
         });
     }
-    summarize_browserless_sign_in(result)
+    summarize_browserless_sign_in_for_mode(result, turnstile)
 }
 
+#[cfg(test)]
 fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String> {
+    summarize_browserless_sign_in_for_mode(result, false)
+}
+
+fn summarize_browserless_sign_in_for_mode(
+    result: &Value,
+    turnstile: bool,
+) -> Result<SignInOutput, String> {
     // A completed attendance page may have no button; BQL still returns HTML
     // after a selector timeout. Inspect visible outcome text before action errors.
     for path in [
@@ -987,6 +1016,17 @@ fn summarize_browserless_sign_in(result: &Value) -> Result<SignInOutput, String>
             .pointer("/pending/pending/submit/submitForm/value")
             .is_none_or(Value::is_null)
     {
+        if turnstile {
+            let token_ready = ["/data/afterSolve/html", "/data/pending/afterSolve/html"]
+                .iter()
+                .filter_map(|path| result.pointer(path).and_then(Value::as_str))
+                .any(|html| html.contains("data-rflush-turnstile-ready"));
+            return Err(if token_ready {
+                "Turnstile 已取得响应 token，但未执行签到提交，请检查 selector".to_string()
+            } else {
+                "Turnstile 响应 token 未生成，已跳过签到提交".to_string()
+            });
+        }
         return Err("Browserless 未执行签到点击，请检查 selector".to_string());
     }
 
@@ -1894,7 +1934,11 @@ mod tests {
                     "guard": result_rule_script(&task, true, image_input),
                     "resultScript": result_rule_script(&task, false, None),
                     "selector": task.selector,
-                    "submitCondition": browserless_submit_condition(&task.selector, image_input.is_some()),
+                    "submitCondition": browserless_submit_condition(
+                        &task.selector,
+                        image_input.is_some(),
+                        false,
+                    ),
                     "waitMs": 1, "solveTimeout": 50,
                     "actionTimeout": 3000, "postClickWaitMs": 1500,
                 }),

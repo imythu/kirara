@@ -1,5 +1,6 @@
 //! Site routing and signers. Browser transports stay in the parent module;
 //! site-specific behavior belongs here, never in the settings UI.
+mod audiences;
 mod baozi;
 mod captcha;
 mod cf_challenge;
@@ -70,12 +71,20 @@ pub(super) fn known(base_url: &str) -> Option<Box<dyn Signer>> {
         return Some(Box::new(opencd::OpenCd));
     }
     match host.strip_prefix("www.").unwrap_or(host) {
+        "audiences.me" => Some(Box::new(audiences::Audiences)),
         "u2.dmhy.org" => Some(Box::new(u2::U2)),
         "p.t-baozi.cc" => Some(Box::new(baozi::Baozi)),
         "dstudio.me" => Some(Box::new(cf_challenge::CfChallenge)),
         "mua.xloli.cc" | "share.ilolicon.com" => Some(Box::new(cf_turnstile::CfTurnstile)),
         _ => None,
     }
+}
+
+fn is_audiences_host(base_url: &str) -> bool {
+    reqwest::Url::parse(base_url).ok().is_some_and(|url| {
+        let host = url.host_str().unwrap_or_default().trim_end_matches('.');
+        matches!(host.strip_prefix("www.").unwrap_or(host), "audiences.me")
+    })
 }
 
 pub fn known_profile(base_url: &str) -> Option<SignerProfile> {
@@ -89,7 +98,14 @@ pub(super) fn resolve(
     config: &BrowserlessTaskConfig,
 ) -> Box<dyn Signer> {
     let preset = if config.manual_override {
-        None
+        if method == SIGN_IN_METHOD_CLOUDFLARE
+            && config.cf_mode == BROWSERLESS_CF_MODE_TURNSTILE
+            && is_audiences_host(base_url)
+        {
+            known(base_url)
+        } else {
+            None
+        }
     } else {
         known(base_url)
     };
