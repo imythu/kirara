@@ -983,7 +983,7 @@ export function InviteProfilePage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {sitesError ? (
-                <p role="status" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {sitesError}
                 </p>
               ) : null}
@@ -1173,7 +1173,7 @@ export function InviteProfilePage() {
               </div>
 
               {parseError ? (
-                <p role="status" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {parseError}
                 </p>
               ) : null}

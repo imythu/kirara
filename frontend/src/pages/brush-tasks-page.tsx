@@ -7,7 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
+import { EmptyHint, LoadingState } from "@/components/ui/state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -46,7 +48,7 @@ function formatDuration(totalSeconds: number): string {
   return `${secs}s`;
 }
 
-function formatHoursLabel(hours: number | null): string {
+function formatHoursLabel(hours: number | null | undefined): string {
   if (hours == null || !Number.isFinite(hours) || hours <= 0) return "";
   const totalMinutes = Math.round(hours * 60);
   const h = Math.floor(totalMinutes / 60);
@@ -361,6 +363,8 @@ export function BrushTasksPage() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [defaultPaths, setDefaultPaths] = useState<Record<number, string>>({});
   const [saveSubPath, setSaveSubPath] = useState("");
   const [downloaderWeights, setDownloaderWeights] = useState<Record<number, number>>({});
@@ -474,17 +478,23 @@ export function BrushTasksPage() {
   }
 
   async function handleDelete(id: number) {
+    if (busyAction) return;
+    setBusyAction(`${id}:delete`);
     try {
       await api(`/api/brush-tasks/${id}`, { method: "DELETE" });
       setDeleteConfirmId(null);
       setMessage("刷流任务已删除");
       reload();
     } catch (error) {
-      setMessage((error as Error).message || "删除刷流任务失败");
+      setDeleteError((error as Error).message || "删除刷流任务失败，请重试");
+    } finally {
+      setBusyAction(null);
     }
   }
 
   async function handleStart(id: number) {
+    if (busyAction) return;
+    setBusyAction(`${id}:start`);
     try {
       await api(`/api/brush-tasks/${id}/start`, { method: "POST" });
       setMessage("刷流任务已启动");
@@ -492,20 +502,28 @@ export function BrushTasksPage() {
       reload();
     } catch (error) {
       setMessage((error as Error).message || "启动刷流任务失败");
+    } finally {
+      setBusyAction(null);
     }
   }
 
   async function handleStop(id: number) {
+    if (busyAction) return;
+    setBusyAction(`${id}:stop`);
     try {
       await api(`/api/brush-tasks/${id}/stop`, { method: "POST" });
       setMessage("刷流任务已停止");
       reload();
     } catch (error) {
       setMessage((error as Error).message || "停止刷流任务失败");
+    } finally {
+      setBusyAction(null);
     }
   }
 
   async function handleRunOnce(id: number) {
+    if (busyAction) return;
+    setBusyAction(`${id}:run`);
     try {
       await api(`/api/brush-tasks/${id}/run`, { method: "POST" });
       setMessage("刷流任务已触发执行");
@@ -513,6 +531,8 @@ export function BrushTasksPage() {
       reload();
     } catch (error) {
       setMessage((error as Error).message || "触发刷流任务失败");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -572,16 +592,7 @@ export function BrushTasksPage() {
       <div className="grid gap-4 xl:gap-6">
         <Card>
           <CardHeader>
-            {message ? (
-              <div className="rounded-2xl border border-border bg-surface-container/70 px-4 py-3 text-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <span>{message}</span>
-                  <button type="button" className="text-muted hover:text-foreground" onClick={() => setMessage("")}>
-                    关闭
-                  </button>
-                </div>
-              </div>
-            ) : null}
+            {message ? <Notice onDismiss={() => setMessage("")}>{message}</Notice> : null}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>刷流任务管理</CardTitle>
@@ -609,7 +620,9 @@ export function BrushTasksPage() {
           <CardContent>
             <SearchFeedback search={taskSearch} onClearQuery={() => setTaskQuery("")} />
             {taskSearch.loading || taskComposing || taskSearch.error ? null : tasks.length === 0 ? (
-              <div className="py-12 text-center text-sm text-muted">{taskQuery ? "没有匹配的刷流任务，请更换关键词或清除查询条件。" : "暂无刷流任务，点击上方按钮添加。"}</div>
+              taskQuery
+                ? <EmptyHint title="没有匹配的刷流任务">请更换关键词或清除查询条件。</EmptyHint>
+                : <EmptyHint title="暂无刷流任务" action={<Button type="button" onClick={openAdd}><Plus />添加任务</Button>}>刷流任务会按计划从 RSS 选种并提交到下载器，并按删种规则自动清理。</EmptyHint>
             ) : (
               <div className="grid gap-3">
                 {tasks.map((task) => (
@@ -630,38 +643,38 @@ export function BrushTasksPage() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {task.enabled ? (
-                          <Button variant="outline" className="h-7 text-[11px] px-2.5" onClick={() => void handleStop(task.id)}>
-                            <Pause className="mr-1.5 h-3.5 w-3.5" />
+                          <Button variant="outline" className="h-9 px-3 text-xs" loading={busyAction === `${task.id}:stop`} disabled={busyAction !== null} onClick={() => void handleStop(task.id)}>
+                            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
                             停止
                           </Button>
                         ) : (
-                          <Button variant="secondary" className="h-7 text-[11px] px-2.5" onClick={() => void handleStart(task.id)}>
-                            <Play className="mr-1.5 h-3.5 w-3.5" />
+                          <Button variant="secondary" className="h-9 px-3 text-xs" loading={busyAction === `${task.id}:start`} disabled={busyAction !== null} onClick={() => void handleStart(task.id)}>
+                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
                             启动
                           </Button>
                         )}
-                        <Button variant="outline" className="h-7 text-[11px] px-2.5" onClick={() => void handleRunOnce(task.id)}>
-                          <Zap className="mr-1.5 h-3.5 w-3.5" />
+                        <Button variant="outline" className="h-9 px-3 text-xs" loading={busyAction === `${task.id}:run`} disabled={busyAction !== null} onClick={() => void handleRunOnce(task.id)}>
+                          <Zap className="h-3.5 w-3.5" aria-hidden="true" />
                           立即执行一次
                         </Button>
-                        <Button variant="outline" className="h-7 text-[11px] px-2.5" onClick={() => openEdit(task)}>
-                          <Edit className="mr-1.5 h-3.5 w-3.5" />
+                        <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openEdit(task)}>
+                          <Edit className="h-3.5 w-3.5" aria-hidden="true" />
                           编辑
                         </Button>
-                        <Button variant="outline" className="h-7 text-[11px] px-2.5" onClick={() => openTorrents(task)}>
-                          <Eye className="mr-1.5 h-3.5 w-3.5" />
+                        <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openTorrents(task)}>
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           查看种子
                         </Button>
                         <Button
                           variant="outline"
-                          className="h-7 text-[11px] px-2.5"
+                          className="h-9 px-3 text-xs"
                           onClick={() => setLastRunTask(task)}
                         >
-                          <Activity className="mr-1.5 h-3.5 w-3.5" />
+                          <Activity className="h-3.5 w-3.5" aria-hidden="true" />
                           最近执行
                         </Button>
-                        <Button variant="destructive" className="h-7 text-[11px] px-2.5" onClick={() => setDeleteConfirmId(task.id)}>
-                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        <Button variant="outline" className="h-9 px-3 text-xs text-destructive hover:border-destructive/40 hover:bg-destructive/5" onClick={() => { setDeleteError(""); setDeleteConfirmId(task.id); }}>
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                           删除
                         </Button>
                       </div>
@@ -711,27 +724,23 @@ export function BrushTasksPage() {
         escMode="double"
       >
         <div className="space-y-6 p-4 sm:p-6">
-          {submitError ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {submitError}
-            </div>
-          ) : null}
-
           {/* 基本设置 */}
           <section>
             <h4 className="mb-3 text-sm font-semibold">基本设置</h4>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>任务名称</Label>
+                <Label htmlFor="brush-field-1">任务名称</Label>
                 <Input
+                  id="brush-field-1"
                   placeholder="我的刷流任务"
                   value={form.name}
                   onChange={(e) => setField("name", e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Cron 表达式</Label>
+                <Label htmlFor="brush-field-2">Cron 表达式</Label>
                 <Input
+                  id="brush-field-2"
                   placeholder="0 */5 * * * *"
                   value={form.cron_expression}
                   onChange={(e) => setField("cron_expression", e.target.value)}
@@ -739,8 +748,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">例如：0 */5 * * * *（每 5 分钟）</p>
               </div>
               <div className="space-y-2">
-                <Label>站点</Label>
+                <Label htmlFor="brush-field-3">站点</Label>
                 <Select
+                  id="brush-field-3"
                   value={form.site_id ? String(form.site_id) : ""}
                   onChange={(val) => setField("site_id", val === "" ? null : Number(val))}
                   options={
@@ -751,8 +761,8 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label>下载器（可多选，加权随机分配）</Label>
-                <div className="flex flex-wrap gap-2">
+                <p id="brush-downloaders-label" className="text-sm font-medium leading-none">下载器（可多选，加权随机分配）</p>
+                <div className="flex flex-wrap gap-2" role="group" aria-labelledby="brush-downloaders-label">
                   {downloaders.length === 0 && (
                     <span className="text-xs text-muted">无可用下载器</span>
                   )}
@@ -763,6 +773,7 @@ export function BrushTasksPage() {
                         key={d.id}
                         type="button"
                         onClick={() => toggleDownloader(d.id)}
+                        aria-pressed={selected}
                         className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                           selected
                             ? "bg-primary text-primary-foreground shadow-glow"
@@ -785,7 +796,8 @@ export function BrushTasksPage() {
                           <Input
                             type="number"
                             min="1"
-                            className="h-8 w-24 text-xs"
+                            aria-label={`${dl?.name ?? `#${dlId}`} 的优先级`}
+                            className="h-9 w-24 text-xs"
                             value={downloaderWeights[dlId] ?? 1}
                             onChange={(e) => updateDownloaderWeight(dlId, Number(e.target.value) || 1)}
                           />
@@ -796,16 +808,18 @@ export function BrushTasksPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label>标签</Label>
+                <Label htmlFor="brush-field-4">标签</Label>
                 <Input
+                  id="brush-field-4"
                   placeholder="brush"
                   value={form.tag}
                   onChange={(e) => setField("tag", e.target.value)}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label>RSS 地址</Label>
+                <Label htmlFor="brush-field-5">RSS 地址</Label>
                 <Input
+                  id="brush-field-5"
                   placeholder="https://example.com/rss"
                   value={form.rss_url}
                   onChange={(e) => setField("rss_url", e.target.value)}
@@ -819,8 +833,9 @@ export function BrushTasksPage() {
             <h4 className="mb-3 text-sm font-semibold">可选设置</h4>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div className="space-y-2">
-                <Label>做种体积上限 (GB)</Label>
+                <Label htmlFor="brush-field-6">做种体积上限 (GB)</Label>
                 <Input
+                  id="brush-field-6"
                   type="number"
                   placeholder="不限"
                   value={form.seed_volume_gb ?? ""}
@@ -828,8 +843,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>最低剩余磁盘空间 (GB)</Label>
+                <Label htmlFor="brush-field-7">最低剩余磁盘空间 (GB)</Label>
                 <Input
+                  id="brush-field-7"
                   type="number"
                   step="0.1"
                   placeholder="不限"
@@ -839,8 +855,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">低于此值的下载器不参与选种</p>
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label>保存子路径（留空使用各下载器默认目录）</Label>
+                <Label htmlFor="brush-field-8">保存子路径（留空使用各下载器默认目录）</Label>
                 <Input
+                  id="brush-field-8"
                   placeholder="如 brush/task1"
                   value={saveSubPath}
                   onChange={(e) => {
@@ -870,8 +887,9 @@ export function BrushTasksPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label>活动时间窗口</Label>
+                <Label htmlFor="brush-field-9">活动时间窗口</Label>
                 <Input
+                  id="brush-field-9"
                   placeholder='["00:00-09:00"]'
                   value={form.active_time_windows ?? ""}
                   onChange={(e) => setField("active_time_windows", e.target.value || null)}
@@ -886,8 +904,9 @@ export function BrushTasksPage() {
             <h4 className="mb-3 text-sm font-semibold">选种规则</h4>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div className="space-y-2">
-                <Label>促销类型</Label>
+                <Label htmlFor="brush-field-10">促销类型</Label>
                 <Select
+                  id="brush-field-10"
                   value={form.promotion ?? "all"}
                   onChange={(val) => {
                     setField("promotion", val);
@@ -903,8 +922,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>最大并发数</Label>
+                <Label htmlFor="brush-field-11">最大并发数</Label>
                 <Input
+                  id="brush-field-11"
                   type="number"
                   min={1}
                   value={form.max_concurrent ?? 100}
@@ -912,8 +932,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>下载限速 (KB/s)</Label>
+                <Label htmlFor="brush-field-12">下载限速 (KB/s)</Label>
                 <Input
+                  id="brush-field-12"
                   type="number"
                   placeholder="不限"
                   value={form.download_speed_limit ?? ""}
@@ -921,8 +942,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>上传限速 (KB/s)</Label>
+                <Label htmlFor="brush-field-13">上传限速 (KB/s)</Label>
                 <Input
+                  id="brush-field-13"
                   type="number"
                   placeholder="不限"
                   value={form.upload_speed_limit ?? ""}
@@ -930,8 +952,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>体积范围</Label>
+                <Label htmlFor="brush-field-14">体积范围</Label>
                 <Input
+                  id="brush-field-14"
                   placeholder='["0-10","10-50"]'
                   value={form.size_ranges ?? ""}
                   onChange={(e) => setField("size_ranges", e.target.value || null)}
@@ -939,8 +962,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">JSON 数组，单位 GB</p>
               </div>
               <div className="space-y-2">
-                <Label>做种人数范围</Label>
+                <Label htmlFor="brush-field-15">做种人数范围</Label>
                 <Input
+                  id="brush-field-15"
                   placeholder='["1-100"]'
                   value={form.seeder_ranges ?? ""}
                   onChange={(e) => setField("seeder_ranges", e.target.value || null)}
@@ -948,8 +972,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">JSON 数组</p>
               </div>
               <div className="space-y-2">
-                <Label>下载人数范围</Label>
+                <Label htmlFor="brush-field-16">下载人数范围</Label>
                 <Input
+                  id="brush-field-16"
                   placeholder='["0-10"]'
                   value={form.downloader_ranges ?? ""}
                   onChange={(e) => setField("downloader_ranges", e.target.value || null)}
@@ -957,8 +982,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">JSON 数组，默认不校验</p>
               </div>
               <div className="space-y-2">
-                <Label>最少 free 时长 (小时)</Label>
+                <Label htmlFor="brush-field-17">最少 free 时长 (小时)</Label>
                 <Input
+                  id="brush-field-17"
                   type="number"
                   placeholder="不限"
                   disabled={(form.promotion ?? "all") !== "free"}
@@ -986,8 +1012,9 @@ export function BrushTasksPage() {
             <h4 className="mb-3 text-sm font-semibold">删种规则</h4>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div className="space-y-2">
-                <Label>删除模式</Label>
+                <Label htmlFor="brush-field-18">删除模式</Label>
                 <Select
+                  id="brush-field-18"
                   value={form.delete_mode ?? "or"}
                   onChange={(val) => setField("delete_mode", val)}
                   options={[
@@ -997,8 +1024,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>最小做种时间 (小时)</Label>
+                <Label htmlFor="brush-field-19">最小做种时间 (小时)</Label>
                 <Input
+                  id="brush-field-19"
                   type="number"
                   step="0.1"
                   placeholder="不限"
@@ -1008,8 +1036,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">{formatHoursLabel(form.min_seed_time_hours)}</p>
               </div>
               <div className="space-y-2">
-                <Label>HR 最小做种时间 (小时)</Label>
+                <Label htmlFor="brush-field-20">HR 最小做种时间 (小时)</Label>
                 <Input
+                  id="brush-field-20"
                   type="number"
                   step="0.1"
                   placeholder="不限"
@@ -1030,8 +1059,9 @@ export function BrushTasksPage() {
                 </label>
               </div>
               <div className="space-y-2">
-                <Label>目标分享率</Label>
+                <Label htmlFor="brush-field-21">目标分享率</Label>
                 <Input
+                  id="brush-field-21"
                   type="number"
                   step="0.1"
                   placeholder="不限"
@@ -1040,8 +1070,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>最大上传量 (GB)</Label>
+                <Label htmlFor="brush-field-22">最大上传量 (GB)</Label>
                 <Input
+                  id="brush-field-22"
                   type="number"
                   placeholder="不限"
                   value={form.max_upload_gb ?? ""}
@@ -1049,8 +1080,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>下载超时 (小时)</Label>
+                <Label htmlFor="brush-field-23">下载超时 (小时)</Label>
                 <Input
+                  id="brush-field-23"
                   type="number"
                   step="0.1"
                   placeholder="不限"
@@ -1060,8 +1092,9 @@ export function BrushTasksPage() {
                 <p className="text-xs text-muted">{formatHoursLabel(form.download_timeout_hours)}</p>
               </div>
               <div className="space-y-2">
-                <Label>最低平均上传速度 (KB/s)</Label>
+                <Label htmlFor="brush-field-24">最低平均上传速度 (KB/s)</Label>
                 <Input
+                  id="brush-field-24"
                   type="number"
                   placeholder="不限"
                   value={form.min_avg_upload_speed_kbs ?? ""}
@@ -1069,8 +1102,9 @@ export function BrushTasksPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>最大不活跃时间 (小时)</Label>
+                <Label htmlFor="brush-field-25">最大不活跃时间 (小时)</Label>
                 <Input
+                  id="brush-field-25"
                   type="number"
                   step="0.1"
                   placeholder="不限"
@@ -1082,10 +1116,11 @@ export function BrushTasksPage() {
             </div>
           </section>
 
-          {/* 操作按钮 */}
+          {/* 操作按钮：错误提示放在保存按钮旁，避免长表单中看不到 */}
+          {submitError ? <Notice tone="error">{submitError}</Notice> : null}
           <div className="flex gap-3 border-t border-border pt-4">
-            <Button disabled={submitting} onClick={() => void handleSubmit()}>
-              {submitting ? "提交中..." : editingId !== null ? "保存修改" : "创建任务"}
+            <Button loading={submitting} onClick={() => void handleSubmit()}>
+              {submitting ? "提交中…" : editingId !== null ? "保存修改" : "创建任务"}
             </Button>
             <Button variant="outline" disabled={submitting} onClick={closeForm}>
               取消
@@ -1112,9 +1147,11 @@ export function BrushTasksPage() {
               </div>
             </div>
             <div className="relative w-full sm:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
               <Input
                 className="h-11 rounded-2xl border-border/70 bg-card pl-9 shadow-sm"
+                type="search"
+                aria-label="搜索种子名称或种子ID"
                 placeholder="搜索名称或种子ID"
                 value={torrentKeyword}
                 onChange={(e) => {
@@ -1126,9 +1163,9 @@ export function BrushTasksPage() {
           </div>
 
           {loadingTorrents ? (
-            <div className="text-sm text-muted">加载中...</div>
+            <LoadingState label="正在加载种子列表…" />
           ) : torrents.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted">暂无种子记录。</div>
+            <EmptyHint title={torrentKeyword ? "没有匹配的种子" : "暂无种子记录"}>{torrentKeyword ? "请更换关键词后重试。" : "任务选种并提交到下载器后，种子会显示在这里。"}</EmptyHint>
           ) : (
             <div className="grid gap-3">
               <Table className="table-fixed">
@@ -1272,12 +1309,13 @@ export function BrushTasksPage() {
       >
         <div className="space-y-4 p-4 sm:p-6">
           <p className="text-sm text-muted">确定要删除该刷流任务吗？此操作不可撤销。</p>
+          {deleteError ? <Notice tone="error">{deleteError}</Notice> : null}
           <div className="flex gap-3">
-            <Button variant="destructive" onClick={() => deleteConfirmId !== null && void handleDelete(deleteConfirmId)}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              确认删除
+            <Button variant="destructive" loading={busyAction?.endsWith(":delete")} onClick={() => deleteConfirmId !== null && void handleDelete(deleteConfirmId)}>
+              {busyAction?.endsWith(":delete") ? null : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+              {busyAction?.endsWith(":delete") ? "删除中…" : "确认删除"}
             </Button>
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+            <Button variant="outline" disabled={busyAction?.endsWith(":delete")} onClick={() => setDeleteConfirmId(null)}>
               取消
             </Button>
           </div>

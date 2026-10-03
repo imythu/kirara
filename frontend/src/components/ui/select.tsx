@@ -20,6 +20,7 @@ type SelectProps = {
   emptyMessage?: string;
   placeholder?: string;
   "aria-describedby"?: string;
+  "aria-label"?: string;
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
 } & ({
   multiple?: false;
@@ -44,6 +45,7 @@ export function Select({
   emptyMessage = "没有匹配的选项",
   placeholder = "请选择",
   "aria-describedby": ariaDescribedBy,
+  "aria-label": ariaLabel,
   "aria-invalid": ariaInvalid,
 }: SelectProps) {
   const [open, setOpen] = React.useState(false);
@@ -215,6 +217,7 @@ export function Select({
         type="button"
         disabled={disabled}
         aria-describedby={ariaDescribedBy}
+        aria-label={ariaLabel ? `${ariaLabel}：${selectedLabel}` : undefined}
         aria-invalid={ariaInvalid}
         aria-expanded={open}
         aria-haspopup="listbox"

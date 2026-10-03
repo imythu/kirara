@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -101,8 +101,9 @@ export function SystemSettingsPage({
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-2">
-          <Label>全局日志级别</Label>
+          <Label htmlFor="settings-log-level">全局日志级别</Label>
           <Select
+            id="settings-log-level"
             value={COMMON_LOG_LEVELS.includes(settings.log_level ?? "") ? settings.log_level ?? "info" : "info"}
             onChange={(val) =>
               setSettings((prev) => ({
@@ -116,7 +117,7 @@ export function SystemSettingsPage({
 
         {/* ---- 全局代理（小白友好版） ---- */}
         <div className="space-y-3 sm:col-span-2 xl:col-span-3">
-          <Label>全局代理</Label>
+          <p className="text-sm font-medium leading-none">全局代理</p>
           <p className="text-xs text-muted">
             各功能开启“使用全局代理”后使用此地址；未配置代理地址时直接连接。
           </p>
@@ -124,8 +125,9 @@ export function SystemSettingsPage({
           <div className="grid gap-3 sm:grid-cols-3">
             {/* 协议 */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted">协议类型</Label>
+              <Label htmlFor="settings-proxy-protocol" className="text-xs text-muted">协议类型</Label>
               <Select
+                id="settings-proxy-protocol"
                 value={proxyParts.protocol}
                 onChange={(val) => updateProxy({ protocol: val })}
                 options={[...PROXY_PROTOCOLS]}
@@ -136,8 +138,9 @@ export function SystemSettingsPage({
             {proxyParts.protocol && (
               <>
                 <div className="space-y-1.5">
-              <Label className="text-xs text-muted">地址</Label>
+              <Label htmlFor="settings-proxy-host" className="text-xs text-muted">地址</Label>
               <Input
+                id="settings-proxy-host"
                 value={proxyParts.host}
                 onChange={(e) => updateProxy({ host: e.target.value })}
                 placeholder="127.0.0.1"
@@ -147,8 +150,9 @@ export function SystemSettingsPage({
 
             {/* 端口 */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted">端口</Label>
+              <Label htmlFor="settings-proxy-port" className="text-xs text-muted">端口</Label>
               <Input
+                id="settings-proxy-port"
                 value={proxyParts.port}
                 onChange={(e) => {
                   const v = e.target.value.replace(/\D/g, "").slice(0, 5);
@@ -168,8 +172,10 @@ export function SystemSettingsPage({
               <p className="text-sm font-medium">代理测试</p>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1 space-y-1.5">
-                  <Label className="text-xs text-muted">测试 URL</Label>
+                  <Label htmlFor="settings-proxy-test-url" className="text-xs text-muted">测试 URL</Label>
                   <Input
+                    id="settings-proxy-test-url"
+                    type="url"
                     value={testUrl}
                     onChange={(e) => setTestUrl(e.target.value)}
                     placeholder="https://www.google.com"
@@ -178,28 +184,27 @@ export function SystemSettingsPage({
                 <Button 
                   variant="outline" 
                   onClick={() => void handleTestProxy()} 
-                  disabled={testingProxy || !settings.proxy}
+                  disabled={!settings.proxy}
+                  loading={testingProxy}
                   className="w-full sm:w-auto"
                 >
-                  {testingProxy ? (
-                    <Activity className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  测试连接
+                  {testingProxy ? "测试中…" : "测试连接"}
                 </Button>
               </div>
 
               {testResult && (
                 <div
+                  role={testResult.success ? "status" : "alert"}
                   className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${
                     testResult.success
-                      ? "border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400"
-                      : "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+                      ? "border-jade/30 bg-jade/5 text-jade"
+                      : "border-destructive/30 bg-destructive/5 text-destructive"
                   }`}
                 >
                   {testResult.success ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                   ) : (
-                    <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                   )}
                   <div className="flex-1 space-y-1">
                     <p className="font-medium">
@@ -216,8 +221,8 @@ export function SystemSettingsPage({
         </div>
 
         <div className="sm:col-span-2 xl:col-span-3">
-          <Button onClick={() => void onSave()} disabled={saving}>
-            {saving ? "保存中..." : "保存系统设置"}
+          <Button onClick={() => void onSave()} loading={saving}>
+            {saving ? "保存中…" : "保存系统设置"}
           </Button>
         </div>
       </CardContent>

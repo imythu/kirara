@@ -22,6 +22,7 @@ export function Dialog({
   panelClassName?: string;
 }) {
   const lastEscAtRef = useRef(0);
+  const pointerDownOnBackdropRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -107,7 +108,19 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-night/45 p-0-sm sm:items-center sm:p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-night/45 p-0 sm:items-center sm:p-4"
+      onPointerDown={(event) => {
+        pointerDownOnBackdropRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        // 只有按下和松开都在遮罩上才关闭，避免在输入框里拖选文字时误关；
+        // 需要双击 Esc 才关闭的表单（escMode="double"）不响应遮罩点击，防止丢失未保存内容。
+        const fromBackdrop = pointerDownOnBackdropRef.current && event.target === event.currentTarget;
+        pointerDownOnBackdropRef.current = false;
+        if (fromBackdrop && escMode === "single") onClose();
+      }}
+    >
       <div
         ref={panelRef}
         role="dialog"
@@ -123,19 +136,19 @@ export function Dialog({
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border bg-surface-container/45 px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <h3 id={titleId} className="text-lg font-bold">{title}</h3>
+            <h3 id={titleId} className="break-words text-lg font-bold">{title}</h3>
             {description ? <p id={descriptionId} className="mt-1 break-words text-sm text-muted">{description}</p> : null}
           </div>
           <button
             type="button"
             aria-label={`关闭${title}`}
-            className="shrink-0 rounded-full p-2 text-muted transition-colors duration-200 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="shrink-0 rounded-full p-2 text-muted transition-colors duration-200 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             onClick={onClose}
           >
             <X className="size-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">{children}</div>
         {footer ? <div className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6">{footer}</div> : null}
       </div>
     </div>

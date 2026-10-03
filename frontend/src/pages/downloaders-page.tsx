@@ -26,6 +26,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
+import { EmptyHint, LoadingState } from "@/components/ui/state";
 import { Select } from "@/components/ui/select";
 import {
   Table,
@@ -137,6 +139,7 @@ export function DownloadersPage() {
   const [clearPassword, setClearPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<DownloaderRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -378,7 +381,7 @@ export function DownloadersPage() {
       setMessage("下载器已删除");
       loadDownloaders();
     } catch (error) {
-      setMessage((error as Error).message || "删除下载器失败");
+      setDeleteError((error as Error).message || "删除下载器失败，请重试");
     } finally {
       setDeleting(false);
     }
@@ -478,14 +481,7 @@ export function DownloadersPage() {
           </div>
         </div>
 
-        {message ? (
-          <div className="rounded-2xl border border-border bg-surface-container/70 px-4 py-3 text-sm">
-            <div className="flex items-start justify-between gap-3">
-              <span>{message}</span>
-              <button type="button" className="text-muted transition-colors hover:text-foreground" onClick={() => setMessage("")}>关闭</button>
-            </div>
-          </div>
-        ) : null}
+        {message ? <Notice onDismiss={() => setMessage("")}>{message}</Notice> : null}
 
         {testResult ? (
           <div
@@ -667,6 +663,7 @@ export function DownloadersPage() {
                   </div>
                   <div className="w-full lg:w-48">
                     <Select
+                      aria-label="排序方式"
                       value={directorySort}
                       onChange={setDirectorySort}
                       options={[
@@ -735,11 +732,6 @@ export function DownloadersPage() {
           escMode="double"
         >
           <div className="space-y-4 p-4 sm:p-6">
-            {submitError ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {submitError}
-              </div>
-            ) : null}
 
             {copySource?.password_configured ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -752,8 +744,8 @@ export function DownloadersPage() {
               <Input id="dl-name" value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="例如：我的 qBittorrent" />
             </div>
             <div className="space-y-2">
-              <Label>类型</Label>
-              <Select value={form.downloader_type} onChange={(val) => setForm((prev) => ({ ...prev, downloader_type: val }))} options={[{ value: "qbittorrent", label: "qBittorrent" }]} />
+              <Label htmlFor="dl-type">类型</Label>
+              <Select id="dl-type" value={form.downloader_type} onChange={(val) => setForm((prev) => ({ ...prev, downloader_type: val }))} options={[{ value: "qbittorrent", label: "qBittorrent" }]} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="dl-url">URL</Label>
@@ -799,22 +791,26 @@ export function DownloadersPage() {
                 清除已保存密码
               </Label>
             ) : null}
+            {submitError ? <Notice tone="error">{submitError}</Notice> : null}
             <div className="flex justify-end gap-2 border-t border-border pt-4">
-              <Button variant="outline" onClick={closeDialog}>取消</Button>
-              <Button disabled={saving || !form.name || !form.url} onClick={handleSave}>{saving ? "保存中..." : "保存"}</Button>
+              <Button variant="outline" disabled={saving} onClick={closeDialog}>取消</Button>
+              <Button loading={saving} disabled={!form.name || !form.url} onClick={handleSave}>{saving ? "保存中…" : "保存"}</Button>
             </div>
           </div>
         </Dialog>
 
         <Dialog
           open={deleteTarget !== null}
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => { setDeleteTarget(null); setDeleteError(""); }}
           title="确认删除"
           description={`确定要删除下载器「${deleteTarget?.name ?? ""}」吗？此操作不可撤销。`}
         >
-          <div className="flex justify-end gap-2 p-4 sm:p-6">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>取消</Button>
-            <Button variant="destructive" disabled={deleting} onClick={handleDelete}>{deleting ? "删除中..." : "确认删除"}</Button>
+          <div className="space-y-4 p-4 sm:p-6">
+            {deleteError ? <Notice tone="error">{deleteError}</Notice> : null}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={deleting} onClick={() => { setDeleteTarget(null); setDeleteError(""); }}>取消</Button>
+              <Button variant="destructive" loading={deleting} onClick={handleDelete}>{deleting ? "删除中…" : "确认删除"}</Button>
+            </div>
           </div>
         </Dialog>
       </>
@@ -825,7 +821,7 @@ export function DownloadersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">下载器管理</h2>
           <p className="mt-1 text-sm text-muted">管理已配置的下载器实例</p>
@@ -867,21 +863,12 @@ export function DownloadersPage() {
           <CardTitle>下载器列表</CardTitle>
         </CardHeader>
         <CardContent>
-          {message ? (
-            <div className="mb-4 rounded-2xl border border-border bg-surface-container/70 px-4 py-3 text-sm">
-              <div className="flex items-start justify-between gap-3">
-                <span>{message}</span>
-                <button type="button" className="text-muted hover:text-foreground" onClick={() => setMessage("")}>
-                  关闭
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {message ? <Notice className="mb-4" onDismiss={() => setMessage("")}>{message}</Notice> : null}
 
           {loading ? (
-            <div className="text-sm text-muted">加载中...</div>
+            <LoadingState label="正在加载下载器…" />
           ) : downloaders.length === 0 ? (
-            <div className="text-sm text-muted">暂无下载器，请点击右上角添加。</div>
+            <EmptyHint title="暂无下载器" action={<Button onClick={openAdd}><Plus />添加下载器</Button>}>连接 qBittorrent 后，订阅、RSS 和刷流任务才能提交下载。</EmptyHint>
           ) : (
             <>
               {/* Desktop table */}
@@ -949,7 +936,7 @@ export function DownloadersPage() {
                               <Copy className="mr-1.5 h-3.5 w-3.5" />
                               复制
                             </Button>
-                            <Button variant="destructive" className="h-8 px-2.5 text-xs" onClick={() => setDeleteTarget(d)}>
+                            <Button variant="outline" className="h-8 px-2.5 text-xs text-destructive hover:border-destructive/40 hover:bg-destructive/5" onClick={() => setDeleteTarget(d)}>
                               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                               删除
                             </Button>
@@ -990,28 +977,28 @@ export function DownloadersPage() {
                       </div>
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => openDetail(d.id)}>
+                      <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openDetail(d.id)}>
                         <Eye className="mr-1.5 h-3.5 w-3.5" />
                         详情
                       </Button>
                       <Button
                         variant="outline"
-                        className="h-7 text-[11px] px-2.5"
+                        className="h-9 px-3 text-xs"
                         disabled={testing === d.id}
                         onClick={() => handleTest(d.id)}
                       >
                         <TestTubeDiagonal className="mr-1.5 h-3.5 w-3.5" />
                         {testing === d.id ? "测试中..." : "测试连接"}
                       </Button>
-                      <Button variant="outline" className="h-7 text-[11px] px-2.5" onClick={() => openEdit(d)}>
+                      <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openEdit(d)}>
                         <Edit className="mr-1.5 h-3.5 w-3.5" />
                         编辑
                       </Button>
-                      <Button variant="outline" className="h-7 text-[11px] px-2.5" onClick={() => openCopy(d)}>
+                      <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openCopy(d)}>
                         <Copy className="mr-1.5 h-3.5 w-3.5" />
                         复制
                       </Button>
-                      <Button variant="destructive" className="h-7 text-[11px] px-2.5" onClick={() => setDeleteTarget(d)}>
+                      <Button variant="outline" className="h-9 px-3 text-xs text-destructive hover:border-destructive/40 hover:bg-destructive/5" onClick={() => setDeleteTarget(d)}>
                         <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                         删除
                       </Button>

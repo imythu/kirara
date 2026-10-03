@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
+import { EmptyHint, LoadingState } from "@/components/ui/state";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
@@ -143,6 +145,7 @@ export function TagRulesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TagRuleRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanInterval, setScanInterval] = useState<number>(7);
   const [savingInterval, setSavingInterval] = useState(false);
@@ -280,7 +283,7 @@ export function TagRulesPage() {
       setFormOpen(false);
       loadData();
     } catch (err) {
-      setSubmitError((err as Error).message);
+      setSubmitError((err as Error).message || "保存标签规则失败，请重试");
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +298,7 @@ export function TagRulesPage() {
       setDeleteTarget(null);
       loadData();
     } catch (err) {
-      setMessage((err as Error).message);
+      setDeleteError((err as Error).message || "删除标签规则失败，请重试");
     } finally {
       setDeleting(false);
     }
@@ -370,9 +373,8 @@ export function TagRulesPage() {
   if (loading) {
     return (
       <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          <span className="ml-2 text-sm text-muted">加载中...</span>
+        <CardContent>
+          <LoadingState className="py-12" label="正在加载标签规则…" />
         </CardContent>
       </Card>
     );
@@ -382,20 +384,7 @@ export function TagRulesPage() {
 
   return (
     <div className="space-y-4">
-      {message ? (
-        <div className="rounded-2xl border border-border bg-card/90 px-4 py-3 text-sm shadow-card">
-          <div className="flex items-center justify-between">
-            <span>{message}</span>
-            <button
-              type="button"
-              className="rounded-full p-1 text-muted hover:bg-accent hover:text-foreground"
-              onClick={() => setMessage("")}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {message ? <Notice onDismiss={() => setMessage("")}>{message}</Notice> : null}
 
       <Card>
         <CardHeader>
@@ -409,13 +398,14 @@ export function TagRulesPage() {
                 根据种子的 Tracker 域名自动匹配并添加标签。
               </CardDescription>
               <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                <Clock className="h-3.5 w-3.5" />
-                <span>扫描间隔</span>
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                <label htmlFor="tag-rule-scan-interval">扫描间隔</label>
                 <select
+                  id="tag-rule-scan-interval"
                   value={scanInterval}
                   onChange={(e) => saveScanInterval(Number(e.target.value))}
                   disabled={savingInterval}
-                  className="h-7 rounded-lg border border-border bg-input px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  className="h-8 rounded-lg border border-border bg-input px-2 text-xs text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {[3, 5, 7, 10, 15, 20, 30, 60].map((m) => (
                     <option key={m} value={m}>{m} 分钟</option>
@@ -438,10 +428,9 @@ export function TagRulesPage() {
         </CardHeader>
         <CardContent>
           {rules.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted">
-              <Tag className="mb-3 h-8 w-8 opacity-40" />
-              <p className="text-sm">暂无标签规则，点击右上角「新增规则」创建。</p>
-            </div>
+            <EmptyHint title="暂无标签规则" action={<Button onClick={openCreate}><Plus className="h-4 w-4" />新增规则</Button>}>
+              按 Tracker 域名或正则为下载器中的种子自动添加标签。
+            </EmptyHint>
           ) : (
             <Table>
               <TableHeader>
@@ -522,15 +511,17 @@ export function TagRulesPage() {
                             type="button"
                             onClick={() => openEdit(rule)}
                             title="编辑"
-                            className="rounded-lg p-2 text-muted transition hover:bg-accent hover:text-foreground"
+                            aria-label={`编辑标签规则 ${rule.tag_name}`}
+                            className="rounded-lg p-2 text-muted transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDeleteTarget(rule)}
+                            onClick={() => { setDeleteError(""); setDeleteTarget(rule); }}
                             title="删除"
-                            className="rounded-lg p-2 text-muted transition hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`删除标签规则 ${rule.tag_name}`}
+                            className="rounded-lg p-2 text-muted transition hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -553,16 +544,12 @@ export function TagRulesPage() {
         description="设置 Tracker 匹配规则，匹配成功的种子将自动添加对应标签。"
       >
         <div className="space-y-5 p-4 sm:p-6">
-          {submitError ? (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-              {submitError}
-            </div>
-          ) : null}
 
           {/* 基本信息 */}
           <div className="space-y-2">
-            <Label>标签名</Label>
+            <Label htmlFor="tag-rule-name">标签名</Label>
             <Input
+              id="tag-rule-name"
               value={form.tag_name}
               onChange={(e) => setForm((prev) => ({ ...prev, tag_name: e.target.value }))}
               placeholder="例如：mteam"
@@ -574,6 +561,7 @@ export function TagRulesPage() {
             <button
               type="button"
               role="switch"
+              id="tag-rule-enabled"
               aria-checked={form.enabled ?? true}
               onClick={() => setForm((prev) => ({ ...prev, enabled: !(prev.enabled ?? true) }))}
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
@@ -586,7 +574,7 @@ export function TagRulesPage() {
                 }`}
               />
             </button>
-            <Label>启用</Label>
+            <Label htmlFor="tag-rule-enabled">启用</Label>
           </div>
 
           {/* 从已有 Tracker 生成 */}
@@ -702,12 +690,14 @@ export function TagRulesPage() {
               <div key={index} className="flex items-center gap-2">
                 <Select
                   className="w-[140px] shrink-0"
+                  aria-label={`第 ${index + 1} 条规则的匹配方式`}
                   value={rule.match_type}
                   onChange={(val) => updateMatchRule(index, "match_type", val as TagMatchCriteria["match_type"])}
                   options={MATCH_TYPES}
                 />
                 <Input
-                  className="flex-1"
+                  className="min-w-0 flex-1"
+                  aria-label={`第 ${index + 1} 条规则的匹配内容`}
                   value={rule.pattern}
                   onChange={(e) => updateMatchRule(index, "pattern", e.target.value)}
                   placeholder={rule.match_type === "regex" ? "正则表达式，如 m-team\\.xyz" : "域名关键词，如 m-team.xyz"}
@@ -718,6 +708,7 @@ export function TagRulesPage() {
                     onClick={() => removeMatchRule(index)}
                     className="shrink-0 rounded-lg p-2 text-muted transition hover:bg-destructive/10 hover:text-destructive"
                     title="删除此规则"
+                    aria-label={`删除第 ${index + 1} 条匹配规则`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -762,13 +753,13 @@ export function TagRulesPage() {
           </div>
 
           {/* 提交 */}
+          {submitError ? <Notice tone="error">{submitError}</Notice> : null}
           <div className="flex items-center justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
+            <Button variant="outline" disabled={submitting} onClick={() => setFormOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {editingId ? "保存" : "创建"}
+            <Button onClick={handleSubmit} loading={submitting}>
+              {submitting ? "保存中…" : editingId ? "保存" : "创建"}
             </Button>
           </div>
         </div>
@@ -777,17 +768,17 @@ export function TagRulesPage() {
       {/* 删除确认 */}
       <Dialog
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(""); }}
         title="确认删除"
         description={`确定要删除标签规则「${deleteTarget?.name ?? ""}」吗？此操作不可撤销。`}
       >
+        {deleteError ? <Notice tone="error" className="mx-4 mt-4 sm:mx-6">{deleteError}</Notice> : null}
         <div className="flex items-center justify-end gap-3 p-4 sm:p-6">
-          <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+          <Button variant="outline" disabled={deleting} onClick={() => { setDeleteTarget(null); setDeleteError(""); }}>
             取消
           </Button>
-          <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="gap-2">
-            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            删除
+          <Button variant="destructive" onClick={handleDelete} loading={deleting}>
+            {deleting ? "删除中…" : "确认删除"}
           </Button>
         </div>
       </Dialog>

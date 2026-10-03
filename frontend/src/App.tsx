@@ -24,6 +24,8 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Dialog, getFocusableElements } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Notice } from "@/components/ui/notice";
+import { LoadingState } from "@/components/ui/state";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { APP_VERSION, api, defaultSettings, subscribeLogs } from "@/lib/api";
@@ -457,7 +459,7 @@ export default function App() {
   }
 
   if (loading) {
-    return <div className="p-8 text-sm text-muted">加载中...</div>;
+    return <LoadingState className="min-h-[100dvh]" label="正在启动云母…" />;
   }
 
   const sidebar = (
@@ -619,23 +621,9 @@ export default function App() {
             </div>
           </header>
 
-          {message ? (
-            <div className="mt-4 rounded-xl border border-border bg-card px-4 py-3 text-sm">
-              <div className="flex items-start justify-between gap-3">
-                <span>{message}</span>
-                <button
-                  type="button"
-                  className="rounded-lg p-1 text-muted transition hover:bg-accent hover:text-foreground"
-                  aria-label="关闭提示"
-                  onClick={() => setMessage("")}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {message ? <Notice className="mt-4" onDismiss={() => setMessage("")}>{message}</Notice> : null}
 
-          <Suspense fallback={<div className="mt-4 rounded-2xl border border-border bg-card px-4 py-6 text-sm text-muted shadow-card">页面加载中...</div>}>
+          <Suspense fallback={<LoadingState className="mt-4 rounded-2xl border border-border bg-card" label="页面加载中…" />}>
             <div className="mt-4">
               {page === "system-overview" ? <SystemOverviewPage /> : null}
               {page === "media" ? <MediaPage /> : null}
@@ -686,6 +674,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <Select
                   className="flex-1"
+                  aria-label="日志级别筛选"
                   value={logLevelFilter}
                   onChange={(val) => setLogLevelFilter(val as LogLevel)}
                   options={selectableLogLevels.map((level) => ({
@@ -693,20 +682,14 @@ export default function App() {
                     label: level.toUpperCase(),
                   }))}
                 />
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface-container text-xs font-semibold text-muted transition hover:text-foreground"
-                  title={`当前系统日志级别是 ${effectiveLogLevel.toUpperCase()}。低于该级别的日志已被后端过滤，所以这里只能选择该级别及以上。`}
-                  aria-label="查看日志级别筛选说明"
-                >
-                  ?
-                </button>
               </div>
               <p className="text-xs leading-5 text-muted">
-                当前系统日志级别：{effectiveLogLevel.toUpperCase()}。筛选项只显示该级别及以上。
+                当前系统日志级别：{effectiveLogLevel.toUpperCase()}。更低级别的日志已被后端过滤，筛选项只显示该级别及以上。
               </p>
             </div>
             <Input
+              type="search"
+              aria-label="按关键词筛选日志"
               value={logKeywordFilter}
               onChange={(event) => setLogKeywordFilter(event.target.value)}
               placeholder="按关键词筛选日志"
@@ -714,6 +697,10 @@ export default function App() {
           </div>
           <div
             ref={logsViewportRef}
+            role="log"
+            aria-label="实时日志输出"
+            aria-live="off"
+            tabIndex={0}
             className="h-[60vh] overflow-auto rounded-2xl border border-border bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100"
           >
             {filteredLogs.length === 0 ? (

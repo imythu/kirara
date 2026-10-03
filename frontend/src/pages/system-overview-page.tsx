@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -104,6 +105,7 @@ function Gauge({
   color,
   label,
   sub,
+  pending = false,
 }: {
   value: number;
   size?: number;
@@ -111,6 +113,7 @@ function Gauge({
   color: string;
   label: string;
   sub?: string;
+  pending?: boolean;
 }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -118,8 +121,8 @@ function Gauge({
   const offset = circumference - (clamped / 100) * circumference;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <svg width={size} height={size} className="-rotate-90">
+    <div className="flex flex-col items-center gap-2" role="img" aria-label={pending ? `${label}：暂无数据` : `${label}：${clamped.toFixed(1)}%${sub ? `，${sub}` : ""}`}>
+      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -142,13 +145,13 @@ function Gauge({
           className="transition-all duration-700 ease-out"
         />
       </svg>
-      <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-2xl font-black tracking-tight" style={{ color }}>
-          {clamped.toFixed(1)}%
+      <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }} aria-hidden="true">
+        <span className="text-2xl font-black tracking-tight tabular-nums" style={{ color }}>
+          {pending ? "—" : `${clamped.toFixed(1)}%`}
         </span>
         {sub ? <span className="text-[10px] text-muted mt-0.5">{sub}</span> : null}
       </div>
-      <span className="text-xs font-semibold text-muted">{label}</span>
+      <span className="text-xs font-semibold text-muted" aria-hidden="true">{label}</span>
     </div>
   );
 }
@@ -210,6 +213,7 @@ const REFRESH_OPTIONS = [
 
 export function SystemOverviewPage() {
   const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null);
+  const [snapshotFailed, setSnapshotFailed] = useState(false);
   const [history, setHistory] = useState<SystemSnapshotRecord[]>([]);
   const [hours, setHours] = useState(24);
   const [refreshSec, setRefreshSec] = useState(10);
@@ -221,8 +225,10 @@ export function SystemOverviewPage() {
     try {
       const data = await api<SystemSnapshot>("/api/system/stats");
       setSnapshot(data);
+      setSnapshotFailed(false);
     } catch {
-      // 静默失败，快照可能尚未就绪
+      // 快照可能尚未就绪；保留上次数据，只在页面上提示。
+      setSnapshotFailed(true);
     }
   }, []);
 
@@ -286,33 +292,38 @@ export function SystemOverviewPage() {
 
   return (
     <div className="space-y-4">
+      {snapshotFailed ? (
+        <Notice tone="warning">
+          {snapshot ? "暂时无法刷新系统指标，下面显示的是上一次获取的数据。" : "暂时无法获取系统指标，稍后会自动重试。"}
+        </Notice>
+      ) : null}
       {/* 实时指标卡片 */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard
           icon={Cpu}
           label="进程 CPU"
-          value={`${(snapshot?.process_cpu_usage ?? 0).toFixed(1)}%`}
+          value={snapshot ? `${snapshot.process_cpu_usage.toFixed(1)}%` : "—"}
           detail="当前进程 CPU 占用"
           color="#7450a3"
         />
         <MetricCard
           icon={MemoryStick}
           label="进程内存"
-          value={`${processMemMb.toFixed(1)} MB`}
+          value={snapshot ? `${processMemMb.toFixed(1)} MB` : "—"}
           detail={snapshot ? formatBytes(snapshot.process_memory_bytes) : "-"}
           color="#99651d"
         />
         <MetricCard
           icon={Server}
           label="系统 CPU"
-          value={`${(snapshot?.system_cpu_usage ?? 0).toFixed(1)}%`}
+          value={snapshot ? `${snapshot.system_cpu_usage.toFixed(1)}%` : "—"}
           detail="全部核心平均"
           color="#397968"
         />
         <MetricCard
           icon={Monitor}
           label="系统内存"
-          value={`${sysMemPercent.toFixed(1)}%`}
+          value={snapshot ? `${sysMemPercent.toFixed(1)}%` : "—"}
           detail={snapshot ? `${sysUsedGb.toFixed(1)} / ${sysTotalGb.toFixed(1)} GB` : "-"}
           color={memColor}
         />
@@ -332,6 +343,7 @@ export function SystemOverviewPage() {
               value={snapshot?.process_cpu_usage ?? 0}
               color="#7450a3"
               label="进程 CPU"
+              pending={!snapshot}
               sub={snapshot ? `${snapshot.process_cpu_usage.toFixed(1)}%` : undefined}
             />
           </div>
@@ -342,6 +354,7 @@ export function SystemOverviewPage() {
               strokeWidth={12}
               color="#397968"
               label="系统 CPU"
+              pending={!snapshot}
               sub={snapshot ? `${snapshot.system_cpu_usage.toFixed(1)}%` : undefined}
             />
           </div>
@@ -350,7 +363,8 @@ export function SystemOverviewPage() {
               value={processMemMb / (sysTotalGb * 1024 || 1) * 100}
               color="#99651d"
               label="进程内存"
-              sub={`${processMemMb.toFixed(0)} MB`}
+              pending={!snapshot}
+              sub={snapshot ? `${processMemMb.toFixed(0)} MB` : undefined}
             />
           </div>
           <div className="relative">
@@ -360,7 +374,8 @@ export function SystemOverviewPage() {
               strokeWidth={12}
               color={memColor}
               label="系统内存"
-              sub={`${sysUsedGb.toFixed(1)} / ${sysTotalGb.toFixed(1)} GB`}
+              pending={!snapshot}
+              sub={snapshot ? `${sysUsedGb.toFixed(1)} / ${sysTotalGb.toFixed(1)} GB` : undefined}
             />
           </div>
         </CardContent>
@@ -376,6 +391,7 @@ export function SystemOverviewPage() {
             </CardTitle>
             <div className="flex items-center gap-2">
               <Select
+                aria-label="时间范围"
                 value={String(hours)}
                 onChange={(val) => setHours(Number(val))}
                 options={TIME_WINDOWS.map((tw) => ({
@@ -384,6 +400,7 @@ export function SystemOverviewPage() {
                 }))}
               />
               <Select
+                aria-label="自动刷新间隔"
                 value={String(refreshSec)}
                 onChange={(val) => setRefreshSec(Number(val))}
                 options={REFRESH_OPTIONS.map((ro) => ({

@@ -1404,7 +1404,7 @@ function JobStatus({ job }: { job: TransferJob }) {
         <StatusIcon className={cn("size-4 shrink-0", !complete && !needsAttention && !stopped && "animate-spin")} />
         <span>{stage.label}</span>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-container">
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-300",

@@ -45,6 +45,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice as InlineNotice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -2776,26 +2777,7 @@ export function MediaPage() {
 }
 
 function NoticeBanner({ notice, onClose }: { notice: Notice; onClose: () => void }) {
-  const Icon = notice.tone === "error" ? AlertCircle : CheckCircle2;
-  return (
-    <div
-      role={notice.tone === "error" ? "alert" : "status"}
-      className={cn(
-        "flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm",
-        notice.tone === "error"
-          ? "border-destructive/25 bg-destructive/5 text-destructive"
-          : "border-primary/20 bg-primary/10 text-foreground",
-      )}
-    >
-      <div className="flex min-w-0 items-start gap-2">
-        <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span className="break-words">{notice.text}</span>
-      </div>
-      <button type="button" className="shrink-0 rounded-lg p-1 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="关闭提示" onClick={onClose}>
-        <X className="size-4" />
-      </button>
-    </div>
-  );
+  return <InlineNotice tone={notice.tone} onDismiss={onClose}>{notice.text}</InlineNotice>;
 }
 
 function LoadingState({ label }: { label: string }) {

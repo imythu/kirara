@@ -374,6 +374,7 @@ export function ScheduledTasksPage() {
                     <Button
                       variant="outline"
                       aria-label={`删除 ${task.name}`}
+                      title="删除任务"
                       disabled={task.running || busy === task.id}
                       onClick={() => {
                         setDeleteError("");

@@ -43,6 +43,7 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import {
   Table,
@@ -1516,20 +1517,7 @@ export function SitesPage() {
         </CardHeader>
 
         <CardContent className="space-y-3 p-4 sm:space-y-5 sm:p-6">
-          {message ? (
-            <div
-              className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span>{message}</span>
-                <button type="button" className="text-muted hover:text-foreground" onClick={() => setMessage("")}>
-                  关闭
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {message ? <Notice onDismiss={() => setMessage("")}>{message}</Notice> : null}
 
 
           <section className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:gap-3" aria-label="筛选站点">

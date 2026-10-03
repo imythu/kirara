@@ -31,6 +31,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
+import { EmptyHint, LoadingState } from "@/components/ui/state";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
@@ -180,6 +182,8 @@ export function SignInPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SignInTaskRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const nexusSites = useMemo(() => sites.filter(isNexusSite), [sites]);
   const siteNameById = useMemo(
@@ -506,14 +510,18 @@ export function SignInPage() {
     }
   }
 
-  async function runAction(action: Promise<unknown>, success: string, background = false) {
+  async function runAction(key: string, run: () => Promise<unknown>, success: string, background = false) {
+    if (busyAction) return;
+    setBusyAction(key);
     try {
-      await action;
+      await run();
       setMessage(success);
       if (background) setSearchPollUntil(Date.now() + 120_000);
       loadData();
     } catch (error) {
       setMessage((error as Error).message || "操作失败");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -526,7 +534,7 @@ export function SignInPage() {
       setMessage("自动签到任务已删除");
       loadData();
     } catch (error) {
-      setMessage((error as Error).message || "删除自动签到任务失败");
+      setDeleteError((error as Error).message || "删除自动签到任务失败，请重试");
     } finally {
       setDeleting(false);
     }
@@ -550,22 +558,7 @@ export function SignInPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          {message ? (
-            <div className="rounded-xl border border-border bg-surface-container/70 px-4 py-3 text-sm">
-              <div className="flex items-start justify-between gap-3">
-                <span>{message}</span>
-                <button
-                  type="button"
-                  className="cursor-pointer text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  title="关闭消息"
-                  aria-label="关闭消息"
-                  onClick={() => setMessage("")}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {message ? <Notice onDismiss={() => setMessage("")} dismissLabel="关闭消息">{message}</Notice> : null}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
@@ -643,7 +636,7 @@ export function SignInPage() {
           <div className="grid gap-3 border-b border-border pb-4 md:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)]">
             <div className="relative min-w-0">
               <Label htmlFor="sign-in-search" className="sr-only">快速搜索</Label>
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
               <Input
                 id="sign-in-search"
                 type="search"
@@ -687,10 +680,7 @@ export function SignInPage() {
 
           {!loading ? <SearchFeedback search={activeSearch} onClearQuery={() => { setSearchTerm(""); setSiteFilter(0); }} /> : null}
           {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              加载中...
-            </div>
+            <LoadingState className="py-12" />
           ) : activeSearch.loading || searchComposing || activeSearch.error ? null : activeView === "tasks" ? (
             <div
               id="sign-in-tasks-panel"
@@ -699,13 +689,13 @@ export function SignInPage() {
               tabIndex={0}
               className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
-              <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
+              <p className="mb-3 text-xs text-muted" aria-live="polite">
                 匹配 {taskSearch.total} / {tasks.length} 个任务
               </p>
               {tasks.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">暂无自动签到任务，点击上方按钮添加。</div>
+                <EmptyHint title="暂无自动签到任务">点击上方按钮添加，或使用批量创建为已配置凭据的站点一次生成任务。</EmptyHint>
               ) : filteredTasks.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">没有匹配的任务，请更换关键词或站点筛选。</div>
+                <EmptyHint title="没有匹配的任务">请更换关键词或站点筛选。</EmptyHint>
               ) : (
                 <div className="grid gap-3">
                   {filteredTasks.map((task) => (
@@ -721,26 +711,26 @@ export function SignInPage() {
                               {displayStatus(task.last_status)}
                             </span>
                           </div>
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">#{task.id}</div>
+                          <div className="mt-0.5 text-[11px] text-muted">#{task.id}</div>
                         </div>
                         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                          <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => void runAction(api(`/api/sign-in-tasks/${task.id}/run`, { method: "POST" }), "已触发运行一次", true)}>
-                            <Zap className="mr-1.5 h-3.5 w-3.5" />运行一次
+                          <Button variant="outline" className="h-9 px-3 text-xs" loading={busyAction === `${task.id}:run`} disabled={busyAction !== null} onClick={() => void runAction(`${task.id}:run`, () => api(`/api/sign-in-tasks/${task.id}/run`, { method: "POST" }), "已触发运行一次", true)}>
+                            <Zap className="h-3.5 w-3.5" aria-hidden="true" />运行一次
                           </Button>
                           {task.enabled ? (
-                            <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => void runAction(api(`/api/sign-in-tasks/${task.id}/stop`, { method: "POST" }), "自动签到任务已停用")}>
-                              <Pause className="mr-1.5 h-3.5 w-3.5" />停用
+                            <Button variant="outline" className="h-9 px-3 text-xs" loading={busyAction === `${task.id}:stop`} disabled={busyAction !== null} onClick={() => void runAction(`${task.id}:stop`, () => api(`/api/sign-in-tasks/${task.id}/stop`, { method: "POST" }), "自动签到任务已停用")}>
+                              <Pause className="h-3.5 w-3.5" aria-hidden="true" />停用
                             </Button>
                           ) : (
-                            <Button variant="secondary" className="h-7 px-2.5 text-[11px]" onClick={() => void runAction(api(`/api/sign-in-tasks/${task.id}/start`, { method: "POST" }), "自动签到任务已启用")}>
-                              <Play className="mr-1.5 h-3.5 w-3.5" />启用
+                            <Button variant="secondary" className="h-9 px-3 text-xs" loading={busyAction === `${task.id}:start`} disabled={busyAction !== null} onClick={() => void runAction(`${task.id}:start`, () => api(`/api/sign-in-tasks/${task.id}/start`, { method: "POST" }), "自动签到任务已启用")}>
+                              <Play className="h-3.5 w-3.5" aria-hidden="true" />启用
                             </Button>
                           )}
-                          <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => openEdit(task)}>
-                            <Edit className="mr-1.5 h-3.5 w-3.5" />编辑
+                          <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openEdit(task)}>
+                            <Edit className="h-3.5 w-3.5" aria-hidden="true" />编辑
                           </Button>
-                          <Button variant="destructive" className="h-7 px-2.5 text-[11px]" onClick={() => setDeleteTarget(task)}>
-                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />删除
+                          <Button variant="outline" className="h-9 px-3 text-xs text-destructive hover:border-destructive/40 hover:bg-destructive/5" onClick={() => { setDeleteError(""); setDeleteTarget(task); }}>
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />删除
                           </Button>
                         </div>
                       </div>
@@ -766,13 +756,13 @@ export function SignInPage() {
               tabIndex={0}
               className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
             >
-              <p className="mb-3 text-xs text-muted-foreground" aria-live="polite">
+              <p className="mb-3 text-xs text-muted" aria-live="polite">
                 匹配 {recordSearch.total} 条执行日志
               </p>
               {recordSearch.total === 0 && !searchTerm && siteFilter === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">暂无签到执行日志。</div>
+                <EmptyHint title="暂无签到执行日志">任务运行后，每次签到结果会记录在这里。</EmptyHint>
               ) : filteredRecords.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">没有匹配的执行日志，请更换关键词或站点筛选。</div>
+                <EmptyHint title="没有匹配的执行日志">请更换关键词或站点筛选。</EmptyHint>
               ) : (
                 <Table>
                   <TableHeader>
@@ -792,13 +782,13 @@ export function SignInPage() {
                           <div className="max-w-48 truncate font-medium" title={taskNameById.get(record.task_id)}>
                             {taskNameById.get(record.task_id) ?? `任务 #${record.task_id}`}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">#{record.task_id}</div>
+                          <div className="mt-0.5 text-[11px] text-muted">#{record.task_id}</div>
                         </TableCell>
                         <TableCell>{record.site_name || siteNameById.get(record.site_id) || `#${record.site_id}`}</TableCell>
                         <TableCell><span className={`rounded-full px-3 py-1 text-xs font-medium ${statusBadge(record.status)}`}>{displayStatus(record.status)}</span></TableCell>
-                        <TableCell className="max-w-[360px] truncate text-muted-foreground" title={record.message}>{record.message || "-"}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(record.started_at)}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(record.finished_at)}</TableCell>
+                        <TableCell className="max-w-[360px] truncate text-muted" title={record.message}>{record.message || "-"}</TableCell>
+                        <TableCell className="text-muted">{formatDate(record.started_at)}</TableCell>
+                        <TableCell className="text-muted">{formatDate(record.finished_at)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -821,8 +811,8 @@ export function SignInPage() {
         <div className="space-y-5 p-4 sm:p-6">
           {settingsBrowser !== "vision_llm" ? <div className="space-y-2 text-sm leading-relaxed">
             <p className="font-medium">为什么需要云浏览器？</p>
-            <p className="text-muted-foreground">部分站点需要在浏览器中加载页面、运行脚本或完成验证后才能签到。云浏览器为 Kirara 提供所需的浏览器环境，代为处理这些步骤，无需在运行 Kirara 的设备上额外安装和维护浏览器。</p>
-            <p className="text-muted-foreground">选择站点后，Kirara 会自动匹配对应的服务。你只需配置该站点需要的 Lightpanda 或 Browserless，连接信息可供所有签到任务共用。</p>
+            <p className="text-muted">部分站点需要在浏览器中加载页面、运行脚本或完成验证后才能签到。云浏览器为 Kirara 提供所需的浏览器环境，代为处理这些步骤，无需在运行 Kirara 的设备上额外安装和维护浏览器。</p>
+            <p className="text-muted">选择站点后，Kirara 会自动匹配对应的服务。你只需配置该站点需要的 Lightpanda 或 Browserless，连接信息可供所有签到任务共用。</p>
           </div> : null}
           {settingsDraft ? (
             <>
@@ -869,7 +859,7 @@ export function SignInPage() {
                     >
                       {browser === "lightpanda" ? <Zap className="h-4 w-4 shrink-0" /> : browser === "browserless" ? <Cloud className="h-4 w-4 shrink-0" /> : <Sparkles className="h-4 w-4 shrink-0" />}
                       <span className="truncate">{browser === "vision_llm" ? "视觉 LLM" : browserLabel(browser)}</span>
-                      <span className={cn("hidden text-[10px] sm:inline", configured ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                      <span className={cn("hidden text-[10px] sm:inline", configured ? "text-emerald-600 dark:text-emerald-400" : "text-muted")}>
                         {configured ? "已配置" : "未配置"}
                       </span>
                     </button>
@@ -888,7 +878,7 @@ export function SignInPage() {
                     }} />
                   使用全局代理访问 {settingsBrowser === "vision_llm" ? "LLM" : settingsBrowser === "lightpanda" ? "Lightpanda" : "Browserless"}
                 </label>
-                <p className="text-xs leading-relaxed text-muted-foreground">使用系统设置中的代理地址；未配置代理地址或关闭此选项时直接连接。</p>
+                <p className="text-xs leading-relaxed text-muted">使用系统设置中的代理地址；未配置代理地址或关闭此选项时直接连接。</p>
               </div>
               {settingsBrowser === "lightpanda" ? (
                 <div
@@ -993,7 +983,7 @@ export function SignInPage() {
                       placeholder={DEFAULT_BROWSERLESS_ADDRESS}
                       aria-describedby="browserless-address-help"
                     />
-                    <p id="browserless-address-help" className="text-xs leading-relaxed text-muted-foreground">已提供默认云端地址，也支持自定义服务根地址或完整的 /stealth/bql 地址。</p>
+                    <p id="browserless-address-help" className="text-xs leading-relaxed text-muted">已提供默认云端地址，也支持自定义服务根地址或完整的 /stealth/bql 地址。</p>
                   </div>
                   <p id="browserless-token-help" className="text-xs leading-relaxed text-muted sm:col-span-2">首次使用：<a href="https://www.browserless.io/signup/email?plan=free" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">注册 Browserless 账号</a>，登录 <a href="https://browserless.io/account/" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">账户控制台</a>，在 API Key 区域复制 Token，填入下方后点击“保存并测试”。</p>
                   <div className="space-y-2 sm:col-span-2">
@@ -1021,7 +1011,7 @@ export function SignInPage() {
               )}
             </>
           ) : (
-            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center py-8 text-sm text-muted">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               加载配置中...
             </div>
@@ -1067,10 +1057,6 @@ export function SignInPage() {
         panelClassName="max-w-3xl"
       >
         <div className="space-y-6 p-4 sm:p-6">
-          {submitError ? (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{submitError}</div>
-          ) : null}
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="sign-in-name">名称</Label>
@@ -1082,7 +1068,7 @@ export function SignInPage() {
                 placeholder="每日签到"
               />
               {suggestedTaskName ? (
-                <div id="sign-in-name-suggestion" className="flex min-h-7 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <div id="sign-in-name-suggestion" className="flex min-h-7 flex-wrap items-center gap-1.5 text-xs text-muted">
                   <span>推荐名称</span>
                   <button
                     type="button"
@@ -1123,12 +1109,12 @@ export function SignInPage() {
                 { value: "cf_turnstile", label: "CF Turnstile 签到" },
                 { value: "captcha", label: "通用图片验证码签到" },
               ]} />
-              <p className="text-xs text-muted-foreground">{selectedProfile
+              <p className="text-xs text-muted">{selectedProfile
                 ? "默认使用系统适配，可手动选择其他方式；选择系统适配可恢复预设。"
                 : "此站尚未自动适配，默认尝试打开页面签到。如需其他方式，请按站点实际情况选择。"}</p>
             </div>
             {!usingPreset && imageCaptcha ? <>
-              <p id="sign-in-image-guidance" className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+              <p id="sign-in-image-guidance" className="text-xs leading-relaxed text-muted sm:col-span-2">
                 以下五项需要了解站点页面结构。普通用户可通过 <a href="https://github.com/imythu/kirara/issues/new" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-4">GitHub 联系作者适配站点</a>。
               </p>
               {([
@@ -1143,11 +1129,11 @@ export function SignInPage() {
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="browserless-already-keywords">已签到提示文字（可留空）</Label>
                 <textarea id="browserless-already-keywords" className="min-h-24 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={browserlessTask.already_keywords} onChange={event => setBrowserlessTaskField("already_keywords", event.target.value)} maxLength={4096} placeholder="例如：您今天已经签到，请勿重复签到。" />
-                <p className="text-xs text-muted-foreground">每行一条明确的提示，命中后跳过签到。留空不提前判断。</p>
+                <p className="text-xs text-muted">每行一条明确的提示，命中后跳过签到。留空不提前判断。</p>
               </div>
             </> : null}
             {isBrowserConfigured(settings, form.browser ?? "lightpanda") ? (
-              <p className="text-xs text-muted-foreground sm:col-span-2">使用 {browserLabel(form.browser)} 云浏览器，连接信息已配置。</p>
+              <p className="text-xs text-muted sm:col-span-2">使用 {browserLabel(form.browser)} 云浏览器，连接信息已配置。</p>
             ) : (
               <div role="alert" className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm sm:col-span-2">
                 <p>{missingBrowserMessage(settings, form.browser ?? "lightpanda")}</p>
@@ -1157,10 +1143,10 @@ export function SignInPage() {
 
           </div>
 
+          {submitError ? <Notice tone="error">{submitError}</Notice> : null}
           <div className="flex flex-wrap gap-3 border-t border-border pt-4">
-            <Button disabled={submitting} onClick={() => void handleSubmit()}>
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {submitting ? "提交中..." : editingId !== null ? "保存修改" : "创建任务"}
+            <Button loading={submitting} onClick={() => void handleSubmit()}>
+              {submitting ? "提交中…" : editingId !== null ? "保存修改" : "创建任务"}
             </Button>
             <Button variant="outline" disabled={submitting} onClick={closeForm}>取消</Button>
           </div>
@@ -1173,12 +1159,15 @@ export function SignInPage() {
         title="确认删除"
         description={`确定要删除自动签到任务「${deleteTarget?.name ?? ""}」吗？此操作不可撤销。`}
       >
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>取消</Button>
-          <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleting}>
-            {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-            删除
-          </Button>
+        <div className="space-y-4 p-4 sm:p-6">
+          {deleteError ? <Notice tone="error">{deleteError}</Notice> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>取消</Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()} loading={deleting}>
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              {deleting ? "删除中…" : "确认删除"}
+            </Button>
+          </div>
         </div>
       </Dialog>
     </div>

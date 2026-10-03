@@ -363,8 +363,10 @@ function TimeRangeControls({
     <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-container/50 p-1.5 rounded-xl border border-border/50">
       <div className="flex items-center gap-1">
         <button
-          className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
-            mode === "quick" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-surface-container/80"
+          type="button"
+          aria-pressed={mode === "quick"}
+          className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            mode === "quick" ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-container/80"
           }`}
           onClick={() => setMode("quick")}
         >
@@ -372,8 +374,10 @@ function TimeRangeControls({
           快捷
         </button>
         <button
-          className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
-            mode === "custom" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-surface-container/80"
+          type="button"
+          aria-pressed={mode === "custom"}
+          className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            mode === "custom" ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-container/80"
           }`}
           onClick={() => setMode("custom")}
         >
@@ -383,14 +387,16 @@ function TimeRangeControls({
       </div>
 
       {mode === "quick" ? (
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {TIME_RANGES.map((r) => (
             <button
               key={r.label}
-              className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
+              type="button"
+              aria-pressed={quickHours === r.hours}
+              className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 quickHours === r.hours
                   ? "bg-primary text-primary-foreground shadow-sm"
-                  : "hover:bg-surface-container/80 text-muted-foreground"
+                  : "hover:bg-surface-container/80 text-muted"
               }`}
               onClick={() => setQuickHours(r.hours)}
             >
@@ -402,18 +408,20 @@ function TimeRangeControls({
         <div className="flex items-center gap-1.5">
           <input
             type="date"
-            className="h-7 rounded-lg border border-border bg-input px-2 text-[10px]"
+            className="h-8 rounded-lg border border-border bg-input px-2 text-xs"
+            aria-label="开始日期"
             value={customStart}
             onChange={(e) => setCustomStart(e.target.value)}
           />
-          <span className="text-[10px] text-muted">至</span>
+          <span className="text-xs text-muted">至</span>
           <input
             type="date"
-            className="h-7 rounded-lg border border-border bg-input px-2 text-[10px]"
+            className="h-8 rounded-lg border border-border bg-input px-2 text-xs"
+            aria-label="结束日期"
             value={customEnd}
             onChange={(e) => setCustomEnd(e.target.value)}
           />
-          <Button size="sm" className="h-7 text-[10px] px-2" onClick={onApply}>
+          <Button size="sm" className="h-8 px-3 text-xs" onClick={onApply}>
             查询
           </Button>
         </div>
@@ -425,10 +433,12 @@ function TimeRangeControls({
           {(["both", "upload", "download"] as const).map((f) => (
             <button
               key={f}
-              className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
+              type="button"
+              aria-pressed={lineFilter === f}
+              className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 lineFilter === f
-                  ? "bg-surface-container-highest text-foreground shadow-sm ring-1 ring-border"
-                  : "hover:bg-surface-container/80 text-muted-foreground"
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                  : "hover:bg-surface-container/80 text-muted"
               }`}
               onClick={() => setLineFilter(f)}
             >
@@ -439,6 +449,7 @@ function TimeRangeControls({
       )}
       <div className="flex items-center gap-2">
         <Select
+          aria-label="自动刷新间隔"
           value={String(refreshSecs)}
           onChange={(val) => setRefreshSecs(Number(val))}
           options={REFRESH_OPTIONS.map((o) => ({ value: String(o.value), label: o.label }))}
@@ -931,11 +942,12 @@ export function StatsPage() {
                 </div>
                 <div>
                   <CardTitle className="text-sm font-semibold">上传 / 下载趋势</CardTitle>
-                  <CardDescription className="text-[10px]">增量数据视图</CardDescription>
+                  <CardDescription className="text-xs">增量数据视图</CardDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Select
+                  aria-label="筛选任务"
                   value={String(selectedTransferTaskId)}
                   onChange={(val) => setSelectedTransferTaskId(Number(val))}
                   options={[
@@ -1049,11 +1061,12 @@ export function StatsPage() {
                 </div>
                 <div>
                   <CardTitle className="text-sm font-semibold">种子数趋势</CardTitle>
-                  <CardDescription className="text-[10px]">各任务活跃数</CardDescription>
+                  <CardDescription className="text-xs">各任务活跃数</CardDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Select
+                  aria-label="筛选任务"
                   value={String(selectedTorrentTaskId)}
                   onChange={(val) => setSelectedTorrentTaskId(Number(val))}
                   options={[
@@ -1151,11 +1164,12 @@ export function StatsPage() {
               </div>
               <div>
                 <CardTitle className="text-sm font-semibold">下载器实时速度</CardTitle>
-                <CardDescription className="text-[10px]">各下载器总宽带占用</CardDescription>
+                <CardDescription className="text-xs">各下载器总宽带占用</CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Select
+                aria-label="筛选下载器"
                 value={String(selectedDownloaderId)}
                 onChange={(val) => setSelectedDownloaderId(Number(val))}
                 options={[
@@ -1269,11 +1283,12 @@ export function StatsPage() {
               </div>
               <div>
                 <CardTitle className="text-sm font-semibold">每日上传 / 下载量</CardTitle>
-                <CardDescription className="text-[10px]">按天聚合的增量数据</CardDescription>
+                <CardDescription className="text-xs">按天聚合的增量数据</CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Select
+                aria-label="筛选任务"
                 value={String(dailyTaskId)}
                 onChange={(val) => setDailyTaskId(Number(val))}
                 options={[
@@ -1288,16 +1303,20 @@ export function StatsPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-container/50 p-1.5 rounded-xl border border-border/50">
             <div className="flex items-center gap-1">
               <button
-                className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
-                  dailyRangeMode === "quick" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-surface-container/80"
+                type="button"
+                aria-pressed={dailyRangeMode === "quick"}
+                className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  dailyRangeMode === "quick" ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-container/80"
                 }`}
                 onClick={() => setDailyRangeMode("quick")}
               >
                 快捷
               </button>
               <button
-                className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
-                  dailyRangeMode === "custom" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-surface-container/80"
+                type="button"
+                aria-pressed={dailyRangeMode === "custom"}
+                className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  dailyRangeMode === "custom" ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-container/80"
                 }`}
                 onClick={() => setDailyRangeMode("custom")}
               >
@@ -1305,14 +1324,16 @@ export function StatsPage() {
               </button>
             </div>
             {dailyRangeMode === "quick" ? (
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {[{ label: "7天", days: 7 }, { label: "14天", days: 14 }, { label: "30天", days: 30 }].map((r) => (
                   <button
                     key={r.label}
-                    className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
+                    type="button"
+                    aria-pressed={dailyQuickDays === r.days}
+                    className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       dailyQuickDays === r.days
                         ? "bg-primary text-primary-foreground shadow-sm"
-                        : "hover:bg-surface-container/80 text-muted-foreground"
+                        : "hover:bg-surface-container/80 text-muted"
                     }`}
                     onClick={() => setDailyQuickDays(r.days)}
                   >
@@ -1324,18 +1345,20 @@ export function StatsPage() {
               <div className="flex items-center gap-1.5">
                 <input
                   type="date"
-                  className="h-7 rounded-lg border border-border bg-input px-2 text-[10px]"
+                  className="h-8 rounded-lg border border-border bg-input px-2 text-xs"
+                  aria-label="开始日期"
                   value={dailyCustomStart}
                   onChange={(e) => setDailyCustomStart(e.target.value)}
                 />
-                <span className="text-[10px] text-muted">至</span>
+                <span className="text-xs text-muted">至</span>
                 <input
                   type="date"
-                  className="h-7 rounded-lg border border-border bg-input px-2 text-[10px]"
+                  className="h-8 rounded-lg border border-border bg-input px-2 text-xs"
+                  aria-label="结束日期"
                   value={dailyCustomEnd}
                   onChange={(e) => setDailyCustomEnd(e.target.value)}
                 />
-                <Button size="sm" className="h-7 text-[10px] px-2" onClick={() => {
+                <Button size="sm" className="h-8 px-3 text-xs" onClick={() => {
                   setDailySince(new Date(fromDateInput(dailyCustomStart, false)).toISOString());
                   setDailyUntil(new Date(fromDateInput(dailyCustomEnd, true)).toISOString());
                 }}>
@@ -1348,10 +1371,12 @@ export function StatsPage() {
               {(["both", "upload", "download"] as const).map((f) => (
                 <button
                   key={f}
-                  className={`h-7 px-2.5 rounded-lg text-[10px] font-medium transition-colors ${
+                  type="button"
+                  aria-pressed={dailyLineFilter === f}
+                  className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     dailyLineFilter === f
-                      ? "bg-surface-container-highest text-foreground shadow-sm ring-1 ring-border"
-                      : "hover:bg-surface-container/80 text-muted-foreground"
+                      ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                      : "hover:bg-surface-container/80 text-muted"
                   }`}
                   onClick={() => setDailyLineFilter(f)}
                 >
@@ -1474,8 +1499,8 @@ function MetricItem({
   value: string;
 }) {
   return (
-    <div className="space-y-0.5 bg-surface-container-low/40 p-1.5 rounded-lg border border-border/30">
-      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+    <div className="space-y-0.5 bg-surface-container/40 p-1.5 rounded-lg border border-border/30">
+      <div className="flex items-center gap-1 text-[10px] text-muted">
         {icon}
         {label}
       </div>
