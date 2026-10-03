@@ -371,7 +371,7 @@ async fn qingwa_bonus_exchange(
     ))
 }
 
-fn browserless_sign_in_query(image_captcha: bool, script_submit: bool) -> String {
+fn browserless_sign_in_query(image_captcha: bool, script_submit: bool, turnstile: bool) -> String {
     let solve = if image_captcha {
         "solve: solveImageCaptcha(captchaSelector: $captchaSelector, inputSelector: $captchaInputSelector, timeout: $solveTimeout) { found solved time }"
     } else {
@@ -398,13 +398,23 @@ fn browserless_sign_in_query(image_captcha: bool, script_submit: bool) -> String
     } else {
         ""
     };
+    // Installed right after navigation, before the widget can call back.
+    let (turnstile_variables, turnstile_hook) = if turnstile {
+        (
+            "$turnstileHook: String!",
+            "turnstileHook: evaluate(content: $turnstileHook) { value }",
+        )
+    } else {
+        ("", "")
+    };
     format!(
         r#"
 mutation CheckIn($cookies: [CookieInput!]! $url: String! {submit_variables}
  $waitMs: Float! $solveTimeout: Float! {action_variables} $postClickWaitMs: Float!
- $guard: String! $resultScript: String! $submitCondition: String! {image_variables}) {{
+ $guard: String! $resultScript: String! $submitCondition: String! {image_variables} {turnstile_variables}) {{
  cookies(cookies: $cookies) {{ cookies {{ name }} }}
  goto(url: $url, waitUntil: networkIdle) {{ status }}
+ {turnstile_hook}
  waitBefore: waitForTimeout(time: $waitMs) {{ time }}
  checkBefore: evaluate(content: $guard) {{ value }}
  beforeClick: html {{ html }}
@@ -436,6 +446,33 @@ fn browserless_submit_condition(selector: &str, image_captcha: bool, turnstile: 
         format!("html:not([data-rflush-stop]){turnstile_guard} :is({selector})")
     }
 }
+
+/// Browserless hands the solved token to the widget's `data-callback`, but the
+/// hidden `cf-turnstile-response` input can stay empty. Pages such as Audiences
+/// submit the form from that callback, so the server rejected the empty token.
+/// Copy the token into the form's empty token fields before the page callback.
+const TURNSTILE_CALLBACK_HOOK: &str = r#"(() => {
+ const widgets = Array.from(document.querySelectorAll('.cf-turnstile[data-callback]'));
+ for (const widget of widgets) {
+  const name = widget.getAttribute('data-callback');
+  const original = window[name];
+  if (typeof original !== 'function' || original.__rflushHooked) continue;
+  const hooked = function (token) {
+   if (typeof token === 'string' && token) {
+    const scope = widget.closest('form') || widget;
+    scope.querySelectorAll("input[name='cf-turnstile-response']").forEach(input => { input.value = token; });
+    scope.querySelectorAll("input[type='hidden']").forEach(input => {
+     if (!input.value && /token|turnstile/i.test(input.name || input.id)) input.value = token;
+    });
+    document.documentElement.setAttribute('data-rflush-turnstile-ready', '');
+   }
+   return original.apply(this, arguments);
+  };
+  hooked.__rflushHooked = true;
+  window[name] = hooked;
+ }
+ return widgets.length;
+})()"#;
 
 fn form_submit_script(selector: &str, method: &str, timeout: u64) -> String {
     format!(
@@ -682,11 +719,12 @@ async fn run_browserless_sign_in(
     let result = post_browserless_bql(
         service_config,
         proxy,
-        &browserless_sign_in_query(image_captcha, script_submit),
+        &browserless_sign_in_query(image_captcha, script_submit, turnstile),
         "CheckIn",
         json!({
             "cookies": cookies,
             "guard": result_rule_script(&task_config, true, image_captcha.then_some(task_config.captcha_input_selector.as_str())),
+            "turnstileHook": TURNSTILE_CALLBACK_HOOK,
             "submitScript": form_submit_script(selector, &task_config.submit_method, timings.action_timeout),
             "resultScript": result_rule_script(&task_config, false, None),
             "submitCondition": submit_condition,
@@ -740,7 +778,14 @@ async fn post_browserless_bql(
     let result = response
         .json::<Value>()
         .await
-        .map_err(|_| format!("Browserless 返回了无效的 JSON（HTTP {}）", status.as_u16()))?;
+        .map_err(|_| match status.as_u16() {
+            401 | 403 => format!(
+                "Browserless 拒绝了请求（HTTP {}），请检查 Token 是否有效或额度是否用尽",
+                status.as_u16()
+            ),
+            429 => "Browserless 请求过于频繁或并发已满（HTTP 429）".to_string(),
+            code => format!("Browserless 返回了无效的 JSON（HTTP {}）", code),
+        })?;
     if !status.is_success() {
         return Err(browserless_error_message(&result)
             .unwrap_or_else(|| format!("Browserless 请求失败（HTTP {}）", status.as_u16())));
@@ -808,24 +853,34 @@ fn browserless_cookies(cookie_header: &str, domain: &str, url: &str) -> Vec<Valu
         .collect()
 }
 
-fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
-    let document = Html::parse_document(html);
+/// Visible body text: text nodes outside script, style and template elements.
+fn html_body_text(html: &str) -> String {
+    body_text(&Html::parse_document(html)).unwrap_or_default()
+}
+
+fn body_text(document: &Html) -> Option<String> {
     let selector = Selector::parse("body").ok()?;
     let body = document.select(&selector).next()?;
-    let text = body
-        .descendants()
-        .filter_map(|node| {
-            let text = node.value().as_text()?;
-            let hidden = node.ancestors().any(|ancestor| {
-                ancestor
-                    .value()
-                    .as_element()
-                    .is_some_and(|el| matches!(el.name(), "script" | "style" | "template"))
-            });
-            (!hidden).then_some(text.to_string())
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
+    Some(
+        body.descendants()
+            .filter_map(|node| {
+                let text = node.value().as_text()?;
+                let hidden = node.ancestors().any(|ancestor| {
+                    ancestor
+                        .value()
+                        .as_element()
+                        .is_some_and(|el| matches!(el.name(), "script" | "style" | "template"))
+                });
+                (!hidden).then_some(text.to_string())
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+fn classify_browserless_html(html: &str) -> Option<SignInOutput> {
+    let document = Html::parse_document(html);
+    let text = body_text(&document)?;
     if text.contains("未登录") || text.contains("必须在登录后才能访问") {
         return None;
     }
@@ -1017,6 +1072,11 @@ fn summarize_browserless_sign_in_for_mode(
             .is_none_or(Value::is_null)
     {
         if turnstile {
+            if let Some(html) = result.pointer("/data/html/html").and_then(Value::as_str)
+                && html_body_text(html).contains("验证失败")
+            {
+                return Err("站点拒绝了 Turnstile 验证结果（页面提示验证失败）".to_string());
+            }
             let token_ready = ["/data/afterSolve/html", "/data/pending/afterSolve/html"]
                 .iter()
                 .filter_map(|path| result.pointer(path).and_then(Value::as_str))
@@ -1889,7 +1949,7 @@ mod tests {
             serde_json::from_value(config["browserless"].clone()).unwrap();
         // Keep the production query's control flow. Replace navigation and
         // CAPTCHA solving with a local fixture and a deterministic short wait.
-        let query = browserless_sign_in_query(false, false)
+        let query = browserless_sign_in_query(false, false, false)
             .replace(
                 "goto(url: $url, waitUntil: networkIdle) { status }",
                 "goto: evaluate(content: $url) { value }",
@@ -1963,6 +2023,31 @@ mod tests {
                 })
             );
         }
+    }
+
+    #[test]
+    fn browserless_turnstile_query_hooks_callback_after_navigation() {
+        let query = browserless_sign_in_query(false, true, true);
+        let goto = query.find("goto(url:").unwrap();
+        let hook = query.find("turnstileHook: evaluate").unwrap();
+        let solve = query.find("solve(type: cloudflare").unwrap();
+        assert!(goto < hook && hook < solve);
+        assert!(query.contains("$turnstileHook: String!"));
+        assert!(!browserless_sign_in_query(false, true, false).contains("turnstileHook"));
+    }
+
+    #[test]
+    fn browserless_turnstile_reports_site_rejection() {
+        let rejected = json!({"data": {
+            "goto": {"status": 200},
+            "solve": {"found": true, "solved": true},
+            "submit": null,
+            "html": {"html": "<body><h2>抱歉</h2><p>验证失败，请重试！</p><script>x='签到成功'</script></body>"}
+        }});
+        assert_eq!(
+            summarize_browserless_sign_in_for_mode(&rejected, true).unwrap_err(),
+            "站点拒绝了 Turnstile 验证结果（页面提示验证失败）"
+        );
     }
 
     #[test]
