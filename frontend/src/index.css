@@ -162,3 +162,5 @@ table, time, .tabular-nums { font-variant-numeric: tabular-nums; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+/* 列表搜索框自带清空按钮，隐藏浏览器原生的清除图标以免重复。 */
+.kirara-search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }

@@ -379,7 +379,11 @@ function TimeRangeControls({
           className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             mode === "custom" ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-container/80"
           }`}
-          onClick={() => setMode("custom")}
+          onClick={() => {
+            // 切换到日期范围时立即按当前日期查询，而不是继续显示快捷范围的数据。
+            if (mode !== "custom") onApply();
+            setMode("custom");
+          }}
         >
           <Calendar className="h-3 w-3 inline mr-1" />
           日期范围
@@ -421,7 +425,13 @@ function TimeRangeControls({
             value={customEnd}
             onChange={(e) => setCustomEnd(e.target.value)}
           />
-          <Button size="sm" className="h-8 px-3 text-xs" onClick={onApply}>
+          <Button
+            size="sm"
+            className="h-8 px-3 text-xs"
+            disabled={!customStart || !customEnd || customStart > customEnd}
+            title={customStart > customEnd ? "开始日期不能晚于结束日期" : undefined}
+            onClick={onApply}
+          >
             查询
           </Button>
         </div>
@@ -515,6 +525,10 @@ export function StatsPage() {
   const transferRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const torrentRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const downloaderRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 每个图表只采用最后一次请求的结果，快速切换筛选时旧响应不会覆盖新数据。
+  const requestSeq = useRef({ transfer: 0, torrent: 0, downloader: 0, daily: 0 });
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   // Fetch overview
   const fetchOverview = async () => {
@@ -536,9 +550,20 @@ export function StatsPage() {
   };
 
   const loadData = async () => {
-    setLoading(true);
     await Promise.all([fetchOverview(), fetchDownloaders()]);
     setLoading(false);
+  };
+
+  // “刷新全部”保留当前图表，只在按钮上显示进度，并让各趋势图重新拉取。
+  const refreshAll = async () => {
+    if (refreshingAll) return;
+    setRefreshingAll(true);
+    try {
+      await loadData();
+      setRefreshToken((value) => value + 1);
+    } finally {
+      setRefreshingAll(false);
+    }
   };
 
   // Fetch trend data for selected task(s)
@@ -552,6 +577,8 @@ export function StatsPage() {
     customSince?: string | null,
     customUntil?: string | null,
   ) => {
+    const seq = ++requestSeq.current[mode];
+    const isCurrent = () => seq === requestSeq.current[mode];
     setLoadingState(true);
     try {
       let end: number;
@@ -591,21 +618,23 @@ export function StatsPage() {
           mode === "transfer"
             ? mergeTransferSnapshotsByMinute(allData)
             : mergeTorrentSnapshotsByMinute(allData);
-        setData(merged);
+        if (isCurrent()) setData(merged);
       } else {
         const data = await api<TaskStatsSnapshot[]>(
           `/api/stats/trend?task_id=${taskId}&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}`,
         );
-        setData(
-          mode === "transfer"
-            ? toTransferGrowthSnapshots(data)
-            : sortSnapshots(data),
-        );
+        if (isCurrent()) {
+          setData(
+            mode === "transfer"
+              ? toTransferGrowthSnapshots(data)
+              : sortSnapshots(data),
+          );
+        }
       }
     } catch {
-      setData([]);
+      if (isCurrent()) setData([]);
     } finally {
-      setLoadingState(false);
+      if (isCurrent()) setLoadingState(false);
     }
   };
 
@@ -615,6 +644,8 @@ export function StatsPage() {
     customSince?: string | null,
     customUntil?: string | null,
   ) => {
+    const seq = ++requestSeq.current.downloader;
+    const isCurrent = () => seq === requestSeq.current.downloader;
     setDownloaderTrendLoading(true);
     try {
       let end: number;
@@ -709,26 +740,29 @@ export function StatsPage() {
             download_speed: value.download_speed,
             recorded_at,
           }));
-        setDownloaderSnapshots(merged);
+        if (isCurrent()) setDownloaderSnapshots(merged);
       } else {
         const data = await api<DownloaderSpeedSnapshot[]>(
           `/api/stats/downloader-speed-trend?downloader_id=${downloaderId}&hours=${effectiveHours}&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}`,
         );
-        setDownloaderSnapshots(data);
+        if (isCurrent()) setDownloaderSnapshots(data);
       }
     } catch {
-      setDownloaderSnapshots([]);
+      if (isCurrent()) setDownloaderSnapshots([]);
     } finally {
-      setDownloaderTrendLoading(false);
+      if (isCurrent()) setDownloaderTrendLoading(false);
     }
   };
+
+  // 概览每 30 秒轮询一次；趋势图只在任务集合变化时才重新拉取，而不是每次概览刷新都重拉。
+  const overviewTaskKey = overview ? overview.tasks.map((task) => task.task_id).join(",") : null;
 
   // Initial load & auto-refresh
   useEffect(() => {
     void loadData();
 
     timerRef.current = setInterval(() => {
-      void fetchOverview();
+      if (!document.hidden) void fetchOverview();
     }, 30_000);
 
     return () => {
@@ -744,7 +778,7 @@ export function StatsPage() {
       void fetchTaskTrend(selectedTransferTaskId, transferTrendHours, "transfer", setTransferTimeWindow, setTransferSnapshots, setTransferTrendLoading, cs, cu);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTransferTaskId, transferTrendHours, overview, transferRangeMode, transferCustomSince, transferCustomUntil]);
+  }, [selectedTransferTaskId, transferTrendHours, overviewTaskKey, transferRangeMode, transferCustomSince, transferCustomUntil, refreshToken]);
 
   useEffect(() => {
     if (overview) {
@@ -753,7 +787,7 @@ export function StatsPage() {
       void fetchTaskTrend(selectedTorrentTaskId, torrentTrendHours, "torrent", setTorrentTimeWindow, setTorrentSnapshots, setTorrentTrendLoading, cs, cu);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTorrentTaskId, torrentTrendHours, overview, torrentRangeMode, torrentCustomSince, torrentCustomUntil]);
+  }, [selectedTorrentTaskId, torrentTrendHours, overviewTaskKey, torrentRangeMode, torrentCustomSince, torrentCustomUntil, refreshToken]);
 
   useEffect(() => {
     if (downloaders.length > 0 || selectedDownloaderId === -1) {
@@ -762,10 +796,12 @@ export function StatsPage() {
       void fetchDownloaderTrend(selectedDownloaderId, downloaderTrendHours, cs, cu);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDownloaderId, downloaderTrendHours, downloaders, downloaderRangeMode, downloaderCustomSince, downloaderCustomUntil]);
+  }, [selectedDownloaderId, downloaderTrendHours, downloaders, downloaderRangeMode, downloaderCustomSince, downloaderCustomUntil, refreshToken]);
 
   // Daily transfer fetch
   useEffect(() => {
+    const seq = ++requestSeq.current.daily;
+    const isCurrent = () => seq === requestSeq.current.daily;
     const fetchDaily = async () => {
       setDailyLoading(true);
       try {
@@ -786,45 +822,48 @@ export function StatsPage() {
         const params = new URLSearchParams({ since, until });
         if (dailyTaskId !== -1) params.set("task_id", String(dailyTaskId));
         const data = await api<DailyTransferItem[]>(`/api/stats/daily-transfer?${params}`);
-        setDailyData(data);
+        if (isCurrent()) setDailyData(data);
       } catch {
-        setDailyData([]);
+        if (isCurrent()) setDailyData([]);
       } finally {
-        setDailyLoading(false);
+        if (isCurrent()) setDailyLoading(false);
       }
     };
     void fetchDaily();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dailyTaskId, dailyRangeMode, dailyQuickDays, dailySince, dailyUntil]);
+  }, [dailyTaskId, dailyRangeMode, dailyQuickDays, dailySince, dailyUntil, refreshToken]);
 
   useEffect(() => {
     if (transferRefreshRef.current) clearInterval(transferRefreshRef.current);
     if (transferRefreshSecs > 0 && transferRangeMode === "quick") {
       transferRefreshRef.current = setInterval(() => {
+        if (document.hidden) return;
         void fetchTaskTrend(selectedTransferTaskId, transferTrendHours, "transfer", setTransferTimeWindow, setTransferSnapshots, setTransferTrendLoading);
       }, transferRefreshSecs * 1000);
     }
     return () => {
       if (transferRefreshRef.current) clearInterval(transferRefreshRef.current);
     };
-  }, [selectedTransferTaskId, transferTrendHours, transferRefreshSecs, overview, transferRangeMode]);
+  }, [selectedTransferTaskId, transferTrendHours, transferRefreshSecs, overviewTaskKey, transferRangeMode]);
 
   useEffect(() => {
     if (torrentRefreshRef.current) clearInterval(torrentRefreshRef.current);
     if (torrentRefreshSecs > 0 && torrentRangeMode === "quick") {
       torrentRefreshRef.current = setInterval(() => {
+        if (document.hidden) return;
         void fetchTaskTrend(selectedTorrentTaskId, torrentTrendHours, "torrent", setTorrentTimeWindow, setTorrentSnapshots, setTorrentTrendLoading);
       }, torrentRefreshSecs * 1000);
     }
     return () => {
       if (torrentRefreshRef.current) clearInterval(torrentRefreshRef.current);
     };
-  }, [selectedTorrentTaskId, torrentTrendHours, torrentRefreshSecs, overview, torrentRangeMode]);
+  }, [selectedTorrentTaskId, torrentTrendHours, torrentRefreshSecs, overviewTaskKey, torrentRangeMode]);
 
   useEffect(() => {
     if (downloaderRefreshRef.current) clearInterval(downloaderRefreshRef.current);
     if (downloaderRefreshSecs > 0 && downloaderRangeMode === "quick") {
       downloaderRefreshRef.current = setInterval(() => {
+        if (document.hidden) return;
         void fetchDownloaderTrend(selectedDownloaderId, downloaderTrendHours);
       }, downloaderRefreshSecs * 1000);
     }
@@ -908,9 +947,10 @@ export function StatsPage() {
               variant="outline"
               size="sm"
               className="h-8 text-[11px] px-3 w-fit"
-              onClick={loadData}
+              disabled={refreshingAll}
+              onClick={() => void refreshAll()}
             >
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${refreshingAll ? "motion-safe:animate-spin" : ""}`} />
               刷新全部
             </Button>
           </div>

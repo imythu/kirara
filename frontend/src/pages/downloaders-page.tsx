@@ -38,7 +38,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { SearchBox } from "@/components/list-controls";
 import { formatDate } from "@/lib/format";
+import { scrollContentToTop } from "@/lib/utils";
 import type { DownloaderRecord, DownloaderSpaceStats, DownloaderTestResult, TransferableTorrent } from "@/types";
 
 function formatBytes(bytes: number): string {
@@ -127,7 +129,7 @@ export function DownloadersPage() {
   const [downloaders, setDownloaders] = useState<DownloaderRecord[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [spaceStats, setSpaceStats] = useState<Record<number, DownloaderSpaceStats>>({});
-  const [spaceStatsLoaded, setSpaceStatsLoaded] = useState(false);
+  const [spaceStatsFailed, setSpaceStatsFailed] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -144,7 +146,7 @@ export function DownloadersPage() {
   const [deleteTarget, setDeleteTarget] = useState<DownloaderRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const [testResult, setTestResult] = useState<DownloaderTestResult | null>(null);
+  const [testResult, setTestResult] = useState<(DownloaderTestResult & { name: string }) | null>(null);
   const [testing, setTesting] = useState<number | null>(null);
   const [directoryGroups, setDirectoryGroups] = useState<DirectoryGroup[] | null>(null);
   const [directoryAnalysisLoading, setDirectoryAnalysisLoading] = useState(false);
@@ -161,39 +163,25 @@ export function DownloadersPage() {
   const [filterReload, setFilterReload] = useState(0);
   const directoryAnalysisController = useRef<AbortController | null>(null);
 
+  // 列表到达即显示，空间状态逐个回填；慢的下载器不会拖住整张列表。刷新时保留旧数据，不闪回加载占位。
   function loadDownloaders() {
-    setLoading(true);
-    setSpaceStatsLoaded(false);
     api<DownloaderRecord[]>("/api/downloaders")
-      .then(async (items) => {
+      .then((items) => {
         setDownloaders(items);
-        const entries = await Promise.all(
-          items.map(async (downloader) => {
-            try {
-              const stats = await api<DownloaderSpaceStats>(`/api/downloaders/${downloader.id}/space`);
-              return [downloader.id, stats] as const;
-            } catch {
-              return null;
-            }
-          }),
-        );
-        const next: Record<number, DownloaderSpaceStats> = {};
-        for (const entry of entries) {
-          if (entry) {
-            next[entry[0]] = entry[1];
-          }
+        setLoading(false);
+        const ids = new Set(items.map((item) => item.id));
+        setSpaceStats((current) => Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(Number(id)))));
+        setSpaceStatsFailed(new Set());
+        for (const downloader of items) {
+          api<DownloaderSpaceStats>(`/api/downloaders/${downloader.id}/space`)
+            .then((stats) => setSpaceStats((current) => ({ ...current, [downloader.id]: stats })))
+            .catch(() => setSpaceStatsFailed((current) => new Set(current).add(downloader.id)));
         }
-        setSpaceStats(next);
-        setSpaceStatsLoaded(true);
-        setMessage("");
       })
       .catch((error: Error) => {
-        setDownloaders([]);
-        setSpaceStats({});
-        setSpaceStatsLoaded(true);
+        setLoading(false);
         setMessage(error.message || "加载下载器失败");
-      })
-      .finally(() => setLoading(false));
+      });
   }
 
   useEffect(() => {
@@ -260,6 +248,7 @@ export function DownloadersPage() {
     setMessage("");
     resetDirectoryAnalysis();
     setDetailId(id);
+    scrollContentToTop();
   }
 
   function resetDirectoryAnalysis() {
@@ -282,6 +271,7 @@ export function DownloadersPage() {
     resetDirectoryAnalysis();
     setDetailId(null);
     setTestResult(null);
+    scrollContentToTop();
   }
 
   async function analyzeSaveDirectories(id: number) {
@@ -346,6 +336,7 @@ export function DownloadersPage() {
   }
 
   async function handleSave() {
+    if (saving || !form.name || !form.url) return;
     setSaving(true);
     setSubmitError("");
     try {
@@ -388,15 +379,16 @@ export function DownloadersPage() {
   }
 
   async function handleTest(id: number) {
+    const name = downloaders.find((item) => item.id === id)?.name ?? `#${id}`;
     setTesting(id);
     setTestResult(null);
     try {
       const result = await api<DownloaderTestResult>(`/api/downloaders/${id}/test`, {
         method: "POST",
       });
-      setTestResult(result);
+      setTestResult({ ...result, name });
     } catch (error) {
-      setTestResult({ success: false, message: (error as Error).message || "请求失败", version: null, free_space: null });
+      setTestResult({ success: false, message: (error as Error).message || "请求失败", version: null, free_space: null, name });
     } finally {
       setTesting(null);
     }
@@ -460,7 +452,7 @@ export function DownloadersPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              disabled={testing === detailDownloader.id}
+              loading={testing === detailDownloader.id}
               onClick={() => handleTest(detailDownloader.id)}
             >
               <TestTubeDiagonal className="mr-2 h-4 w-4" />
@@ -493,7 +485,7 @@ export function DownloadersPage() {
           >
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <div className="font-medium">{testResult.success ? "连接成功" : "连接失败"}</div>
+                <div className="font-medium">「{testResult.name}」{testResult.success ? "连接成功" : "连接失败"}</div>
                 <div>{testResult.message}</div>
                 {testResult.version ? <div>客户端版本：{testResult.version}</div> : null}
                 {testResult.free_space !== null ? <div>可用空间：{formatBytes(testResult.free_space)}</div> : null}
@@ -513,7 +505,7 @@ export function DownloadersPage() {
                 当前空闲
               </div>
               <div className="mt-3 text-2xl font-semibold">
-                {detailSpaceStats ? formatBytes(detailSpaceStats.free_space) : spaceStatsLoaded ? "获取失败" : "加载中..."}
+                {detailSpaceStats ? formatBytes(detailSpaceStats.free_space) : spaceStatsFailed.has(detailDownloader.id) ? "获取失败" : "加载中..."}
               </div>
             </CardContent>
           </Card>
@@ -524,7 +516,7 @@ export function DownloadersPage() {
                 未完成剩余
               </div>
               <div className="mt-3 text-2xl font-semibold">
-                {detailSpaceStats ? formatBytes(detailSpaceStats.pending_download_bytes) : spaceStatsLoaded ? "获取失败" : "加载中..."}
+                {detailSpaceStats ? formatBytes(detailSpaceStats.pending_download_bytes) : spaceStatsFailed.has(detailDownloader.id) ? "获取失败" : "加载中..."}
               </div>
             </CardContent>
           </Card>
@@ -535,7 +527,7 @@ export function DownloadersPage() {
                 预测可用
               </div>
               <div className="mt-3 text-2xl font-semibold">
-                {detailSpaceStats ? formatBytes(detailSpaceStats.effective_free_space) : spaceStatsLoaded ? "获取失败" : "加载中..."}
+                {detailSpaceStats ? formatBytes(detailSpaceStats.effective_free_space) : spaceStatsFailed.has(detailDownloader.id) ? "获取失败" : "加载中..."}
               </div>
             </CardContent>
           </Card>
@@ -651,16 +643,13 @@ export function DownloadersPage() {
                 </div>
 
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="relative min-w-0 flex-1 lg:max-w-xl">
-                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                    <Input
-                      value={directoryQuery}
-                      onChange={(event) => setDirectoryQuery(event.target.value)}
-                      className="pl-10"
-                      placeholder="搜索路径、种子、标签或分类"
-                      aria-label="搜索保存路径、种子、标签或分类"
-                    />
-                  </div>
+                  <SearchBox
+                    className="flex-1 lg:max-w-xl"
+                    value={directoryQuery}
+                    onChange={setDirectoryQuery}
+                    placeholder="搜索路径、种子、标签或分类"
+                    label="搜索保存路径、种子、标签或分类"
+                  />
                   <div className="w-full lg:w-48">
                     <Select
                       aria-label="排序方式"
@@ -730,8 +719,24 @@ export function DownloadersPage() {
                 : "填写下载器连接信息。"
           }
           escMode="double"
+          footer={
+            <div className="space-y-3">
+              {submitError ? <Notice tone="error">{submitError}</Notice> : null}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" disabled={saving} onClick={closeDialog}>取消</Button>
+                <Button type="submit" form="downloader-form" loading={saving} disabled={!form.name || !form.url}>{saving ? "保存中…" : "保存"}</Button>
+              </div>
+            </div>
+          }
         >
-          <div className="space-y-4 p-4 sm:p-6">
+          <form
+            id="downloader-form"
+            className="space-y-4 p-4 sm:p-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSave();
+            }}
+          >
 
             {copySource?.password_configured ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -791,12 +796,7 @@ export function DownloadersPage() {
                 清除已保存密码
               </Label>
             ) : null}
-            {submitError ? <Notice tone="error">{submitError}</Notice> : null}
-            <div className="flex justify-end gap-2 border-t border-border pt-4">
-              <Button variant="outline" disabled={saving} onClick={closeDialog}>取消</Button>
-              <Button loading={saving} disabled={!form.name || !form.url} onClick={handleSave}>{saving ? "保存中…" : "保存"}</Button>
-            </div>
-          </div>
+          </form>
         </Dialog>
 
         <Dialog
@@ -843,7 +843,7 @@ export function DownloadersPage() {
         >
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
-              <div className="font-medium">{testResult.success ? "连接成功" : "连接失败"}</div>
+              <div className="font-medium">「{testResult.name}」{testResult.success ? "连接成功" : "连接失败"}</div>
               <div>{testResult.message}</div>
               {testResult.version && <div>版本：{testResult.version}</div>}
               {testResult.free_space !== null && (
@@ -909,8 +909,10 @@ export function DownloadersPage() {
                               <div>未完成剩余：{formatBytes(spaceStats[d.id].pending_download_bytes)}</div>
                               <div>预测可用：{formatBytes(spaceStats[d.id].effective_free_space)}</div>
                             </div>
+                          ) : spaceStatsFailed.has(d.id) ? (
+                            <span className="text-destructive">获取失败</span>
                           ) : (
-                            "加载中..."
+                            <span className="inline-flex items-center gap-1.5"><LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />加载中</span>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -975,7 +977,11 @@ export function DownloadersPage() {
                         <div>预测可用: {formatBytes(spaceStats[d.id].effective_free_space)}</div>
                         <div>未完成: {spaceStats[d.id].incomplete_count} / 总数: {spaceStats[d.id].torrent_count}</div>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="mt-2.5 text-[11px] text-muted">
+                        {spaceStatsFailed.has(d.id) ? "空间状态获取失败" : "正在读取空间状态…"}
+                      </div>
+                    )}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => openDetail(d.id)}>
                         <Eye className="mr-1.5 h-3.5 w-3.5" />

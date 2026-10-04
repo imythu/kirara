@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import type { GlobalConfig, ProxyTestResult } from "@/types";
@@ -45,13 +46,32 @@ export function SystemSettingsPage({
   settings,
   setSettings,
   saving,
+  dirty,
   onSave,
 }: {
   settings: GlobalConfig;
   setSettings: React.Dispatch<React.SetStateAction<GlobalConfig>>;
   saving: boolean;
+  dirty: boolean;
   onSave: () => Promise<void>;
 }) {
+  const [saveFeedback, setSaveFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+
+  // 继续编辑后，旧的保存结果不再代表当前表单。
+  useEffect(() => {
+    if (dirty) setSaveFeedback((current) => (current?.tone === "success" ? null : current));
+  }, [dirty]);
+
+  async function handleSave() {
+    setSaveFeedback(null);
+    try {
+      await onSave();
+      setSaveFeedback({ tone: "success", text: "系统设置已保存" });
+    } catch (error) {
+      setSaveFeedback({ tone: "error", text: (error as Error).message || "保存失败" });
+    }
+  }
+
   useEffect(() => {
     if (!COMMON_LOG_LEVELS.includes(settings.log_level ?? "")) {
       setSettings((prev) => ({ ...prev, log_level: "info" }));
@@ -65,6 +85,7 @@ export function SystemSettingsPage({
 
   const updateProxy = (patch: Partial<{ protocol: string; host: string; port: string }>) => {
     const next = { ...proxyParts, ...patch };
+    setTestResult(null);
     setSettings((prev) => ({ ...prev, proxy: buildProxy(next.protocol, next.host, next.port) }));
   };
 
@@ -95,6 +116,12 @@ export function SystemSettingsPage({
 
   return (
     <Card>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!saving) void handleSave();
+        }}
+      >
       <CardHeader>
         <CardTitle>系统设置</CardTitle>
         <CardDescription>全局后端程序配置。日志级别保存后会立即作用到整个后端进程。</CardDescription>
@@ -178,12 +205,20 @@ export function SystemSettingsPage({
                     type="url"
                     value={testUrl}
                     onChange={(e) => setTestUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      // 测试地址里按回车执行测试，而不是提交整个设置表单。
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (!testingProxy) void handleTestProxy();
+                      }
+                    }}
                     placeholder="https://www.google.com"
                   />
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={() => void handleTestProxy()} 
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleTestProxy()}
                   disabled={!settings.proxy}
                   loading={testingProxy}
                   className="w-full sm:w-auto"
@@ -220,12 +255,19 @@ export function SystemSettingsPage({
           )}
         </div>
 
-        <div className="sm:col-span-2 xl:col-span-3">
-          <Button onClick={() => void onSave()} loading={saving}>
-            {saving ? "保存中…" : "保存系统设置"}
-          </Button>
+        <div className="space-y-3 sm:col-span-2 xl:col-span-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" loading={saving}>
+              {saving ? "保存中…" : "保存系统设置"}
+            </Button>
+            {dirty && !saving ? <span className="text-xs text-muted" role="status">有未保存的修改</span> : null}
+          </div>
+          {saveFeedback ? (
+            <Notice tone={saveFeedback.tone} onDismiss={() => setSaveFeedback(null)}>{saveFeedback.text}</Notice>
+          ) : null}
         </div>
       </CardContent>
+      </form>
     </Card>
   );
 }

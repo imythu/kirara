@@ -24,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { SearchBox } from "@/components/list-controls";
 import type { DownloaderRecord, TransferableTorrent } from "@/types";
 
 type OpenListTargetDirectory = {
@@ -403,6 +404,11 @@ export function TorrentTransferPage() {
 
     async function poll(showLoading: boolean) {
       if (!active || generation !== jobPollGeneration.current) return;
+      // 标签页在后台时跳过本轮请求，回到前台后的下一轮再刷新。
+      if (!showLoading && document.hidden) {
+        timer = window.setTimeout(() => void poll(false), JOB_POLL_INTERVAL_MS);
+        return;
+      }
       if (showLoading) setJobsLoading(true);
       controller = new AbortController();
       jobPollController.current = controller;
@@ -813,19 +819,15 @@ export function TorrentTransferPage() {
                 options={targetOptions}
               />
             </div>
-            <div className="relative min-w-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-              <Input
-                value={keyword}
-                onChange={(event) => {
-                  setKeyword(event.target.value);
-                  setTorrentPage(1);
-                }}
-                placeholder="搜索名称或 info hash"
-                aria-label="搜索可转移种子"
-                className="pl-9"
-              />
-            </div>
+            <SearchBox
+              value={keyword}
+              onChange={(value) => {
+                setKeyword(value);
+                setTorrentPage(1);
+              }}
+              placeholder="搜索名称或 info hash"
+              label="搜索可转移种子"
+            />
           </div>
 
           {selectedTarget ? (

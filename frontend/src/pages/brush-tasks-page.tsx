@@ -3,6 +3,8 @@ import { Activity, ChevronLeft, ChevronRight, Edit, Eye, Pause, Play, Plus, Refr
 import { Button } from "@/components/ui/button";
 import { SearchFeedback, SearchPagination } from "@/components/search-controls";
 import { useServerSearch } from "@/lib/server-search";
+import { usePageState } from "@/lib/page-state";
+import { Highlight, SearchBox } from "@/components/list-controls";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -342,7 +344,7 @@ const selectClass =
 const checkboxClass = "h-4 w-4 rounded border border-border accent-[hsl(var(--primary))]";
 
 export function BrushTasksPage() {
-  const [taskQuery, setTaskQuery] = useState("");
+  const [taskQuery, setTaskQuery] = usePageState("brush:query", "");
   const [taskComposing, setTaskComposing] = useState(false);
   const [searchPollUntil, setSearchPollUntil] = useState(0);
   const [sites, setSites] = useState<SiteRecord[]>([]);
@@ -358,7 +360,10 @@ export function BrushTasksPage() {
   const [torrentsPageSize] = useState(20);
   const [torrentsTotal, setTorrentsTotal] = useState(0);
   const [torrentKeyword, setTorrentKeyword] = useState("");
+  const [debouncedTorrentKeyword, setDebouncedTorrentKeyword] = useState("");
   const [loadingTorrents, setLoadingTorrents] = useState(false);
+  const [torrentsLoaded, setTorrentsLoaded] = useState(false);
+  const [torrentsError, setTorrentsError] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -370,7 +375,7 @@ export function BrushTasksPage() {
   const [downloaderWeights, setDownloaderWeights] = useState<Record<number, number>>({});
 
   const taskSearch = useServerSearch<BrushTaskRecord>("/api/brush-tasks/search", {
-    query: taskQuery, composing: taskComposing, pollUntil: searchPollUntil,
+    query: taskQuery, composing: taskComposing, pollUntil: searchPollUntil, persistKey: "brush:tasks",
   });
   const tasks = taskSearch.records;
   function reload() { taskSearch.reload(); }
@@ -550,6 +555,9 @@ export function BrushTasksPage() {
     setTorrentsPage(1);
     setTorrentsTotal(0);
     setTorrentKeyword("");
+    setDebouncedTorrentKeyword("");
+    setTorrentsLoaded(false);
+    setTorrentsError("");
   }
 
   function setField<K extends keyof BrushTaskRequest>(key: K, value: BrushTaskRequest[K]) {
@@ -561,29 +569,45 @@ export function BrushTasksPage() {
     return value === "" || Number.isNaN(n) ? null : n;
   }
 
+  // 关键字输入停顿后再查询，避免每个按键都发请求。
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedTorrentKeyword(torrentKeyword.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [torrentKeyword]);
+
   useEffect(() => {
     if (!torrentsOpen || !torrentsTask) {
       return;
     }
 
+    let current = true;
     setLoadingTorrents(true);
     const params = new URLSearchParams({
       page: String(torrentsPage),
       page_size: String(torrentsPageSize),
     });
-    const keyword = torrentKeyword.trim();
-    if (keyword) {
-      params.set("keyword", keyword);
+    if (debouncedTorrentKeyword) {
+      params.set("keyword", debouncedTorrentKeyword);
     }
 
     api<BrushTaskTorrentsResponse>(`/api/brush-tasks/${torrentsTask.id}/torrents?${params.toString()}`)
       .then((data) => {
+        if (!current) return;
         setTorrents(data.records);
         setTorrentsTotal(data.total_records);
+        setTorrentsLoaded(true);
+        setTorrentsError("");
       })
-      .catch((error: Error) => setMessage(error.message || "加载种子列表失败"))
-      .finally(() => setLoadingTorrents(false));
-  }, [torrentKeyword, torrentsOpen, torrentsPage, torrentsPageSize, torrentsTask]);
+      .catch((error: Error) => {
+        if (current) setTorrentsError(error.message || "加载种子列表失败");
+      })
+      .finally(() => {
+        if (current) setLoadingTorrents(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [debouncedTorrentKeyword, torrentsOpen, torrentsPage, torrentsPageSize, torrentsTask]);
 
   const torrentsTotalPages = Math.max(1, Math.ceil(torrentsTotal / torrentsPageSize));
 
@@ -599,23 +623,20 @@ export function BrushTasksPage() {
                 <CardDescription>管理 PT 刷流任务，配置选种与删种规则，查看种子状态。</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={reload}>
-                  <RefreshCw className="mr-2 h-4 w-4" />刷新
+                <Button type="button" variant="outline" disabled={taskSearch.loading || taskSearch.refreshing} onClick={reload}>
+                  <RefreshCw className={cn("mr-2 h-4 w-4", (taskSearch.loading || taskSearch.refreshing) && "motion-safe:animate-spin")} />刷新
                 </Button>
                 <Button type="button" onClick={openAdd}>
                   <Plus className="mr-2 h-4 w-4" />添加任务
                 </Button>
               </div>
             </div>
-            <div className="relative">
-              <Label htmlFor="brush-task-search" className="sr-only">搜索刷流任务</Label>
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <Input id="brush-task-search" type="search" value={taskQuery} className="pl-10"
-                placeholder="搜索任务、站点别名、拼音或状态"
-                onChange={(event) => setTaskQuery(event.target.value)}
-                onCompositionStart={() => setTaskComposing(true)}
-                onCompositionEnd={(event) => { setTaskQuery(event.currentTarget.value); setTaskComposing(false); }} />
-            </div>
+            <SearchBox id="brush-task-search" value={taskQuery} label="搜索刷流任务"
+              busy={taskSearch.refreshing}
+              placeholder="搜索任务、站点别名、拼音或状态"
+              onChange={setTaskQuery}
+              onCompositionStart={() => setTaskComposing(true)}
+              onCompositionEnd={(value) => { setTaskQuery(value); setTaskComposing(false); }} />
           </CardHeader>
           <CardContent>
             <SearchFeedback search={taskSearch} onClearQuery={() => setTaskQuery("")} />
@@ -630,7 +651,7 @@ export function BrushTasksPage() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm truncate">{task.name}</span>
+                          <span className="font-semibold text-sm truncate"><Highlight text={task.name} query={taskQuery} /></span>
                           <span
                             className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                               task.enabled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
@@ -722,8 +743,29 @@ export function BrushTasksPage() {
         title={editingId !== null ? "编辑刷流任务" : "添加刷流任务"}
         description="配置任务的选种规则、删种策略和其他参数。"
         escMode="double"
+        footer={
+          <div className="space-y-3">
+            {/* 错误提示放在保存按钮旁，避免长表单中看不到 */}
+            {submitError ? <Notice tone="error">{submitError}</Notice> : null}
+            <div className="flex gap-3">
+              <Button type="submit" form="brush-task-form" loading={submitting}>
+                {submitting ? "提交中…" : editingId !== null ? "保存修改" : "创建任务"}
+              </Button>
+              <Button variant="outline" disabled={submitting} onClick={closeForm}>
+                取消
+              </Button>
+            </div>
+          </div>
+        }
       >
-        <div className="space-y-6 p-4 sm:p-6">
+        <form
+          id="brush-task-form"
+          className="space-y-6 p-4 sm:p-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!submitting) void handleSubmit();
+          }}
+        >
           {/* 基本设置 */}
           <section>
             <h4 className="mb-3 text-sm font-semibold">基本设置</h4>
@@ -1116,17 +1158,7 @@ export function BrushTasksPage() {
             </div>
           </section>
 
-          {/* 操作按钮：错误提示放在保存按钮旁，避免长表单中看不到 */}
-          {submitError ? <Notice tone="error">{submitError}</Notice> : null}
-          <div className="flex gap-3 border-t border-border pt-4">
-            <Button loading={submitting} onClick={() => void handleSubmit()}>
-              {submitting ? "提交中…" : editingId !== null ? "保存修改" : "创建任务"}
-            </Button>
-            <Button variant="outline" disabled={submitting} onClick={closeForm}>
-              取消
-            </Button>
-          </div>
-        </div>
+        </form>
       </Dialog>
 
       {/* 查看种子对话框 */}
@@ -1146,28 +1178,29 @@ export function BrushTasksPage() {
                 共 {torrentsTotal} 条
               </div>
             </div>
-            <div className="relative w-full sm:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <Input
-                className="h-11 rounded-2xl border-border/70 bg-card pl-9 shadow-sm"
-                type="search"
-                aria-label="搜索种子名称或种子ID"
-                placeholder="搜索名称或种子ID"
-                value={torrentKeyword}
-                onChange={(e) => {
-                  setTorrentKeyword(e.target.value);
-                  setTorrentsPage(1);
-                }}
-              />
-            </div>
+            <SearchBox
+              className="w-full sm:max-w-sm"
+              primary={false}
+              busy={loadingTorrents && torrentsLoaded}
+              label="搜索种子名称或种子ID"
+              placeholder="搜索名称或种子ID"
+              value={torrentKeyword}
+              onChange={(value) => {
+                setTorrentKeyword(value);
+                setTorrentsPage(1);
+              }}
+            />
           </div>
 
-          {loadingTorrents ? (
-            <LoadingState label="正在加载种子列表…" />
-          ) : torrents.length === 0 ? (
+          {torrentsError ? (
+            <Notice tone="error">{torrentsError}</Notice>
+          ) : null}
+          {!torrentsLoaded ? (
+            torrentsError ? null : <LoadingState label="正在加载种子列表…" />
+          ) : torrents.length === 0 && !loadingTorrents ? (
             <EmptyHint title={torrentKeyword ? "没有匹配的种子" : "暂无种子记录"}>{torrentKeyword ? "请更换关键词后重试。" : "任务选种并提交到下载器后，种子会显示在这里。"}</EmptyHint>
           ) : (
-            <div className="grid gap-3">
+            <div className={cn("grid gap-3 transition-opacity", loadingTorrents && "opacity-60")} aria-busy={loadingTorrents}>
               <Table className="table-fixed">
                 <TableHeader className="sticky top-0 z-10 backdrop-blur">
                   <TableRow>
@@ -1192,7 +1225,7 @@ export function BrushTasksPage() {
                     <TableRow key={t.id}>
                       <TableCell className="p-4 text-xs">
                         <div className="truncate font-medium text-foreground" title={t.torrent_name}>
-                          {t.torrent_name}
+                          <Highlight text={t.torrent_name} query={debouncedTorrentKeyword} />
                         </div>
                       </TableCell>
                       <TableCell className="p-4 text-xs font-mono">
@@ -1328,7 +1361,6 @@ export function BrushTasksPage() {
         onClose={() => setLastRunTask(null)}
         title={lastRunTask ? `${lastRunTask.name} · 最近执行` : "最近执行"}
         description="展示该刷流任务上一次执行采集的详细信息。"
-        escMode="double"
         panelClassName="max-w-3xl"
       >
         <div className="p-4 sm:p-6">

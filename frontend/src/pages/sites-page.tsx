@@ -34,6 +34,7 @@ import { SiteActionMenu } from "@/components/site-action-menu";
 import { SearchFeedback, SearchPagination } from "@/components/search-controls";
 import { SiteSearchBindingField, useSiteSearchBinding } from "@/components/site-search-binding";
 import { useServerSearch } from "@/lib/server-search";
+import { oneOf, usePageState } from "@/lib/page-state";
 import {
   Card,
   CardContent,
@@ -627,7 +628,7 @@ export function SitesPage() {
   const [sitesError, setSitesError] = useState("");
   const [actionsTarget, setActionsTarget] = useState<SiteRecord | null>(null);
   const [credentialMessage, setCredentialMessage] = useState("");
-  const [siteFiltersOpen, setSiteFiltersOpen] = useState(false);
+  const [siteFiltersOpen, setSiteFiltersOpen] = usePageState("sites:filters-open", false);
   const [refreshAllSubmitting, setRefreshAllSubmitting] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [siteCredentials, setSiteCredentials] = useState<Record<number, SiteCredentialsRecord>>({});
@@ -635,7 +636,7 @@ export function SitesPage() {
   const [loadingCredentialKeys, setLoadingCredentialKeys] = useState<Set<string>>(() => new Set());
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null);
   const [credentialsTarget, setCredentialsTarget] = useState<SiteRecord | null>(null);
-  const [siteQuery, setSiteQuery] = useState("");
+  const [siteQuery, setSiteQuery] = usePageState("sites:query", "");
   const [siteSort, setSiteSort] = useState(storedSiteSort);
   function changeSiteSort(value: string) {
     setSiteSort(value);
@@ -646,8 +647,8 @@ export function SitesPage() {
     }
   }
   const siteSearchInputRef = useRef<HTMLInputElement>(null);
-  const [siteStatusFilter, setSiteStatusFilter] = useState<"all" | SiteHealth>("all");
-  const [siteTypeFilter, setSiteTypeFilter] = useState("all");
+  const [siteStatusFilter, setSiteStatusFilter] = usePageState<"all" | SiteHealth>("sites:status", "all", oneOf(["all", "healthy", "failed", "pending"] as const));
+  const [siteTypeFilter, setSiteTypeFilter] = usePageState("sites:type", "all");
   const [siteComposing, setSiteComposing] = useState(false);
   const [sitePresets, setSitePresets] = useState<PtdSitePreset[]>([]);
   const [sitePresetsLoading, setSitePresetsLoading] = useState(true);
@@ -746,6 +747,7 @@ export function SitesPage() {
     enabled: !loading,
     refreshKey: sites,
     pageSize: SITE_PAGE_SIZE,
+    persistKey: "sites",
     filters: {
       sort: siteSort,
       health: siteStatusFilter === "all" ? undefined : siteStatusFilter,
@@ -756,8 +758,9 @@ export function SitesPage() {
 
   /* ---- data loading ---- */
 
+  // 已有列表时（保存、删除、同步后）静默刷新，保留当前列表与滚动位置，不闪回加载占位。
   function loadSites() {
-    setLoading(true);
+    if (sites.length === 0) setLoading(true);
     setSitesError("");
     setSiteCredentials({});
     setRevealedCredentialKeys(new Set());
@@ -1531,8 +1534,15 @@ export function SitesPage() {
                 onChange={(event) => setSiteQuery(event.target.value)}
                 onCompositionStart={() => setSiteComposing(true)}
                 onCompositionEnd={(event) => { setSiteQuery(event.currentTarget.value); setSiteComposing(false); }}
-                onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && !siteComposing) siteSearch.reload(); }}
-                className={`h-11 rounded-lg pl-10 ${siteQuery ? "pr-24" : "pr-12"}`}
+                type="search"
+                data-primary-search="true"
+                aria-keyshortcuts="/"
+                onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || siteComposing) return;
+                  if (event.key === "Enter") siteSearch.reload();
+                  else if (event.key === "Escape" && siteQuery) { event.preventDefault(); setSiteQuery(""); }
+                }}
+                className={`kirara-search-input h-11 rounded-lg pl-10 ${siteQuery ? "pr-24" : "pr-12"}`}
                 placeholder="搜索站点"
                 title="支持自定义名称、官方别名、拼音、账户和站点特色，可组合状态条件"
               />
@@ -1550,7 +1560,7 @@ export function SitesPage() {
               aria-controls="site-filters"
               onClick={() => setSiteFiltersOpen((open) => !open)}
             >
-              筛选{siteTypeFilter !== "all" || siteStatusFilter !== "all" ? ` · ${Number(siteTypeFilter !== "all") + Number(siteStatusFilter !== "all")}` : ""}
+              类型{siteTypeFilter !== "all" ? ` · 1` : ""}
               <ChevronDown className={`size-4 transition-transform ${siteFiltersOpen ? "rotate-180" : ""}`} />
             </Button>
           </section>
@@ -1559,8 +1569,14 @@ export function SitesPage() {
               <Label htmlFor="site-sort" className="sr-only">站点排序</Label>
               <Select id="site-sort" value={siteSort} onChange={changeSiteSort} className="w-full" options={SITE_SORT_OPTIONS} />
             </div>
-            <span className="shrink-0 text-xs text-muted" role="status">
-              {loading || siteSearch.loading || siteComposing ? "正在加载站点…" : sitesError || siteSearch.error ? "数量暂不可用" : siteSearch.total === sites.length ? `共 ${sites.length} 个站点` : `${siteSearch.total} / ${sites.length} 个站点`}
+            <span className="flex shrink-0 items-center gap-3 text-xs text-muted">
+              <span role="status">
+                {loading || siteSearch.loading || siteComposing ? "正在加载站点…" : sitesError || siteSearch.error ? "数量暂不可用" : siteSearch.total === sites.length ? `共 ${sites.length} 个站点` : `${siteSearch.total} / ${sites.length} 个站点`}
+              </span>
+              {siteQuery.trim() || siteTypeFilter !== "all" || siteStatusFilter !== "all" ? (
+                <button type="button" className="rounded font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => { setSiteQuery(""); setSiteTypeFilter("all"); setSiteStatusFilter("all"); }}>清除筛选</button>
+              ) : null}
             </span>
           </div>
           <div id="site-filters" className={`${siteFiltersOpen ? "flex" : "hidden"} flex-col gap-3 border-t border-border pt-3`}>
@@ -1579,7 +1595,7 @@ export function SitesPage() {
               ]}
             />
             </div>
-
+          </div>
 
           <section className="grid grid-cols-4 gap-1 sm:flex sm:flex-wrap sm:gap-2" aria-label="站点状态概览">
             {([
@@ -1597,7 +1613,7 @@ export function SitesPage() {
                   className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1 py-2 text-left transition-colors sm:px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-secondary text-secondary-foreground" : "text-muted hover:bg-accent/45"}`}
                   aria-pressed={selected}
                   aria-label={`${metric.label} ${sitesError && sites.length === 0 ? "数量未知" : metric.value}`}
-                  onClick={() => setSiteStatusFilter(metric.key)}
+                  onClick={() => setSiteStatusFilter(selected ? "all" : metric.key)}
                 >
                   <span className={`hidden size-6 shrink-0 items-center justify-center rounded-full sm:flex ${metric.tone}`}>
                     <MetricIcon className="size-4" />
@@ -1611,7 +1627,6 @@ export function SitesPage() {
               );
             })}
           </section>
-          </div>
 
           {!loading ? <SearchFeedback search={siteSearch} onClearQuery={() => { setSiteQuery(""); setSiteTypeFilter("all"); setSiteStatusFilter("all"); }} /> : null}
 

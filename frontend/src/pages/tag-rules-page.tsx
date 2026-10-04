@@ -11,6 +11,8 @@ import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import { FilterChips, FilterSummary, Highlight, SearchBox, SortableHead } from "@/components/list-controls";
+import { compareValues, matchesQuery, oneOf, usePageState, useSortState } from "@/lib/page-state";
 import type {
   DownloaderRecord,
   TagMatchCriteria,
@@ -155,6 +157,25 @@ export function TagRulesPage() {
   const [failedDownloaders, setFailedDownloaders] = useState<string[]>([]);
   const [selectedTrackerDomain, setSelectedTrackerDomain] = useState("");
   const [generatedRuleIndex, setGeneratedRuleIndex] = useState<number | null>(null);
+  const [togglingIds, setTogglingIds] = useState<number[]>([]);
+  const [ruleQuery, setRuleQuery] = usePageState("tag-rules:query", "");
+  const [enabledFilter, setEnabledFilter] = usePageState("tag-rules:enabled", "all", oneOf(["all", "enabled", "disabled"] as const));
+  const [sort, toggleSort] = useSortState("tag-rules:sort", { key: "updated", direction: "desc" }, ["name", "count", "updated"] as const);
+  const ruleFilterActive = Boolean(ruleQuery.trim()) || enabledFilter !== "all";
+  const visibleRules = useMemo(() => {
+    const rows = rules.filter((rule) => matchesQuery(ruleQuery, rule.tag_name, rule.match_rules)
+      && (enabledFilter === "all" || (enabledFilter === "enabled") === rule.enabled));
+    const sorted = rows.slice().sort((left, right) => sort.key === "name"
+      ? compareValues(left.tag_name, right.tag_name)
+      : sort.key === "count"
+        ? left.tagged_torrent_count - right.tagged_torrent_count || left.tagged_total_size - right.tagged_total_size
+        : compareValues(left.updated_at, right.updated_at));
+    return sort.direction === "asc" ? sorted : sorted.reverse();
+  }, [rules, ruleQuery, enabledFilter, sort]);
+  const clearRuleFilters = () => {
+    setRuleQuery("");
+    setEnabledFilter("all");
+  };
 
   const downloaderNameById = useMemo(
     () => new Map(downloaders.map((d) => [d.id, d.name])),
@@ -177,8 +198,8 @@ export function TagRulesPage() {
     [selectedTrackerDomain],
   );
 
+  // 首次加载显示占位；保存、删除、扫描后的刷新保留当前列表，避免整页闪烁和滚动位置丢失。
   function loadData() {
-    setLoading(true);
     Promise.all([
       api<TagRuleRecord[]>("/api/tag-rules"),
       api<DownloaderRecord[]>("/api/downloaders"),
@@ -253,7 +274,30 @@ export function TagRulesPage() {
     setFormOpen(true);
   }
 
+  async function toggleRuleEnabled(rule: TagRuleRecord) {
+    if (togglingIds.includes(rule.id)) return;
+    const enabled = !rule.enabled;
+    setTogglingIds((current) => [...current, rule.id]);
+    setRules((current) => current.map((item) => (item.id === rule.id ? { ...item, enabled } : item)));
+    try {
+      const payload: TagRuleRequest = { ...ruleToForm(rule), name: rule.tag_name, enabled };
+      await api(`/api/tag-rules/${rule.id}`, { method: "PUT", body: JSON.stringify(payload) });
+      setMessage(`标签规则「${rule.tag_name}」已${enabled ? "启用" : "停用"}`);
+      loadData();
+    } catch (err) {
+      setRules((current) => current.map((item) => (item.id === rule.id ? { ...item, enabled: rule.enabled } : item)));
+      setMessage(`切换「${rule.tag_name}」失败：${(err as Error).message}`);
+    } finally {
+      setTogglingIds((current) => current.filter((id) => id !== rule.id));
+    }
+  }
+
   async function handleSubmit() {
+    if (submitting) return;
+    if (!form.tag_name.trim()) {
+      setSubmitError("请填写标签名");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -309,6 +353,7 @@ export function TagRulesPage() {
     try {
       await api("/api/tag-rules/scan", { method: "POST" });
       setMessage("扫描完成");
+      loadData();
     } catch (err) {
       setMessage((err as Error).message);
     } finally {
@@ -388,7 +433,7 @@ export function TagRulesPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Tag className="h-5 w-5 text-primary" />
@@ -414,7 +459,7 @@ export function TagRulesPage() {
                 {savingInterval ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button variant="outline" onClick={handleScan} disabled={scanning} className="gap-2">
                 {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 立即扫描
@@ -432,20 +477,35 @@ export function TagRulesPage() {
               按 Tracker 域名或正则为下载器中的种子自动添加标签。
             </EmptyHint>
           ) : (
+            <div className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <FilterChips label="按启用状态筛选" value={enabledFilter} onChange={setEnabledFilter} options={[
+                { value: "all", label: "全部", count: rules.length },
+                { value: "enabled", label: "启用", count: rules.filter((rule) => rule.enabled).length },
+                { value: "disabled", label: "禁用", count: rules.filter((rule) => !rule.enabled).length },
+              ]} />
+              <SearchBox className="sm:w-80" value={ruleQuery} onChange={setRuleQuery} placeholder="搜索标签名或匹配内容" />
+            </div>
+            <FilterSummary shown={visibleRules.length} total={rules.length} noun="条规则" active={ruleFilterActive} onClear={clearRuleFilters} />
+            {visibleRules.length === 0 ? (
+              <EmptyHint title="没有符合条件的标签规则" action={<Button variant="outline" onClick={clearRuleFilters}>清除筛选</Button>}>
+                {ruleQuery.trim() ? `没有标签名或匹配内容包含“${ruleQuery.trim()}”。` : "调整筛选条件后再试。"}
+              </EmptyHint>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>标签名</TableHead>
-                  <TableHead>种子数</TableHead>
+                  <SortableHead label="标签名" sortKey="name" sort={sort} onSort={toggleSort} />
+                  <SortableHead label="种子数" sortKey="count" sort={sort} onSort={toggleSort} defaultDirection="desc" />
                   <TableHead>匹配规则</TableHead>
                   <TableHead>生效实例</TableHead>
                   <TableHead>状态</TableHead>
-                  <TableHead>更新时间</TableHead>
+                  <SortableHead label="更新时间" sortKey="updated" sort={sort} onSort={toggleSort} defaultDirection="desc" />
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rules.map((rule) => {
+                {visibleRules.map((rule) => {
                   let criteria: TagMatchCriteria[] = [];
                   try {
                     criteria = JSON.parse(rule.match_rules);
@@ -464,7 +524,7 @@ export function TagRulesPage() {
                     <TableRow key={rule.id}>
                       <TableCell>
                         <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                          {rule.tag_name}
+                          <Highlight text={rule.tag_name} query={ruleQuery} />
                         </span>
                       </TableCell>
                       <TableCell>
@@ -483,7 +543,7 @@ export function TagRulesPage() {
                               className="inline-flex items-center gap-1 rounded-full bg-surface-container px-2 py-0.5 text-xs text-foreground"
                             >
                               <span className="text-muted">{matchTypeLabel(c.match_type)}</span>
-                              <span className="max-w-[140px] truncate font-mono">{c.pattern}</span>
+                              <span className="max-w-[140px] truncate font-mono"><Highlight text={c.pattern} query={ruleQuery} /></span>
                             </span>
                           ))}
                         </div>
@@ -496,13 +556,21 @@ export function TagRulesPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            rule.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={rule.enabled}
+                          aria-label={`${rule.tag_name} 启用状态`}
+                          title={rule.enabled ? "点击停用" : "点击启用"}
+                          disabled={togglingIds.includes(rule.id)}
+                          onClick={() => void toggleRuleEnabled(rule)}
+                          className={`inline-flex min-h-7 items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 ${
+                            rule.enabled ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                           }`}
                         >
+                          {togglingIds.includes(rule.id) ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
                           {rule.enabled ? "启用" : "禁用"}
-                        </span>
+                        </button>
                       </TableCell>
                       <TableCell className="text-xs text-muted">{formatDate(rule.updated_at)}</TableCell>
                       <TableCell className="text-right">
@@ -532,6 +600,8 @@ export function TagRulesPage() {
                 })}
               </TableBody>
             </Table>
+            )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -542,8 +612,28 @@ export function TagRulesPage() {
         onClose={() => setFormOpen(false)}
         title={editingId ? "编辑标签规则" : "新增标签规则"}
         description="设置 Tracker 匹配规则，匹配成功的种子将自动添加对应标签。"
+        footer={
+          <div className="space-y-3">
+            {submitError ? <Notice tone="error">{submitError}</Notice> : null}
+            <div className="flex items-center justify-end gap-3">
+              <Button variant="outline" disabled={submitting} onClick={() => setFormOpen(false)}>
+                取消
+              </Button>
+              <Button type="submit" form="tag-rule-form" loading={submitting}>
+                {submitting ? "保存中…" : editingId ? "保存" : "创建"}
+              </Button>
+            </div>
+          </div>
+        }
       >
-        <div className="space-y-5 p-4 sm:p-6">
+        <form
+          id="tag-rule-form"
+          className="space-y-5 p-4 sm:p-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
 
           {/* 基本信息 */}
           <div className="space-y-2">
@@ -553,6 +643,7 @@ export function TagRulesPage() {
               value={form.tag_name}
               onChange={(e) => setForm((prev) => ({ ...prev, tag_name: e.target.value }))}
               placeholder="例如：mteam"
+              autoFocus
             />
           </div>
 
@@ -723,6 +814,7 @@ export function TagRulesPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
+                aria-pressed={isAllDownloaders}
                 onClick={setAllDownloaders}
                 className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                   isAllDownloaders
@@ -738,6 +830,7 @@ export function TagRulesPage() {
                   <button
                     key={d.id}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => toggleDownloader(d.id)}
                     className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                       selected
@@ -752,17 +845,7 @@ export function TagRulesPage() {
             </div>
           </div>
 
-          {/* 提交 */}
-          {submitError ? <Notice tone="error">{submitError}</Notice> : null}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <Button variant="outline" disabled={submitting} onClick={() => setFormOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleSubmit} loading={submitting}>
-              {submitting ? "保存中…" : editingId ? "保存" : "创建"}
-            </Button>
-          </div>
-        </div>
+        </form>
       </Dialog>
 
       {/* 删除确认 */}

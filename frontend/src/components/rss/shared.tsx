@@ -1,5 +1,5 @@
 import { AlertCircle, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, RefreshCw } from "lucide-react";
-import { Children, cloneElement, isValidElement, useId, useState, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useId, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { rssDate, rssSize, rssStatus, type RssAttributes, type RssEvaluation, type RssPreview } from "@/lib/rss-api";
@@ -48,8 +48,15 @@ export function ListSkeleton() {
 }
 
 export function Pager({ page, total, size, onChange }: { page: number; total: number; size: number; onChange: (page: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
   if (total === 0) return null;
-  return <div className="flex flex-wrap items-center justify-between gap-2 py-3 text-xs text-muted"><span className="tabular-nums">共 {total} 条 · 第 {page} / {Math.max(1, Math.ceil(total / size))} 页</span><div className="flex gap-2"><Button className="h-11 px-3" variant="outline" disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="上一页"><ChevronLeft /></Button><Button className="h-11 px-3" variant="outline" disabled={page * size >= total} onClick={() => onChange(page + 1)} aria-label="下一页"><ChevronRight /></Button></div></div>;
+  // 翻页后回到列表开头，而不是停留在底部的分页栏。
+  const goTo = (next: number) => {
+    onChange(next);
+    const list = ref.current?.parentElement;
+    if (list && list.getBoundingClientRect().top < 0) list.scrollIntoView({ block: "start" });
+  };
+  return <div ref={ref} className="flex flex-wrap items-center justify-between gap-2 py-3 text-xs text-muted"><span className="tabular-nums">共 {total} 条 · 第 {page} / {Math.max(1, Math.ceil(total / size))} 页</span><div className="flex gap-2"><Button className="h-11 px-3" variant="outline" disabled={page <= 1} onClick={() => goTo(page - 1)} aria-label="上一页"><ChevronLeft /></Button><Button className="h-11 px-3" variant="outline" disabled={page * size >= total} onClick={() => goTo(page + 1)} aria-label="下一页"><ChevronRight /></Button></div></div>;
 }
 
 const attributeSources: Record<string, string> = { rss: "RSS 订阅", torznab: "RSS 订阅", site: "关联站点", nexusphp: "关联站点", mteam: "关联站点", unknown: "暂未取得" };

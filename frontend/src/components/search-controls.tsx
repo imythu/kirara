@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SearchControls } from "@/lib/server-search";
@@ -42,15 +43,25 @@ export function SearchFeedback({ search, onClearQuery }: { search: SearchControl
 }
 
 export function SearchPagination({ search, label = "搜索结果" }: { search: SearchControls; label?: string }) {
+  const navRef = useRef<HTMLElement>(null);
   if (search.loading || search.composing || search.error || search.pageCount <= 1) return null;
+  // 翻页后回到列表开头，而不是停留在底部的分页栏。
+  const goTo = (page: number) => {
+    search.setPage(page);
+    const list = navRef.current?.parentElement;
+    if (list && list.getBoundingClientRect().top < 0) list.scrollIntoView({ block: "start" });
+  };
   return (
-    <nav aria-label={`${label}分页`} className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-      <span className="text-sm text-muted">第 {search.page} / {search.pageCount} 页 · 共 {search.total} 条</span>
+    <nav ref={navRef} aria-label={`${label}分页`} className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <span className="flex items-center gap-2 text-sm text-muted">
+        第 {search.page} / {search.pageCount} 页 · 共 {search.total} 条
+        {search.refreshing ? <Loader2 className="size-4 animate-spin" aria-label="正在加载" /> : null}
+      </span>
       <div className="flex gap-2">
-        <Button type="button" variant="outline" onClick={() => search.setPage(search.page - 1)} disabled={search.page <= 1}>
+        <Button type="button" variant="outline" onClick={() => goTo(search.page - 1)} disabled={search.page <= 1}>
           <ChevronLeft className="mr-1 size-4" aria-hidden="true" />上一页
         </Button>
-        <Button type="button" variant="outline" onClick={() => search.setPage(search.page + 1)} disabled={search.page >= search.pageCount}>
+        <Button type="button" variant="outline" onClick={() => goTo(search.page + 1)} disabled={search.page >= search.pageCount}>
           下一页<ChevronRight className="ml-1 size-4" aria-hidden="true" />
         </Button>
       </div>

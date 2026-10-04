@@ -1,6 +1,10 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// 打开中的对话框栈：嵌套打开时只有最上层响应 Esc / Tab，并且显示在最上面。
+const openDialogStack: symbol[] = [];
+let overflowBeforeDialogs = "";
 
 export function Dialog({
   open,
@@ -28,6 +32,8 @@ export function Dialog({
   const onCloseRef = useRef(onClose);
   const titleId = useId();
   const descriptionId = useId();
+  const stackTokenRef = useRef(Symbol("dialog"));
+  const [stackDepth, setStackDepth] = useState(0);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -39,18 +45,34 @@ export function Dialog({
       return;
     }
 
+    const stackToken = stackTokenRef.current;
+    openDialogStack.push(stackToken);
+    setStackDepth(openDialogStack.length);
+    const isTopmost = () => openDialogStack[openDialogStack.length - 1] === stackToken;
     previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const previousOverflow = document.body.style.overflow;
+    if (openDialogStack.length === 1) overflowBeforeDialogs = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusFrame = window.requestAnimationFrame(() => {
-      const firstFocusable = getFocusableElements(panelRef.current)[0];
-      (firstFocusable ?? panelRef.current)?.focus();
+      const panel = panelRef.current;
+      // 已有元素（autoFocus）获得焦点时保持不变。
+      if (!panel || panel.contains(document.activeElement)) return;
+      // 优先聚焦内容区第一个控件，而不是标题栏的关闭按钮；触屏设备不主动聚焦输入框以免弹出键盘遮挡内容。
+      const body = panel.querySelector<HTMLElement>("[data-dialog-body]");
+      const firstInBody = getFocusableElements(body)[0];
+      const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+      const isTextField = firstInBody instanceof HTMLTextAreaElement
+        || (firstInBody instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit"].includes(firstInBody.type));
+      if (firstInBody && !(coarse && isTextField)) {
+        firstInBody.focus({ preventScroll: true });
+      } else {
+        panel.focus({ preventScroll: true });
+      }
     });
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || !isTopmost()) return;
       if (event.key === "Tab") {
         const focusable = getFocusableElements(panelRef.current);
         if (focusable.length === 0) {
@@ -97,7 +119,9 @@ export function Dialog({
     return () => {
       window.cancelAnimationFrame(focusFrame);
       window.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      const index = openDialogStack.lastIndexOf(stackToken);
+      if (index >= 0) openDialogStack.splice(index, 1);
+      if (openDialogStack.length === 0) document.body.style.overflow = overflowBeforeDialogs;
       if (previouslyFocusedRef.current?.isConnected) {
         previouslyFocusedRef.current.focus();
       }
@@ -110,6 +134,7 @@ export function Dialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-night/45 p-0 sm:items-center sm:p-4"
+      style={stackDepth > 1 ? { zIndex: 50 + stackDepth } : undefined}
       onPointerDown={(event) => {
         pointerDownOnBackdropRef.current = event.target === event.currentTarget;
       }}
@@ -129,7 +154,7 @@ export function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          "flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-xl sm:rounded-2xl",
+          "flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-xl focus-visible:outline-none sm:rounded-2xl",
           panelClassName,
         )}
         onClick={(event) => event.stopPropagation()}
@@ -148,7 +173,7 @@ export function Dialog({
             <X className="size-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">{children}</div>
+        <div data-dialog-body className="min-h-0 flex-1 overflow-auto overscroll-contain">{children}</div>
         {footer ? <div className="shrink-0 border-t border-border bg-card px-4 py-3 sm:px-6">{footer}</div> : null}
       </div>
     </div>

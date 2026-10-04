@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useId, useRef, useState, type SVGProps } from "react";
+import { Suspense, lazy, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import {
   BarChart3,
   BookOpen,
@@ -67,25 +67,43 @@ const navGroups: Array<{ key: NavGroup; label: string }> = [
   { key: "system", label: "系统与监控" },
 ];
 
-const SitesPage = lazy(() => import("@/pages/sites-page").then((module) => ({ default: module.SitesPage })));
-const InviteProfilePage = lazy(() =>
-  import("@/pages/invite-profile-page").then((module) => ({ default: module.InviteProfilePage })),
-);
-const DownloadersPage = lazy(() => import("@/pages/downloaders-page").then((module) => ({ default: module.DownloadersPage })));
-const TorrentTransferPage = lazy(() => import("@/pages/torrent-transfer-page").then((module) => ({ default: module.TorrentTransferPage })));
-const BrushTasksPage = lazy(() => import("@/pages/brush-tasks-page").then((module) => ({ default: module.BrushTasksPage })));
-const ScheduledTasksPage = lazy(() => import("@/pages/scheduled-tasks-page").then((module) => ({ default: module.ScheduledTasksPage })));
-const SignInPage = lazy(() => import("@/pages/sign-in-page").then((module) => ({ default: module.SignInPage })));
-const TagRulesPage = lazy(() => import("@/pages/tag-rules-page").then((module) => ({ default: module.TagRulesPage })));
-const StatsPage = lazy(() => import("@/pages/stats-page").then((module) => ({ default: module.StatsPage })));
-const SystemSettingsPage = lazy(() =>
-  import("@/pages/system-settings-page").then((module) => ({ default: module.SystemSettingsPage })),
-);
-const SystemOverviewPage = lazy(() =>
-  import("@/pages/system-overview-page").then((module) => ({ default: module.SystemOverviewPage })),
-);
-const MediaPage = lazy(() => import("@/pages/media-page").then((module) => ({ default: module.MediaPage })));
-const RssPage = lazy(() => import("@/pages/rss-page").then((module) => ({ default: module.RssPage })));
+// 页面模块加载器：既用于 lazy，也用于悬停/空闲时预取，切换页面时无需再等待分包下载。
+const pageLoaders = {
+  sites: () => import("@/pages/sites-page"),
+  "invite-profile": () => import("@/pages/invite-profile-page"),
+  downloaders: () => import("@/pages/downloaders-page"),
+  "torrent-transfer": () => import("@/pages/torrent-transfer-page"),
+  "brush-tasks": () => import("@/pages/brush-tasks-page"),
+  "scheduled-tasks": () => import("@/pages/scheduled-tasks-page"),
+  "sign-in": () => import("@/pages/sign-in-page"),
+  "tag-rules": () => import("@/pages/tag-rules-page"),
+  stats: () => import("@/pages/stats-page"),
+  "system-settings": () => import("@/pages/system-settings-page"),
+  "system-overview": () => import("@/pages/system-overview-page"),
+  media: () => import("@/pages/media-page"),
+  rss: () => import("@/pages/rss-page"),
+} satisfies Record<AppPage, () => Promise<unknown>>;
+
+const prefetchedPages = new Set<AppPage>();
+function prefetchPage(page: AppPage) {
+  if (prefetchedPages.has(page)) return;
+  prefetchedPages.add(page);
+  pageLoaders[page]().catch(() => prefetchedPages.delete(page));
+}
+
+const SitesPage = lazy(() => pageLoaders.sites().then((module) => ({ default: module.SitesPage })));
+const InviteProfilePage = lazy(() => pageLoaders["invite-profile"]().then((module) => ({ default: module.InviteProfilePage })));
+const DownloadersPage = lazy(() => pageLoaders.downloaders().then((module) => ({ default: module.DownloadersPage })));
+const TorrentTransferPage = lazy(() => pageLoaders["torrent-transfer"]().then((module) => ({ default: module.TorrentTransferPage })));
+const BrushTasksPage = lazy(() => pageLoaders["brush-tasks"]().then((module) => ({ default: module.BrushTasksPage })));
+const ScheduledTasksPage = lazy(() => pageLoaders["scheduled-tasks"]().then((module) => ({ default: module.ScheduledTasksPage })));
+const SignInPage = lazy(() => pageLoaders["sign-in"]().then((module) => ({ default: module.SignInPage })));
+const TagRulesPage = lazy(() => pageLoaders["tag-rules"]().then((module) => ({ default: module.TagRulesPage })));
+const StatsPage = lazy(() => pageLoaders.stats().then((module) => ({ default: module.StatsPage })));
+const SystemSettingsPage = lazy(() => pageLoaders["system-settings"]().then((module) => ({ default: module.SystemSettingsPage })));
+const SystemOverviewPage = lazy(() => pageLoaders["system-overview"]().then((module) => ({ default: module.SystemOverviewPage })));
+const MediaPage = lazy(() => pageLoaders.media().then((module) => ({ default: module.MediaPage })));
+const RssPage = lazy(() => pageLoaders.rss().then((module) => ({ default: module.RssPage })));
 
 const navItems: Array<{
   key: AppPage;
@@ -229,20 +247,15 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [selfUse, setSelfUse] = useState(false);
   const [settings, setSettings] = useState<GlobalConfig>(defaultSettings);
+  const [savedSettings, setSavedSettings] = useState<GlobalConfig>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [navQuery, setNavQuery] = useState("");
   const [closedGroups, setClosedGroups] = useState<NavGroup[]>([]);
   const menuPanelRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
   const [logsOpen, setLogsOpen] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [logsConnected, setLogsConnected] = useState(false);
-  const [logLevelFilter, setLogLevelFilter] = useState<LogLevel>("trace");
-  const [logKeywordFilter, setLogKeywordFilter] = useState("");
-  const logsViewportRef = useRef<HTMLDivElement | null>(null);
-  const pendingLogsRef = useRef<string[]>([]);
 
   const currentNav =
     page === "system-overview"
@@ -252,18 +265,11 @@ export default function App() {
     (item.key !== "torrent-transfer" || selfUse) && item.label.toLowerCase().includes(navQuery.trim().toLowerCase()),
   );
   const effectiveLogLevel = getEffectiveLogLevel(settings);
-  const selectableLogLevels = LOG_LEVELS.filter(
-    (level) => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[effectiveLogLevel],
-  );
-
-  useEffect(() => {
-    if (logsOpen) {
-      setLogLevelFilter(effectiveLogLevel);
-    }
-  }, [logsOpen, effectiveLogLevel]);
 
   async function loadSettings() {
-    setSettings(await api<GlobalConfig>("/api/settings"));
+    const loaded = await api<GlobalConfig>("/api/settings");
+    setSettings(loaded);
+    setSavedSettings(loaded);
   }
 
   useEffect(() => {
@@ -285,7 +291,108 @@ export default function App() {
     ])
       .catch((error: Error) => setMessage(error.message))
       .finally(() => setLoading(false));
+  }, []);
+
+  // 进入系统设置时重新读取服务端配置，丢弃上次离开时未保存的草稿。
+  const enteredSettingsRef = useRef(page === "system-settings");
+  useEffect(() => {
+    if (page !== "system-settings") {
+      enteredSettingsRef.current = false;
+      return;
+    }
+    if (enteredSettingsRef.current) return;
+    enteredSettingsRef.current = true;
+    loadSettings().catch((error: Error) => setMessage(error.message));
   }, [page]);
+
+  // 每个页面记住自己的滚动位置：回到页面时恢复到离开时的位置，首次进入从顶部开始。
+  // 页面数据异步到达，因此在内容足够高之前持续尝试，用户一旦主动滚动就停止。
+  const scrollPositions = useRef(new Map<AppPage, number>());
+  const scrollPageRef = useRef(page);
+  const restoringScrollRef = useRef(false);
+  useEffect(() => {
+    const content = contentRef.current;
+    const record = () => {
+      if (restoringScrollRef.current) return;
+      const top = content && content.scrollHeight > content.clientHeight ? content.scrollTop : window.scrollY;
+      scrollPositions.current.set(scrollPageRef.current, top);
+    };
+    content?.addEventListener("scroll", record, { passive: true });
+    window.addEventListener("scroll", record, { passive: true });
+    return () => {
+      content?.removeEventListener("scroll", record);
+      window.removeEventListener("scroll", record);
+    };
+  }, [loading]);
+  useLayoutEffect(() => {
+    scrollPageRef.current = page;
+    const content = contentRef.current;
+    const target = scrollPositions.current.get(page) ?? 0;
+    const apply = () => {
+      content?.scrollTo({ top: target });
+      window.scrollTo({ top: target });
+    };
+    restoringScrollRef.current = true;
+    apply();
+    if (target === 0) {
+      restoringScrollRef.current = false;
+      return;
+    }
+    let frame = 0;
+    const startedAt = performance.now();
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      restoringScrollRef.current = false;
+      for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) window.removeEventListener(type, stop, true);
+    };
+    const step = () => {
+      apply();
+      const current = content && content.scrollHeight > content.clientHeight ? content.scrollTop : window.scrollY;
+      if (Math.abs(current - target) < 2 || performance.now() - startedAt > 2000) stop();
+      else frame = requestAnimationFrame(step);
+    };
+    for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) window.addEventListener(type, stop, { capture: true, passive: true });
+    frame = requestAnimationFrame(step);
+    return stop;
+  }, [page]);
+
+  // 在任意位置按 “/” 聚焦当前页面的主搜索框（正在输入或打开对话框时不拦截）。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='dialog']")) return;
+      if (document.querySelector("[role='dialog'][aria-modal='true']")) return;
+      const search = Array.from(document.querySelectorAll<HTMLInputElement>("[data-primary-search]"))
+        .find((element) => element.offsetParent !== null && !element.disabled);
+      if (!search) return;
+      event.preventDefault();
+      search.focus();
+      search.select();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // 启动后空闲时预取其余页面分包，切换菜单时不再出现加载占位。
+  useEffect(() => {
+    if (loading) return;
+    const pages = (Object.keys(pageLoaders) as AppPage[]).filter((key) => key !== "torrent-transfer" || selfUse);
+    let index = 0;
+    let handle = 0;
+    const idle = typeof window.requestIdleCallback === "function";
+    const schedule = (callback: () => void) => idle
+      ? window.requestIdleCallback(callback, { timeout: 3000 })
+      : window.setTimeout(callback, 600);
+    const cancel = (id: number) => idle ? window.cancelIdleCallback(id) : window.clearTimeout(id);
+    const step = () => {
+      if (index >= pages.length) return;
+      prefetchPage(pages[index++]);
+      handle = schedule(step);
+    };
+    handle = schedule(step);
+    return () => cancel(handle);
+  }, [loading, selfUse]);
 
   useEffect(() => {
     if (!loading && !selfUse && page === "torrent-transfer") {
@@ -294,11 +401,6 @@ export default function App() {
       window.history.replaceState(null, "", "#/");
     }
   }, [loading, selfUse, page]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -352,87 +454,6 @@ export default function App() {
     };
   }, [menuOpen]);
 
-  useEffect(() => {
-    if (!logsOpen) return;
-
-    let closed = false;
-    let source: { close: () => void } | null = null;
-    let flushTimer: number | null = null;
-    setLogs([]);
-    pendingLogsRef.current = [];
-
-    const enqueueLog = (line: string) => {
-      pendingLogsRef.current.push(line);
-    };
-
-    const flushLogs = () => {
-      if (pendingLogsRef.current.length === 0) {
-        return;
-      }
-
-      const pending = pendingLogsRef.current;
-      pendingLogsRef.current = [];
-      setLogs((prev) => {
-        const next = prev.concat(pending);
-        return next.length > MAX_LOG_LINES ? next.slice(next.length - MAX_LOG_LINES) : next;
-      });
-    };
-
-    flushTimer = window.setInterval(flushLogs, LOG_FLUSH_INTERVAL_MS);
-
-    source = subscribeLogs({
-      onOpen: () => {
-        if (!closed) setLogsConnected(true);
-      },
-      onLog: (data) => {
-        if (closed) return;
-        try {
-          const payload = JSON.parse(data) as { encoded_line?: string };
-          if (typeof payload.encoded_line === "string") {
-            enqueueLog(decodeURIComponent(payload.encoded_line));
-          }
-        } catch {
-          enqueueLog(data);
-        }
-      },
-      onError: () => {
-        if (!closed) setLogsConnected(false);
-      },
-    });
-
-    return () => {
-      closed = true;
-      setLogsConnected(false);
-      if (flushTimer !== null) {
-        window.clearInterval(flushTimer);
-      }
-      flushLogs();
-      pendingLogsRef.current = [];
-      source?.close();
-    };
-  }, [logsOpen]);
-
-  const filteredLogs = logs.filter((line) => {
-    const lineLevel = extractLogLevel(line);
-    if (lineLevel && LOG_LEVEL_PRIORITY[lineLevel] < LOG_LEVEL_PRIORITY[logLevelFilter]) {
-      return false;
-    }
-
-    if (logKeywordFilter.trim() !== "") {
-      return line.toLowerCase().includes(logKeywordFilter.trim().toLowerCase());
-    }
-
-    return true;
-  });
-
-  useEffect(() => {
-    if (!logsOpen) return;
-    logsViewportRef.current?.scrollTo({
-      top: logsViewportRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [logs, logsOpen]);
-
   function navigate(nextPage: AppPage) {
     if (nextPage === "torrent-transfer" && !selfUse) return;
     lastVisited.current.set(readPageFromHash(), window.location.hash);
@@ -440,8 +461,10 @@ export default function App() {
     setHash(nextPage, lastVisited.current.get(nextPage));
     setMenuOpen(false);
     setNavQuery("");
+    setMessage("");
   }
 
+  /** 保存失败时抛出错误，由设置页在保存按钮旁就地显示结果。 */
   async function saveSettings() {
     setSaving(true);
     try {
@@ -450,13 +473,35 @@ export default function App() {
         body: JSON.stringify(settings),
       });
       setSettings(saved);
-      setMessage("设置已保存");
-    } catch (error) {
-      setMessage((error as Error).message);
+      setSavedSettings(saved);
     } finally {
       setSaving(false);
     }
   }
+  const settingsDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
+
+  // 页面元素只在路由或其依赖变化时重建，菜单搜索、日志弹窗等外壳状态变化不会让整页重新渲染。
+  const pageContent = useMemo(() => (
+    <>
+      {page === "system-overview" ? <SystemOverviewPage /> : null}
+      {page === "media" ? <MediaPage /> : null}
+      {page === "rss" ? <RssPage /> : null}
+      {page === "sites" ? <SitesPage /> : null}
+      {page === "invite-profile" ? <InviteProfilePage /> : null}
+      {page === "downloaders" ? <DownloadersPage /> : null}
+      {page === "torrent-transfer" && selfUse ? <TorrentTransferPage /> : null}
+      {page === "brush-tasks" ? <BrushTasksPage /> : null}
+      {page === "scheduled-tasks" ? <ScheduledTasksPage /> : null}
+      {page === "sign-in" ? <SignInPage /> : null}
+      {page === "tag-rules" ? <TagRulesPage /> : null}
+      {page === "stats" ? <StatsPage /> : null}
+      {page === "system-settings" ? (
+        <SystemSettingsPage settings={settings} setSettings={setSettings} saving={saving} dirty={settingsDirty} onSave={saveSettings} />
+      ) : null}
+    </>
+    // saveSettings 每次渲染都是新函数，但它只读取最新的 settings，随 settings 重建即可。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [page, selfUse, settings, saving, settingsDirty]);
 
   if (loading) {
     return <LoadingState className="min-h-[100dvh]" label="正在启动云母…" />;
@@ -588,7 +633,7 @@ export default function App() {
         ) : null}
 
         {/* Keep absolute descendants, including sr-only labels, inside this scroll container. */}
-        <section className="kirara-content relative min-h-0 min-w-0 overflow-y-auto sm:p-6 lg:px-8 lg:py-7 xl:px-10">
+        <section ref={contentRef} className="kirara-content relative min-h-0 min-w-0 overflow-y-auto sm:p-6 lg:px-8 lg:py-7 xl:px-10">
           <header className="kirara-page-header relative pb-6">
             <div className="relative flex items-center justify-between gap-3 lg:items-start">
               <div className="flex min-w-0 items-center gap-2 lg:items-start lg:gap-3">
@@ -610,9 +655,7 @@ export default function App() {
 
               <div className="flex shrink-0 items-center justify-end gap-2">
                 <div aria-hidden="true" className="kirara-header-art hidden xl:block" />
-                <div className="hidden px-3 py-2 text-xs text-muted xl:block">
-                  {currentTime.toLocaleString("zh-CN", { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
-                </div>
+                <HeaderClock />
                 <Button variant="outline" className="h-9 px-3 lg:h-10 lg:px-5" onClick={() => setLogsOpen(true)} aria-label="实时日志">
                   <FileText className="h-4 w-4 lg:mr-2" />
                   <span className="hidden lg:inline">实时日志</span>
@@ -624,83 +667,192 @@ export default function App() {
           {message ? <Notice className="mt-4" onDismiss={() => setMessage("")}>{message}</Notice> : null}
 
           <Suspense fallback={<LoadingState className="mt-4 rounded-2xl border border-border bg-card" label="页面加载中…" />}>
-            <div className="mt-4">
-              {page === "system-overview" ? <SystemOverviewPage /> : null}
-              {page === "media" ? <MediaPage /> : null}
-              {page === "rss" ? <RssPage /> : null}
-              {page === "sites" ? <SitesPage /> : null}
-              {page === "invite-profile" ? <InviteProfilePage /> : null}
-              {page === "downloaders" ? <DownloadersPage /> : null}
-              {page === "torrent-transfer" && selfUse ? <TorrentTransferPage /> : null}
-              {page === "brush-tasks" ? <BrushTasksPage /> : null}
-              {page === "scheduled-tasks" ? <ScheduledTasksPage /> : null}
-              {page === "sign-in" ? <SignInPage /> : null}
-              {page === "tag-rules" ? <TagRulesPage /> : null}
-              {page === "stats" ? <StatsPage /> : null}
-              {page === "system-settings" ? (
-                <SystemSettingsPage settings={settings} setSettings={setSettings} saving={saving} onSave={saveSettings} />
-              ) : null}
-            </div>
+            <div className="mt-4">{pageContent}</div>
           </Suspense>
         </section>
       </div>
 
-      <Dialog open={logsOpen} onClose={() => setLogsOpen(false)} title="实时日志" description="查看后端程序的最近日志和实时输出。">
-        <div className="space-y-4 p-4 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <span
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium",
-                logsConnected ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
-              )}
+      <LogsDialog open={logsOpen} onClose={() => setLogsOpen(false)} effectiveLogLevel={effectiveLogLevel} />
+    </main>
+  );
+}
+
+/** 头部时钟只显示到分钟，独立组件按分钟对齐刷新，避免每秒重渲染整个应用。 */
+function HeaderClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let timer = 0;
+    const tick = () => {
+      const current = new Date();
+      setNow(current);
+      timer = window.setTimeout(tick, 60_000 - (current.getSeconds() * 1000 + current.getMilliseconds()) + 50);
+    };
+    timer = window.setTimeout(tick, 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="hidden px-3 py-2 text-xs text-muted xl:block">
+      {now.toLocaleString("zh-CN", { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
+    </div>
+  );
+}
+
+/** 距离底部小于该像素时视为“跟随最新”，新日志到达时自动滚到底部。 */
+const LOG_STICK_THRESHOLD_PX = 48;
+
+function LogsDialog({ open, onClose, effectiveLogLevel }: { open: boolean; onClose: () => void; effectiveLogLevel: LogLevel }) {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [logsConnected, setLogsConnected] = useState(false);
+  const [logLevelFilter, setLogLevelFilter] = useState<LogLevel>(effectiveLogLevel);
+  const [logKeywordFilter, setLogKeywordFilter] = useState("");
+  const [following, setFollowing] = useState(true);
+  const logsViewportRef = useRef<HTMLDivElement | null>(null);
+  const pendingLogsRef = useRef<string[]>([]);
+  const followingRef = useRef(true);
+  const selectableLogLevels = LOG_LEVELS.filter(
+    (level) => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[effectiveLogLevel],
+  );
+
+  useEffect(() => {
+    if (open) {
+      setLogLevelFilter(effectiveLogLevel);
+      followingRef.current = true;
+      setFollowing(true);
+    }
+  }, [open, effectiveLogLevel]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let closed = false;
+    setLogs([]);
+    pendingLogsRef.current = [];
+
+    const flushLogs = () => {
+      if (pendingLogsRef.current.length === 0) return;
+      const pending = pendingLogsRef.current;
+      pendingLogsRef.current = [];
+      setLogs((prev) => {
+        const next = prev.concat(pending);
+        return next.length > MAX_LOG_LINES ? next.slice(next.length - MAX_LOG_LINES) : next;
+      });
+    };
+
+    const flushTimer = window.setInterval(flushLogs, LOG_FLUSH_INTERVAL_MS);
+    const source = subscribeLogs({
+      onOpen: () => {
+        if (!closed) setLogsConnected(true);
+      },
+      onLog: (data) => {
+        if (closed) return;
+        try {
+          const payload = JSON.parse(data) as { encoded_line?: string };
+          if (typeof payload.encoded_line === "string") {
+            pendingLogsRef.current.push(decodeURIComponent(payload.encoded_line));
+          }
+        } catch {
+          pendingLogsRef.current.push(data);
+        }
+      },
+      onError: () => {
+        if (!closed) setLogsConnected(false);
+      },
+    });
+
+    return () => {
+      closed = true;
+      setLogsConnected(false);
+      window.clearInterval(flushTimer);
+      pendingLogsRef.current = [];
+      source.close();
+    };
+  }, [open]);
+
+  const keyword = logKeywordFilter.trim().toLowerCase();
+  const filteredLogs = useMemo(() => logs.filter((line) => {
+    const lineLevel = extractLogLevel(line);
+    if (lineLevel && LOG_LEVEL_PRIORITY[lineLevel] < LOG_LEVEL_PRIORITY[logLevelFilter]) return false;
+    return keyword === "" || line.toLowerCase().includes(keyword);
+  }), [logs, logLevelFilter, keyword]);
+
+  // 只有停留在底部时才跟随新日志；用户向上翻看历史时不强制拉回。
+  useEffect(() => {
+    if (!open || !followingRef.current) return;
+    const viewport = logsViewportRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  }, [filteredLogs, open]);
+
+  function jumpToLatest() {
+    followingRef.current = true;
+    setFollowing(true);
+    const viewport = logsViewportRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} title="实时日志" description="查看后端程序的最近日志和实时输出。">
+      <div className="space-y-4 p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium",
+              logsConnected ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
+            )}
+          >
+            {logsConnected ? "已连接" : "连接中"}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">最多保留 {MAX_LOG_LINES} 行</span>
+            <Button
+              variant="outline"
+              onClick={() => {
+                pendingLogsRef.current = [];
+                setLogs([]);
+              }}
             >
-              {logsConnected ? "已连接" : "连接中"}
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted">最多保留 {MAX_LOG_LINES} 行</span>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  pendingLogsRef.current = [];
-                  setLogs([]);
-                }}
-              >
               清空视图
-              </Button>
-            </div>
+            </Button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Select
-                  className="flex-1"
-                  aria-label="日志级别筛选"
-                  value={logLevelFilter}
-                  onChange={(val) => setLogLevelFilter(val as LogLevel)}
-                  options={selectableLogLevels.map((level) => ({
-                    value: level,
-                    label: level.toUpperCase(),
-                  }))}
-                />
-              </div>
-              <p className="text-xs leading-5 text-muted">
-                当前系统日志级别：{effectiveLogLevel.toUpperCase()}。更低级别的日志已被后端过滤，筛选项只显示该级别及以上。
-              </p>
-            </div>
-            <Input
-              type="search"
-              aria-label="按关键词筛选日志"
-              value={logKeywordFilter}
-              onChange={(event) => setLogKeywordFilter(event.target.value)}
-              placeholder="按关键词筛选日志"
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="space-y-2">
+            <Select
+              aria-label="日志级别筛选"
+              value={logLevelFilter}
+              onChange={(val) => setLogLevelFilter(val as LogLevel)}
+              options={selectableLogLevels.map((level) => ({
+                value: level,
+                label: level.toUpperCase(),
+              }))}
             />
+            <p className="text-xs leading-5 text-muted">
+              当前系统日志级别：{effectiveLogLevel.toUpperCase()}。更低级别的日志已被后端过滤，筛选项只显示该级别及以上。
+            </p>
           </div>
+          <Input
+            type="search"
+            aria-label="按关键词筛选日志"
+            value={logKeywordFilter}
+            onChange={(event) => setLogKeywordFilter(event.target.value)}
+            placeholder="按关键词筛选日志"
+          />
+        </div>
+        <div className="relative">
           <div
             ref={logsViewportRef}
             role="log"
             aria-label="实时日志输出"
             aria-live="off"
             tabIndex={0}
+            onScroll={(event) => {
+              const viewport = event.currentTarget;
+              const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= LOG_STICK_THRESHOLD_PX;
+              if (atBottom !== followingRef.current) {
+                followingRef.current = atBottom;
+                setFollowing(atBottom);
+              }
+            }}
             className="h-[60vh] overflow-auto rounded-2xl border border-border bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100"
           >
             {filteredLogs.length === 0 ? (
@@ -713,9 +865,15 @@ export default function App() {
               ))
             )}
           </div>
+          {!following && filteredLogs.length > 0 ? (
+            <Button size="sm" className="absolute bottom-3 right-3 shadow-lg" onClick={jumpToLatest}>
+              <ChevronDown aria-hidden="true" />
+              跳到最新
+            </Button>
+          ) : null}
         </div>
-      </Dialog>
-    </main>
+      </div>
+    </Dialog>
   );
 }
 
@@ -737,6 +895,7 @@ function NavSection({ title, open, onToggle, items, page, navigate, searching }:
           const Icon = item.icon;
           const active = item.key === page;
           return <button key={item.key} type="button" onClick={() => navigate(item.key)}
+            onPointerEnter={() => prefetchPage(item.key)} onFocus={() => prefetchPage(item.key)}
             aria-current={active ? "page" : undefined} title={item.description}
             className={cn("kirara-nav-item flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2")}>
             <Icon aria-hidden="true" className="h-5 w-5 shrink-0" /><span>{item.label}</span>

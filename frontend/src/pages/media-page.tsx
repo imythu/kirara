@@ -60,6 +60,8 @@ import {
   type LocalReleaseScopeKind,
 } from "@/lib/media-release-scope";
 import { cn } from "@/lib/utils";
+import { FilterChips, FilterSummary, Highlight, SearchBox, SortableHead } from "@/components/list-controls";
+import { compareValues, matchesQuery, oneOf, usePageState, useSortState } from "@/lib/page-state";
 
 const MEDIA_MODES = ["subscriptions", "tmdb", "resources", "settings"] as const;
 type MediaMode = typeof MEDIA_MODES[number];
@@ -1070,6 +1072,8 @@ export function MediaPage() {
   const [downloaders, setDownloaders] = useState<Downloader[]>([]);
   const [openListSettings, setOpenListSettings] = useState<OpenListAutomationSettings | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const loadedOnceRef = useRef(false);
   const [loadError, setLoadError] = useState("");
   const [failedSections, setFailedSections] = useState<string[]>([]);
   const [createError, setCreateError] = useState("");
@@ -1079,10 +1083,12 @@ export function MediaPage() {
 
   const [tmdbQuery, setTmdbQuery] = useState(() => readQueryDraft("tmdb"));
   useEffect(() => writeQueryDraft("tmdb", tmdbQuery), [tmdbQuery]);
-  const [tmdbType, setTmdbType] = useState<"multi" | MediaType>("multi");
-  const [tmdbResults, setTmdbResults] = useState<TmdbMedia[]>([]);
+  // TMDB 搜索结果在离开页面后保留，回来时无需重新搜索。
+  const [tmdbType, setTmdbType] = usePageState<"multi" | MediaType>("media:tmdb:type", "multi", oneOf(["multi", "tv", "movie"] as const));
+  const [tmdbResults, setTmdbResults] = usePageState<TmdbMedia[]>("media:tmdb:results", [], (value): value is TmdbMedia[] => Array.isArray(value));
   const [tmdbLoading, setTmdbLoading] = useState(false);
-  const [tmdbSearched, setTmdbSearched] = useState(false);
+  const [tmdbSearched, setTmdbSearched] = usePageState("media:tmdb:searched", false);
+  const tmdbSearchGeneration = useRef(0);
   const [pendingMedia, setPendingMedia] = useState<TmdbMedia | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<TmdbMedia | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<TmdbDetails | null>(null);
@@ -1150,7 +1156,9 @@ export function MediaPage() {
     downloadLoadMoreController.current?.abort();
     downloadLoadMoreController.current = null;
     setDownloadsLoadingMore(false);
-    setInitialLoading(true);
+    // 只有首次进入显示整块加载占位；之后的刷新保留当前面板（含筛选、展开状态与未保存的编辑）。
+    if (loadedOnceRef.current) setRefreshing(true);
+    else setInitialLoading(true);
     setLoadError("");
     const results = await Promise.allSettled([
       api<unknown>("/api/media/settings"),
@@ -1226,7 +1234,9 @@ export function MediaPage() {
     }
     setFailedSections(results.flatMap((result, index) => result.status === "rejected" ? [["settings", "profiles", "subscriptions", "downloads", "sites", "downloaders", "openlist"][index]] : []));
     setLoadError(errors.length ? `部分数据无法读取：${errors.map((error) => error.split("：")[0]).join("、")}。请检查服务连接后重试。` : "");
+    loadedOnceRef.current = true;
     setInitialLoading(false);
+    setRefreshing(false);
   }, []);
 
   const reloadSubscriptions = useCallback(async () => {
@@ -1769,21 +1779,23 @@ export function MediaPage() {
     setDeleteSubscription(null);
   }
 
-  async function searchTmdb(event: FormEvent) {
-    event.preventDefault();
+  async function searchTmdb(event?: FormEvent, typeOverride?: "multi" | MediaType) {
+    event?.preventDefault();
     if (!tmdbQuery.trim()) return;
+    const generation = ++tmdbSearchGeneration.current;
     setTmdbLoading(true);
     setTmdbSearched(true);
     setNotice(null);
     try {
-      const params = new URLSearchParams({ query: tmdbQuery.trim(), media_type: tmdbType });
+      const params = new URLSearchParams({ query: tmdbQuery.trim(), media_type: typeOverride ?? tmdbType });
       const payload = await api<unknown>(`/api/media/tmdb/search?${params.toString()}`);
-      setTmdbResults(readArray<TmdbMedia>(payload, ["results", "items", "data"]));
+      if (generation === tmdbSearchGeneration.current) setTmdbResults(readArray<TmdbMedia>(payload, ["results", "items", "data"]));
     } catch (error) {
+      if (generation !== tmdbSearchGeneration.current) return;
       setTmdbResults([]);
       setNotice({ tone: "error", text: describeUnknown(error) });
     } finally {
-      setTmdbLoading(false);
+      if (generation === tmdbSearchGeneration.current) setTmdbLoading(false);
     }
   }
 
@@ -2130,8 +2142,8 @@ export function MediaPage() {
             {initialLoading ? "正在读取订阅" : failedSections.includes("subscriptions") ? "订阅暂时无法读取" : `${subscriptions.length} 个订阅`}
           </p>
         </div>
-        <Button variant="outline" disabled={initialLoading} onClick={() => void loadData()}>
-          <RefreshCw data-icon="inline-start" />
+        <Button variant="outline" disabled={initialLoading || refreshing} onClick={() => void loadData()}>
+          <RefreshCw data-icon="inline-start" className={refreshing ? "motion-safe:animate-spin" : undefined} />
           刷新
         </Button>
       </header>
@@ -2169,11 +2181,16 @@ export function MediaPage() {
         })}
       </div>
 
-      {notice ? <NoticeBanner notice={notice} onClose={() => setNotice(null)} /> : null}
+      {/* 操作结果固定在内容区顶部可见，在长列表中部触发扫描等操作时也能看到反馈。 */}
+      {notice ? (
+        <div className="sticky top-0 z-20 -mx-1 bg-background px-1 py-1">
+          <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
+        </div>
+      ) : null}
       {loadError ? (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
           <p>{loadError}</p>
-          <Button variant="outline" disabled={initialLoading} onClick={() => void loadData()}>重新读取</Button>
+          <Button variant="outline" loading={refreshing} disabled={initialLoading} onClick={() => void loadData()}>重新读取</Button>
         </div>
       ) : null}
 
@@ -2233,7 +2250,11 @@ export function MediaPage() {
           loading={tmdbLoading}
           searched={tmdbSearched}
           onQueryChange={setTmdbQuery}
-          onMediaTypeChange={(value) => setTmdbType(value as "multi" | MediaType)}
+          onMediaTypeChange={(value) => {
+            // 已经搜索过时，切换类型直接用新类型重新搜索，不必再点一次“搜索”。
+            setTmdbType(value as "multi" | MediaType);
+            if (tmdbSearched && tmdbQuery.trim()) void searchTmdb(undefined, value as "multi" | MediaType);
+          }}
           onSearch={searchTmdb}
           onSubscribe={(media) => void openSubscriptionDialog(media)}
         />
@@ -2382,7 +2403,7 @@ export function MediaPage() {
             {configurationUnavailable || missingPrerequisites.length > 0 ? <p role="status" className="text-sm text-muted">{configurationUnavailable ? "配置读取失败，请关闭弹窗后重新读取。" : `还需配置：${missingPrerequisites.map((item) => item.label).join("、")}。可先完成配置，已选影视会保留。`}</p> : null}
             {!configurationUnavailable && missingPrerequisites.length > 0 ? <div className="flex flex-wrap gap-2">
               {missingPrerequisites.map((item) => item.href ? <a key={item.label} className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm underline" href={item.href} target="_blank" rel="noreferrer">配置{item.label}（新标签页）</a> : <Button key={item.label} variant="outline" onClick={() => { setPendingMedia(selectedMedia); closeSubscriptionDialog(); setMode("settings"); }}>配置{item.label}</Button>)}
-              <Button variant="outline" onClick={() => void loadData()}>已配置，重新读取</Button>
+              <Button variant="outline" loading={refreshing} onClick={() => void loadData()}>已配置，重新读取</Button>
             </div> : null}
             <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
               <Button variant="outline" onClick={closeSubscriptionDialog}>取消</Button>
@@ -3257,6 +3278,10 @@ function SitePicker({
   );
 }
 
+const SUBSCRIPTION_FILTERS = ["all", "attention", "active", "paused", "completed"] as const;
+const SUBSCRIPTION_SORT_KEYS = ["none", "title", "status", "scan"] as const;
+const DOWNLOAD_FILTERS = ["all", "submitted", "pending", "failed"] as const;
+
 function SubscriptionsPanel({
   subscriptionsUnavailable, downloadsUnavailable, configurationUnavailable, onRetry,
   subscriptions,
@@ -3305,15 +3330,38 @@ function SubscriptionsPanel({
   onDeleteDownload: (download: MediaDownload) => void;
   onLoadMoreDownloads: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const visibleSubscriptions = subscriptions.filter((item) => {
-    const matchesQuery = `${item.title} ${item.original_title ?? ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
-    const completed = subscriptionIsCompleted(item);
-    return matchesQuery && (statusFilter === "all" || (statusFilter === "attention" && Boolean(item.last_error) && !completed)
-      || (statusFilter === "active" && item.enabled && !completed) || (statusFilter === "paused" && !item.enabled && !completed)
-      || (statusFilter === "completed" && completed));
-  });
+  const [query, setQuery] = usePageState("media:subscriptions:query", "");
+  const [statusFilter, setStatusFilter] = usePageState("media:subscriptions:status", "all", oneOf(SUBSCRIPTION_FILTERS));
+  const [sort, toggleSort] = useSortState("media:subscriptions:sort", { key: "none", direction: "asc" }, SUBSCRIPTION_SORT_KEYS);
+  const [downloadQuery, setDownloadQuery] = usePageState("media:downloads:query", "");
+  const [downloadFilter, setDownloadFilter] = usePageState("media:downloads:status", "all", oneOf(DOWNLOAD_FILTERS));
+  const subscriptionFilterActive = Boolean(query.trim()) || statusFilter !== "all";
+  const visibleSubscriptions = useMemo(() => {
+    const rows = subscriptions.filter((item) => {
+      const completed = subscriptionIsCompleted(item);
+      return matchesQuery(query, item.title, item.original_title, item.year)
+        && (statusFilter === "all" || (statusFilter === "attention" && Boolean(item.last_error) && !completed)
+          || (statusFilter === "active" && item.enabled && !completed) || (statusFilter === "paused" && !item.enabled && !completed)
+          || (statusFilter === "completed" && completed));
+    });
+    if (sort.key === "none") return rows;
+    const rank = (item: Subscription) => item.last_error && !subscriptionIsCompleted(item) ? 0
+      : subscriptionIsCompleted(item) ? 3 : item.enabled ? 1 : 2;
+    const sorted = rows.slice().sort((left, right) => {
+      if (sort.key === "title") return compareValues(left.title, right.title);
+      if (sort.key === "status") return rank(left) - rank(right) || compareValues(left.title, right.title);
+      return compareValues(left.next_run_at ?? left.last_run_at, right.next_run_at ?? right.last_run_at);
+    });
+    return sort.direction === "asc" ? sorted : sorted.reverse();
+  }, [subscriptions, query, statusFilter, sort]);
+  const visibleDownloads = useMemo(() => downloads.filter((item) =>
+    matchesQuery(downloadQuery, item.title, item.source_site, item.downloader_name)
+    && (downloadFilter === "all"
+      || (downloadFilter === "submitted" && item.status === "submitted")
+      || (downloadFilter === "failed" && item.status === "failed")
+      || (downloadFilter === "pending" && !["submitted", "failed", "cancelled"].includes(item.status)))),
+  [downloads, downloadQuery, downloadFilter]);
+  const downloadFilterActive = Boolean(downloadQuery.trim()) || downloadFilter !== "all";
   function actions(subscription: Subscription) {
     const completed = subscriptionIsCompleted(subscription);
     return <div className="flex flex-wrap items-start gap-2 lg:justify-end">
@@ -3335,6 +3383,7 @@ function SubscriptionsPanel({
   const pausedCount = subscriptions.filter((item) => !item.enabled && !subscriptionIsCompleted(item)).length;
   const attentionCount = subscriptions.filter((item) => item.last_error && !subscriptionIsCompleted(item)).length;
   const queuedCount = downloads.filter((item) => !["submitted", "failed", "cancelled"].includes(item.status)).length;
+  const completedCount = subscriptions.filter((item) => subscriptionIsCompleted(item)).length;
   const submittedDownloadCount = downloads.filter((item) => item.status === "submitted").length;
   const failedDownloadCount = downloads.filter((item) => item.status === "failed").length;
 
@@ -3343,7 +3392,7 @@ function SubscriptionsPanel({
       <div className="flex flex-wrap items-center gap-2 text-sm" aria-label="订阅状态概览">
         {subscriptionsUnavailable ? <span className="text-muted">订阅状态暂不可用</span> : <>
           <span className="mr-2 text-muted">追更中 {activeCount} · 已暂停 {pausedCount}</span>
-          <Button variant="outline" className="h-11" aria-pressed={statusFilter === "attention"} onClick={() => setStatusFilter(statusFilter === "attention" ? "all" : "attention")}>需处理 {attentionCount}</Button>
+          {attentionCount > 0 ? <Button variant="outline" className="h-11" aria-pressed={statusFilter === "attention"} onClick={() => setStatusFilter(statusFilter === "attention" ? "all" : "attention")}>需处理 {attentionCount}</Button> : null}
         </>}
       </div>
 
@@ -3359,28 +3408,33 @@ function SubscriptionsPanel({
           </Button>
         </CardHeader>
         <CardContent>
-          {!subscriptionsUnavailable && subscriptions.length > 0 ? <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
-            <div><Label htmlFor="subscription-query">查找订阅</Label><Input id="subscription-query" className="mt-2 min-h-11" placeholder="输入影视名称或原名" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-            <div><Label htmlFor="subscription-status">状态筛选</Label><Select id="subscription-status" className="mt-2 min-h-11" value={statusFilter} onChange={setStatusFilter} options={[
-              { value: "all", label: "全部状态" }, { value: "attention", label: "需处理" }, { value: "active", label: "追更中" }, { value: "paused", label: "已暂停" }, { value: "completed", label: "已完成" },
-            ]} /></div>
-            <p role="status" className="text-sm text-muted sm:col-span-2">显示 {visibleSubscriptions.length} / {subscriptions.length} 个订阅</p>
+          {!subscriptionsUnavailable && subscriptions.length > 0 ? <div className="mb-4 flex flex-col gap-3">
+            <SearchBox id="subscription-query" value={query} onChange={setQuery} placeholder="查找订阅：影视名称、原名或年份" />
+            <FilterChips label="按状态筛选订阅" value={statusFilter} onChange={setStatusFilter} options={[
+              { value: "all", label: "全部", count: subscriptions.length },
+              { value: "attention", label: "需处理", count: attentionCount, tone: "danger" },
+              { value: "active", label: "追更中", count: activeCount },
+              { value: "paused", label: "已暂停", count: pausedCount },
+              { value: "completed", label: "已完成", count: completedCount },
+            ]} />
+            <FilterSummary shown={visibleSubscriptions.length} total={subscriptions.length} noun="个订阅" active={subscriptionFilterActive}
+              onClear={() => { setQuery(""); setStatusFilter("all"); }} />
           </div> : null}
           {subscriptionsUnavailable ? <EmptyState icon={AlertCircle} title="订阅无法读取" action={{ label: "重新读取", onClick: onRetry }} /> : subscriptions.length === 0 ? (
             <EmptyState icon={Tv} title="暂无订阅" action={{ label: "添加影视", onClick: onAdd }} />
           ) : visibleSubscriptions.length === 0 ? (
-            <EmptyState icon={Search} title="没有符合筛选条件的订阅" action={{ label: "清除筛选", onClick: () => { setQuery(""); setStatusFilter("all"); } }} />
+            <EmptyState icon={Search} title={query.trim() ? `没有找到“${query.trim()}”相关的订阅` : "没有符合筛选条件的订阅"} action={{ label: "清除筛选", onClick: () => { setQuery(""); setStatusFilter("all"); } }} />
           ) : (
             <>
               <div className="hidden lg:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>影视</TableHead>
+                      <SortableHead label="影视" sortKey="title" sort={sort} onSort={toggleSort} />
                       <TableHead>当前目标</TableHead>
                       <TableHead>规则</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>扫描时间</TableHead>
+                      <SortableHead label="状态" sortKey="status" sort={sort} onSort={toggleSort} />
+                      <SortableHead label="扫描时间" sortKey="scan" sort={sort} onSort={toggleSort} />
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -3395,7 +3449,7 @@ function SubscriptionsPanel({
                               <Poster path={subscription.poster_path} title={subscription.title} className="w-11 shrink-0" />
                               <div className="min-w-0">
                                 <div className="flex max-w-[280px] items-center gap-2">
-                                  <div className="truncate font-semibold" title={subscription.title}>{subscription.title}</div>
+                                  <div className="truncate font-semibold" title={subscription.title}><Highlight text={subscription.title} query={query} /></div>
                                   <StatusPill label={subscriptionCategoryLabel(subscription)} />
                                 </div>
                                 <div className="mt-0.5 text-xs text-muted">{subscription.year ?? "年份未知"}</div>
@@ -3443,7 +3497,7 @@ function SubscriptionsPanel({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <h3 className="truncate text-sm font-semibold">{subscription.title}</h3>
+                              <h3 className="truncate text-sm font-semibold"><Highlight text={subscription.title} query={query} /></h3>
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <StatusPill label={subscriptionCategoryLabel(subscription)} />
                                 <GenrePills genres={subscription.tmdb_genres} />
@@ -3488,7 +3542,21 @@ function SubscriptionsPanel({
             <EmptyState icon={HardDriveDownload} title="暂无下载任务" />
           ) : (
             <div className="grid gap-2">
-              {downloads.map((download) => {
+              <div className="mb-2 flex flex-col gap-3">
+                <SearchBox primary={false} value={downloadQuery} onChange={setDownloadQuery} placeholder="查找下载：资源标题、站点或下载器" />
+                <FilterChips label="按提交状态筛选下载记录" value={downloadFilter} onChange={setDownloadFilter} options={[
+                  { value: "all", label: "全部", count: downloads.length },
+                  { value: "submitted", label: "已提交", count: submittedDownloadCount },
+                  { value: "pending", label: "处理中", count: queuedCount },
+                  { value: "failed", label: "失败", count: failedDownloadCount, tone: "danger" },
+                ]} />
+                <FilterSummary shown={visibleDownloads.length} total={downloads.length} noun="条已加载记录" active={downloadFilterActive}
+                  onClear={() => { setDownloadQuery(""); setDownloadFilter("all"); }} />
+              </div>
+              {visibleDownloads.length === 0 ? (
+                <EmptyState icon={Search} title="已加载的记录中没有符合条件的下载" action={{ label: "清除筛选", onClick: () => { setDownloadQuery(""); setDownloadFilter("all"); } }} />
+              ) : null}
+              {visibleDownloads.map((download) => {
                 const targetLabel = targetKeyLabel(download.target_key);
                 const qualityFields = releaseQualityFields(download.parsed_release).filter((field) => field !== targetLabel);
                 const notice = downloadNotice(download);
@@ -3502,7 +3570,7 @@ function SubscriptionsPanel({
                         {qualityFields.map((field) => <StatusPill key={field} label={field} />)}
                         {qualityFields.length === 0 ? <StatusPill label="质量未识别" tone="negative" /> : null}
                       </div>
-                      <div className="mt-2 line-clamp-2 text-sm font-semibold" title={download.title}>{download.title}</div>
+                      <div className="mt-2 line-clamp-2 text-sm font-semibold" title={download.title}><Highlight text={download.title} query={downloadQuery} /></div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
                         <span>{download.source_site}</span>
                         <span>{formatBytes(download.size)}</span>
@@ -3938,7 +4006,7 @@ function TmdbPanel({
           <form className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]" onSubmit={onSearch}>
             <div className="flex flex-col gap-2">
               <Label htmlFor="tmdb-query">影视名称</Label>
-              <Input id="tmdb-query" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="输入中文名或原名" autoComplete="off" />
+              <Input id="tmdb-query" type="search" data-primary-search="true" aria-keyshortcuts="/" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="输入中文名或原名" autoComplete="off" />
             </div>
             <FormSelect
               label="类型"
@@ -4092,7 +4160,7 @@ function ResourcesPanel({
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="flex flex-col gap-2 md:col-span-2">
                 <Label htmlFor="resource-query">关键词</Label>
-                <Input id="resource-query" value={form.query} onChange={(event) => setForm((current) => ({ ...current, query: event.target.value }))} placeholder="影视名、季集或发布标题" autoComplete="off" />
+                <Input id="resource-query" type="search" data-primary-search="true" aria-keyshortcuts="/" value={form.query} onChange={(event) => setForm((current) => ({ ...current, query: event.target.value }))} placeholder="影视名、季集或发布标题" autoComplete="off" />
               </div>
               <FormSelect
                 label="关联目标"
@@ -4167,28 +4235,8 @@ function ResourcesPanel({
             <div className="mb-5 border-b border-border pb-5">
               <div className="max-w-2xl">
                 <Label htmlFor="resource-local-query">本地快速查找</Label>
-                <div className="relative mt-2">
-                  <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-                  <Input
-                    id="resource-local-query"
-                    value={localQuery}
-                    onChange={(event) => setLocalQuery(event.target.value)}
-                    className="pl-10 pr-10"
-                    placeholder="标题、来源站点或 S01E01"
-                    autoComplete="off"
-                  />
-                  {localQuery ? (
-                    <button
-                      type="button"
-                      aria-label="清空本地查找"
-                      title="清空本地查找"
-                      className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                      onClick={() => setLocalQuery("")}
-                    >
-                      <X className="size-4" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
+                <SearchBox id="resource-local-query" className="mt-2" primary={false} value={localQuery} onChange={setLocalQuery}
+                  label="本地快速查找" placeholder="标题、来源站点或 S01E01" />
               </div>
               <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="季集识别类型">
                 {LOCAL_SCOPE_FILTERS.map((filter) => {
@@ -4201,7 +4249,7 @@ function ResourcesPanel({
                       type="button"
                       aria-pressed={active}
                       disabled={count === 0 && filter.value !== "all"}
-                      onClick={() => setScopeFilter(filter.value)}
+                      onClick={() => setScopeFilter(active ? "all" : filter.value)}
                       className={cn(
                         "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-45",
                         active
@@ -4221,6 +4269,10 @@ function ResourcesPanel({
                     </button>
                   );
                 })}
+                {localQuery.trim() || scopeFilter !== "all" ? (
+                  <button type="button" className="h-8 rounded px-1 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => { setLocalQuery(""); setScopeFilter("all"); }}>清除筛选</button>
+                ) : null}
               </div>
             </div>
 

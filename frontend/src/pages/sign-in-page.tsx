@@ -27,6 +27,8 @@ import { SignInCreatePanel, type SignInSiteOption } from "@/components/sign-in-c
 import { Button } from "@/components/ui/button";
 import { SearchFeedback, SearchPagination } from "@/components/search-controls";
 import { useServerSearch } from "@/lib/server-search";
+import { usePageState } from "@/lib/page-state";
+import { Highlight, SearchBox } from "@/components/list-controls";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -163,10 +165,11 @@ export function SignInPage() {
   const [settings, setSettings] = useState<GlobalConfig | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<GlobalConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const [activeView, setActiveView] = useHashChoice<SignInView>("view", SIGN_IN_VIEWS, "tasks");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [siteFilter, setSiteFilter] = useState(0);
+  const [searchTerm, setSearchTerm] = usePageState("sign-in:query", "");
+  const [siteFilter, setSiteFilter] = usePageState("sign-in:site", 0);
   const [searchPollUntil, setSearchPollUntil] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsBrowser, setSettingsBrowser] = useState<SignInBrowser | "vision_llm">("lightpanda");
@@ -202,10 +205,10 @@ export function SignInPage() {
     filters: { site_id: siteFilter || undefined },
   };
   const taskSearch = useServerSearch<SignInTaskRecord>("/api/sign-in-tasks/search", {
-    ...searchOptions, enabled: !loading && activeView === "tasks",
+    ...searchOptions, enabled: !loading && activeView === "tasks", persistKey: "sign-in:tasks",
   });
   const recordSearch = useServerSearch<SignInRecord>("/api/sign-in-records/search", {
-    ...searchOptions, enabled: !loading && activeView === "records",
+    ...searchOptions, enabled: !loading && activeView === "records", persistKey: "sign-in:records",
   });
   const activeSearch = activeView === "tasks" ? taskSearch : recordSearch;
   const filteredTasks = useMemo(() => taskSearch.records.map((task) => {
@@ -244,9 +247,10 @@ export function SignInPage() {
     }));
   }
 
+  // 首次加载显示占位；之后的刷新保留当前列表，不闪回整页加载状态。
   function loadData() {
-    setLoading(true);
-    Promise.all([
+    setRefreshing(true);
+    return Promise.all([
       api<SignInTaskRecord[]>("/api/sign-in-tasks"),
       api<SiteRecord[]>("/api/sites"),
       api<GlobalConfig>("/api/settings"),
@@ -262,12 +266,20 @@ export function SignInPage() {
         setSettings(nextSettings);
       })
       .catch((error: Error) => setMessage(error.message || "加载自动签到数据失败"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
   }
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // 记住的站点筛选对应的站点已删除时回到“全部站点”。
+  useEffect(() => {
+    if (!loading && siteFilter !== 0 && !sites.some((site) => site.id === siteFilter)) setSiteFilter(0);
+  }, [loading, siteFilter, sites, setSiteFilter]);
 
   function setField<K extends keyof SignInTaskRequest>(key: K, value: SignInTaskRequest[K]) {
     setForm(current => ({ ...current, [key]: value }));
@@ -572,8 +584,8 @@ export function SignInPage() {
                 <Settings2 className="mr-2 h-4 w-4" />
                 配置签到工具
               </Button>
-              <Button variant="outline" onClick={loadData}>
-                <RefreshCw className="mr-2 h-4 w-4" />
+              <Button variant="outline" disabled={refreshing} onClick={() => void loadData()}>
+                <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "motion-safe:animate-spin")} />
                 刷新
               </Button>
               <Button id="sign-in-batch-add" variant="outline" disabled={loading || !settings || createMode !== null} onClick={() => setCreateMode("batch")}>
@@ -634,21 +646,15 @@ export function SignInPage() {
           </div>
 
           <div className="grid gap-3 border-b border-border pb-4 md:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)]">
-            <div className="relative min-w-0">
-              <Label htmlFor="sign-in-search" className="sr-only">快速搜索</Label>
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <Input
-                id="sign-in-search"
-                type="search"
-                autoComplete="off"
-                className="pl-10"
-                value={searchTerm}
-                placeholder={activeView === "tasks" ? "搜索任务、站点或最近消息" : "搜索任务、站点或日志消息"}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                onCompositionStart={() => setSearchComposing(true)}
-                onCompositionEnd={(event) => { setSearchTerm(event.currentTarget.value); setSearchComposing(false); }}
-              />
-            </div>
+            <SearchBox
+              id="sign-in-search"
+              value={searchTerm}
+              busy={activeSearch.refreshing}
+              placeholder={activeView === "tasks" ? "搜索任务、站点或最近消息" : "搜索任务、站点或日志消息"}
+              onChange={setSearchTerm}
+              onCompositionStart={() => setSearchComposing(true)}
+              onCompositionEnd={(value) => { setSearchTerm(value); setSearchComposing(false); }}
+            />
             <div className="flex min-w-0 gap-2">
               <div className="min-w-0 flex-1">
                 <Label htmlFor="sign-in-site-filter" className="sr-only">按站点筛选</Label>
@@ -703,7 +709,7 @@ export function SignInPage() {
                       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="min-w-0 break-words text-sm font-semibold sm:truncate">{task.name}</span>
+                            <span className="min-w-0 break-words text-sm font-semibold sm:truncate"><Highlight text={task.name} query={searchTerm} /></span>
                             <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium", task.enabled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
                               {task.enabled ? "已启用" : "已停用"}
                             </span>
@@ -807,6 +813,37 @@ export function SignInPage() {
         description="配置自动签到共用的浏览器连接和视觉 LLM。"
         escMode="double"
         panelClassName="max-w-3xl"
+        footer={
+          <div className="space-y-3">
+            {configFeedback ? (
+              <div
+                role={configFeedback.tone === "error" ? "alert" : "status"}
+                className={cn(
+                  "rounded-xl border px-4 py-3 text-sm",
+                  configFeedback.tone === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-destructive/30 bg-destructive/5 text-destructive",
+                )}
+              >
+                {configFeedback.text}
+              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!settingsDraft || savingBrowser} onClick={() => void persistBrowserSettings(false)}>
+                {savingBrowser && !probingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                保存配置
+              </Button>
+              {settingsBrowser !== "vision_llm" ? <Button variant="outline" disabled={!settingsDraft || savingBrowser} onClick={() => void persistBrowserSettings(true)}>
+                {probingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4" />}
+                {probingBrowser ? "测试中..." : "保存并测试"}
+              </Button> : null}
+              <Button variant="outline" disabled={savingBrowser} onClick={closeSettings}>
+                <X className="mr-2 h-4 w-4" />
+                关闭
+              </Button>
+            </div>
+          </div>
+        }
       >
         <div className="space-y-5 p-4 sm:p-6">
           {settingsBrowser !== "vision_llm" ? <div className="space-y-2 text-sm leading-relaxed">
@@ -1017,34 +1054,6 @@ export function SignInPage() {
             </div>
           )}
 
-          {configFeedback ? (
-            <div
-              role="status"
-              className={cn(
-                "rounded-xl border px-4 py-3 text-sm",
-                configFeedback.tone === "success"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-destructive/30 bg-destructive/5 text-destructive",
-              )}
-            >
-              {configFeedback.text}
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-            <Button disabled={!settingsDraft || savingBrowser} onClick={() => void persistBrowserSettings(false)}>
-              {savingBrowser && !probingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              保存配置
-            </Button>
-            {settingsBrowser !== "vision_llm" ? <Button variant="outline" disabled={!settingsDraft || savingBrowser} onClick={() => void persistBrowserSettings(true)}>
-              {probingBrowser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4" />}
-              {probingBrowser ? "测试中..." : "保存并测试"}
-            </Button> : null}
-            <Button variant="outline" disabled={savingBrowser} onClick={closeSettings}>
-              <X className="mr-2 h-4 w-4" />
-              关闭
-            </Button>
-          </div>
         </div>
       </Dialog>
 
@@ -1055,8 +1064,27 @@ export function SignInPage() {
         description="选择站点和执行间隔，已支持站点默认使用系统适配，也可手动选择签到方式。"
         escMode="double"
         panelClassName="max-w-3xl"
+        footer={
+          <div className="space-y-3">
+            {submitError ? <Notice tone="error">{submitError}</Notice> : null}
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" form="sign-in-task-form" loading={submitting}>
+                {submitting ? "提交中…" : editingId !== null ? "保存修改" : "创建任务"}
+              </Button>
+              <Button variant="outline" disabled={submitting} onClick={closeForm}>取消</Button>
+            </div>
+          </div>
+        }
       >
-        <div className="space-y-6 p-4 sm:p-6">
+        <form
+          id="sign-in-task-form"
+          className="space-y-6 p-4 sm:p-6"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!submitting) void handleSubmit();
+          }}
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="sign-in-name">名称</Label>
@@ -1143,14 +1171,7 @@ export function SignInPage() {
 
           </div>
 
-          {submitError ? <Notice tone="error">{submitError}</Notice> : null}
-          <div className="flex flex-wrap gap-3 border-t border-border pt-4">
-            <Button loading={submitting} onClick={() => void handleSubmit()}>
-              {submitting ? "提交中…" : editingId !== null ? "保存修改" : "创建任务"}
-            </Button>
-            <Button variant="outline" disabled={submitting} onClick={closeForm}>取消</Button>
-          </div>
-        </div>
+        </form>
       </Dialog>
 
       <Dialog

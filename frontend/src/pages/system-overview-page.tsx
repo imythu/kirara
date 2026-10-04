@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Cpu,
@@ -76,14 +76,15 @@ function SourceToggle({
     { key: "system", label: "系统" },
   ];
   return (
-    <div className="flex rounded-xl border border-border bg-surface-container/60 p-0.5">
+    <div role="group" aria-label="数据来源" className="flex rounded-xl border border-border bg-surface-container/60 p-0.5">
       {options.map((opt) => (
         <button
           key={opt.key}
           type="button"
+          aria-pressed={value === opt.key}
           onClick={() => onChange(opt.key)}
           className={cn(
-            "rounded-lg px-3 py-1 text-xs font-semibold transition-all",
+            "min-h-8 rounded-lg px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             value === opt.key
               ? "bg-primary text-primary-foreground shadow-sm"
               : "text-muted hover:text-foreground",
@@ -219,7 +220,7 @@ export function SystemOverviewPage() {
   const [refreshSec, setRefreshSec] = useState(10);
   const [cpuSource, setCpuSource] = useState<SourceFilter>("all");
   const [memSource, setMemSource] = useState<SourceFilter>("all");
-  const refreshTimerRef = useRef<number | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const fetchSnapshot = useCallback(async () => {
     try {
@@ -240,39 +241,35 @@ export function SystemOverviewPage() {
       setHistory(data);
     } catch {
       // 静默失败
+    } finally {
+      setHistoryLoaded(true);
     }
   }, []);
 
-  // 初始加载 + 实时轮询
+  // 初始加载 + 实时轮询；标签页隐藏时暂停，回到前台立即补一次。
   useEffect(() => {
-    fetchSnapshot();
-    fetchHistory(hours);
-
-    if (refreshTimerRef.current !== null) {
-      window.clearInterval(refreshTimerRef.current);
-    }
-
-    if (refreshSec > 0) {
-      refreshTimerRef.current = window.setInterval(() => {
-        fetchSnapshot();
-        fetchHistory(hours);
-      }, refreshSec * 1000);
-    }
-
+    const refresh = () => {
+      void fetchSnapshot();
+      void fetchHistory(hours);
+    };
+    refresh();
+    const timer = refreshSec > 0
+      ? window.setInterval(() => {
+        if (!document.hidden) refresh();
+      }, refreshSec * 1000)
+      : null;
+    const onVisible = () => {
+      if (!document.hidden && refreshSec > 0) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      if (refreshTimerRef.current !== null) {
-        window.clearInterval(refreshTimerRef.current);
-      }
+      if (timer !== null) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refreshSec, hours, fetchSnapshot, fetchHistory]);
 
-  // 切换时间窗口时重新拉取
-  useEffect(() => {
-    fetchHistory(hours);
-  }, [hours, fetchHistory]);
-
   // 图表数据
-  const chartData = history.map((r) => ({
+  const chartData = useMemo(() => history.map((r) => ({
     time: new Date(r.recorded_at).getTime(),
     processCpu: r.process_cpu_usage,
     systemCpu: r.system_cpu_usage,
@@ -282,7 +279,7 @@ export function SystemOverviewPage() {
       : 0,
     systemUsedGb: r.system_used_memory_bytes / 1024 / 1024 / 1024,
     systemTotalGb: r.system_total_memory_bytes / 1024 / 1024 / 1024,
-  }));
+  })), [history]);
 
   const processMemMb = snapshot?.process_memory_mb ?? 0;
   const sysMemPercent = snapshot?.system_memory_usage_percent ?? 0;
@@ -412,6 +409,11 @@ export function SystemOverviewPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6 pt-2">
+          {historyLoaded && chartData.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted" role="status">
+              所选时间范围内还没有历史记录，服务运行一段时间后会自动出现趋势。
+            </p>
+          ) : null}
           {/* CPU 趋势 */}
           <div>
             <div className="mb-3 flex items-center justify-between">
@@ -448,7 +450,7 @@ export function SystemOverviewPage() {
                   />
                   <Tooltip
                     labelFormatter={(v) => new Date(v as number).toLocaleString()}
-                    formatter={(v: number) => [`${v.toFixed(1)}%`]}
+                    formatter={(v) => [`${Number(v).toFixed(1)}%`]}
                     contentStyle={{
                       borderRadius: 12,
                       border: "1px solid var(--border)",
@@ -535,9 +537,9 @@ export function SystemOverviewPage() {
                   )}
                   <Tooltip
                     labelFormatter={(v) => new Date(v as number).toLocaleString()}
-                    formatter={(v: number, name: string) => {
-                      if (name === "系统内存") return [`${v.toFixed(1)}%`];
-                      return [`${v.toFixed(1)} MB`];
+                    formatter={(v, name) => {
+                      if (name === "系统内存") return [`${Number(v).toFixed(1)}%`];
+                      return [`${Number(v).toFixed(1)} MB`];
                     }}
                     contentStyle={{
                       borderRadius: 12,

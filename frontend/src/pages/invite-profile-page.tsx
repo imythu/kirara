@@ -22,6 +22,7 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LoadingState } from "@/components/ui/state";
 import {
   Table,
   TableBody,
@@ -32,6 +33,8 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Highlight, SearchBox } from "@/components/list-controls";
+import { oneOf, usePageState } from "@/lib/page-state";
 import type { PtdSitePreset, SiteRecord } from "@/types";
 
 type ParsedItem = {
@@ -676,12 +679,13 @@ function StatusChip({ status, error }: { status: RowState["status"]; error?: str
 }
 
 export function InviteProfilePage() {
-  const [tab, setTab] = useState<"show" | "verify">("show");
+  const [tab, setTab] = usePageState<"show" | "verify">("invite:tab", "show", oneOf(["show", "verify"] as const));
   const [sites, setSites] = useState<SiteRecord[]>([]);
   const [catalog, setCatalog] = useState<PtdSitePreset[]>([]);
   const [sitesError, setSitesError] = useState("");
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [filter, setFilter] = useState("");
+  // 勾选的站点与筛选词在离开页面后保留，回来可以直接继续。
+  const [selectedIds, setSelectedIds] = usePageState<number[]>("invite:selected", [], (value): value is number[] => Array.isArray(value) && value.every((item) => typeof item === "number"));
+  const [filter, setFilter] = usePageState("invite:filter", "");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -691,6 +695,7 @@ export function InviteProfilePage() {
   const [preregEmail, setPreregEmail] = useState<string | null>(null);
   const [states, setStates] = useState<RowState[]>([]);
   const [running, setRunning] = useState(false);
+  const [sitesLoading, setSitesLoading] = useState(true);
   const [parseError, setParseError] = useState("");
   const abortRef = useRef(false);
 
@@ -722,6 +727,8 @@ export function InviteProfilePage() {
       setCatalog(presets);
     } catch (error) {
       setSitesError((error as Error).message || "站点列表读取失败");
+    } finally {
+      setSitesLoading(false);
     }
   }, []);
 
@@ -732,6 +739,15 @@ export function InviteProfilePage() {
   useEffect(() => () => {
     abortRef.current = true;
   }, []);
+
+  // 记住的勾选里去掉已删除或已没有 UID 的站点，保证计数与预览一致。
+  useEffect(() => {
+    if (sitesLoading || sitesError) return;
+    setSelectedIds((current) => {
+      const next = current.filter((id) => eligibleSites.some((site) => site.id === id));
+      return next.length === current.length ? current : next;
+    });
+  }, [sitesLoading, sitesError, eligibleSites, setSelectedIds]);
 
   const selectedSites = useMemo(
     () => eligibleSites.filter((site) => selectedIds.includes(site.id) && site.stats?.uid),
@@ -860,7 +876,7 @@ export function InviteProfilePage() {
           setStates((current) =>
             current.map((state, i) =>
               i === index
-                ? { status: "failed", result, error: result.message || result.failure }
+                ? { status: "failed", result, error: result.message || result.failure || undefined }
                 : state,
             ),
           );
@@ -989,16 +1005,7 @@ export function InviteProfilePage() {
               ) : null}
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                  <Input
-                    value={filter}
-                    onChange={(event) => setFilter(event.target.value)}
-                    placeholder="筛选站点 / UID / 用户名"
-                    className="h-11 pl-9 sm:h-10"
-                    aria-label="筛选站点"
-                  />
-                </div>
+                <SearchBox className="flex-1" value={filter} onChange={setFilter} label="筛选站点" placeholder="筛选站点 / UID / 用户名" />
                 <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-10 sm:flex-none" onClick={toggleAllVisible} disabled={!visibleSites.length}>
                   {visibleSites.length > 0 && visibleSites.every((s) => selectedIds.includes(s.id))
                     ? "取消本页"
@@ -1009,7 +1016,9 @@ export function InviteProfilePage() {
                 </Button>
               </div>
 
-              {eligibleSites.length === 0 ? (
+              {sitesLoading ? (
+                <LoadingState label="正在读取站点…" />
+              ) : eligibleSites.length === 0 ? (
                 <div className="rounded-xl border border-border bg-surface-container px-4 py-8 text-center">
                   <Gift className="mx-auto h-8 w-8 text-muted" aria-hidden />
                   <p className="mt-3 text-sm font-medium">还没有可出示的站点</p>
@@ -1051,7 +1060,7 @@ export function InviteProfilePage() {
                               />
                             </TableCell>
                             <TableCell>
-                              <div className="font-medium">{site.name}</div>
+                              <div className="font-medium"><Highlight text={site.name} query={filter} /></div>
                               <div className="text-xs text-muted">{siteHost(site)}</div>
                             </TableCell>
                             <TableCell className="tabular-nums text-muted">{site.id}</TableCell>
@@ -1134,8 +1143,12 @@ export function InviteProfilePage() {
                   </CardDescription>
                 </div>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                  {queued.length || unmatched.length ? (
-                    <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-9 sm:flex-none" disabled={running} onClick={resetLookup}>
+                  {running ? (
+                    <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-9 sm:flex-none" onClick={() => { abortRef.current = true; }}>
+                      停止查询
+                    </Button>
+                  ) : queued.length || unmatched.length ? (
+                    <Button variant="outline" size="sm" className="h-11 flex-1 sm:h-9 sm:flex-none" onClick={resetLookup}>
                       清空结果
                     </Button>
                   ) : null}
@@ -1162,13 +1175,19 @@ export function InviteProfilePage() {
                   id="invite-paste"
                   value={pasteText}
                   onChange={(event) => setPasteText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !running && pasteText.trim()) {
+                      event.preventDefault();
+                      void handleParseAndLookup();
+                    }
+                  }}
                   rows={10}
                   spellCheck={false}
                   className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs leading-5 text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   placeholder={"预注册ID：example\n邮箱：user@example.com\nhttps://pt.example.com/userdetails.php?id=123\n猫：27701\n青蛙|5|708227"}
                 />
                 <p className="text-xs leading-5 text-muted">
-                  支持管道格式、资料链接（userdetails / profile/detail）、圈内俗称（如「猫：27701」）。点「解析并查询」会立刻拉取。
+                  支持管道格式、资料链接（userdetails / profile/detail）、圈内俗称（如「猫：27701」）。点「解析并查询」（或 Ctrl/⌘ + Enter）会立刻拉取。
                 </p>
               </div>
 

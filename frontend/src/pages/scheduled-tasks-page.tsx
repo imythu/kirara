@@ -16,7 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, scrollContentToTop } from "@/lib/utils";
+import { Notice } from "@/components/ui/notice";
+import { FilterChips, FilterSummary, Highlight, SearchBox } from "@/components/list-controls";
+import { matchesQuery, oneOf, usePageState } from "@/lib/page-state";
 import { CurlImportDialog } from "@/components/curl-import-dialog";
 
 import {
@@ -116,12 +119,16 @@ function Status({ run, running }: { run: Run | null; running?: boolean }) {
   );
 }
 
+const TASK_FILTERS = ["all", "enabled", "paused", "failed"] as const;
+
 export function ScheduledTasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
+  const [busyKind, setBusyKind] = useState<"run" | "enabled" | "delete" | null>(null);
+  const listScrollRef = useRef(0);
   const [editor, setEditor] = useState<Task | "new" | null>(null);
   const [history, setHistory] = useState<Task | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -130,7 +137,8 @@ export function ScheduledTasksPage() {
   const [deleting, setDeleting] = useState<Task | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const createRef = useRef<HTMLButtonElement>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = usePageState("scheduled:query", "");
+  const [statusFilter, setStatusFilter] = usePageState("scheduled:status", "all", oneOf(TASK_FILTERS));
   async function refresh() {
     try {
       setTasks(await api<Task[]>(root));
@@ -175,7 +183,9 @@ export function ScheduledTasksPage() {
     };
   }, [history]);
   async function action(task: Task, kind: "run" | "enabled") {
+    if (busy !== null) return;
     setBusy(task.id);
+    setBusyKind(kind);
     setNotice("");
     try {
       await api(`${root}/${task.id}/${kind}`, {
@@ -196,17 +206,38 @@ export function ScheduledTasksPage() {
       setNotice(`${task.name}：${messageOf(e)}`);
     } finally {
       setBusy(null);
+      setBusyKind(null);
     }
+  }
+  // 编辑器替换列表显示：打开时回到顶部，关闭后回到原来的列表位置。
+  function openEditor(next: Task | "new") {
+    listScrollRef.current = document.querySelector<HTMLElement>(".kirara-content")?.scrollTop || window.scrollY;
+    setEditor(next);
+    setNotice("");
+    scrollContentToTop();
   }
   function closeEditor() {
     setEditor(null);
-    requestAnimationFrame(() => createRef.current?.focus());
+    requestAnimationFrame(() => {
+      const top = listScrollRef.current;
+      document.querySelector<HTMLElement>(".kirara-content")?.scrollTo({ top });
+      if (window.scrollY !== top) window.scrollTo({ top });
+      createRef.current?.focus({ preventScroll: true });
+    });
   }
+  const failedTask = (t: Task) => t.last_run?.status === "failed" || t.last_run?.status === "interrupted";
   const filtered = tasks.filter((t) =>
-    `${t.name} ${t.request_summary}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
+    matchesQuery(query, t.name, t.request_summary)
+    && (statusFilter === "all"
+      || (statusFilter === "enabled" && t.enabled)
+      || (statusFilter === "paused" && !t.enabled)
+      || (statusFilter === "failed" && failedTask(t))),
   );
+  const filterActive = Boolean(query.trim()) || statusFilter !== "all";
+  const clearFilters = () => {
+    setQuery("");
+    setStatusFilter("all");
+  };
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -216,10 +247,7 @@ export function ScheduledTasksPage() {
         {!editor && (
           <Button
             ref={createRef}
-            onClick={() => {
-              setEditor("new");
-              setNotice("");
-            }}
+            onClick={() => openEditor("new")}
           >
             <Plus />
             新增任务
@@ -237,14 +265,7 @@ export function ScheduledTasksPage() {
           </Button>
         </div>
       )}
-      {notice && (
-        <p
-          role="status"
-          className="rounded-xl border border-border bg-accent p-4 text-sm"
-        >
-          {notice}
-        </p>
-      )}
+      {notice && <Notice onDismiss={() => setNotice("")}>{notice}</Notice>}
       {editor ? (
         <TaskEditor
           key={editor === "new" ? "new" : editor.id}
@@ -273,7 +294,7 @@ export function ScheduledTasksPage() {
                 定期检查服务、调用 API，或发送
                 Webhook。选择执行间隔后，云母会在后台为你运行。
               </p>
-              <Button onClick={() => setEditor("new")}>
+              <Button onClick={() => openEditor("new")}>
                 <Plus />
                 创建 HTTP 任务
               </Button>
@@ -283,23 +304,34 @@ export function ScheduledTasksPage() {
               className="overflow-hidden rounded-2xl border border-border bg-card"
               aria-label="任务列表"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 sm:px-5">
-                <span className="text-sm text-muted">
-                  {tasks.length} 个任务 ·{" "}
-                  {tasks.filter((t) => t.enabled).length} 个已启用
-                </span>
-                <Input
-                  aria-label="搜索任务"
-                  placeholder="搜索名称或主机"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="sm:max-w-64"
-                />
+              <div className="space-y-3 border-b border-border p-4 sm:px-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <FilterChips
+                    label="按状态筛选任务"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={[
+                      { value: "all", label: "全部", count: tasks.length },
+                      { value: "enabled", label: "已启用", count: tasks.filter((t) => t.enabled).length },
+                      { value: "paused", label: "已暂停", count: tasks.filter((t) => !t.enabled).length },
+                      { value: "failed", label: "上次失败", count: tasks.filter(failedTask).length, tone: "danger" },
+                    ]}
+                  />
+                  <SearchBox
+                    label="搜索任务"
+                    placeholder="搜索名称或主机"
+                    value={query}
+                    onChange={setQuery}
+                    className="sm:w-72"
+                  />
+                </div>
+                <FilterSummary shown={filtered.length} total={tasks.length} noun="个任务" active={filterActive} onClear={clearFilters} />
               </div>
               {!filtered.length && (
-                <p className="p-10 text-center text-sm text-muted">
-                  没有匹配的任务，试试其他名称或主机。
-                </p>
+                <div className="p-10 text-center text-sm text-muted">
+                  <p>{query.trim() ? `没有找到“${query.trim()}”相关的任务，试试其他名称或主机。` : "没有符合筛选条件的任务。"}</p>
+                  <Button variant="outline" className="mt-4" onClick={clearFilters}>清除筛选</Button>
+                </div>
               )}
               {filtered.map((task) => (
                 <article
@@ -309,13 +341,13 @@ export function ScheduledTasksPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="break-all font-semibold">{task.name}</h2>
+                        <h2 className="break-all font-semibold"><Highlight text={task.name} query={query} /></h2>
                         <span className="text-xs text-muted">
                           {task.enabled ? "已启用" : "已暂停"}
                         </span>
                       </div>
                       <p className="mt-1 break-all text-sm text-muted">
-                        HTTP 请求 · {task.request_summary}
+                        HTTP 请求 · <Highlight text={task.request_summary} query={query} />
                       </p>
                     </div>
                     <Status run={task.last_run} running={task.running} />
@@ -345,6 +377,7 @@ export function ScheduledTasksPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
+                      loading={busy === task.id && busyKind === "run"}
                       disabled={busy === task.id || task.running}
                       onClick={() => action(task, "run")}
                     >
@@ -353,6 +386,7 @@ export function ScheduledTasksPage() {
                     </Button>
                     <Button
                       variant="outline"
+                      loading={busy === task.id && busyKind === "enabled"}
                       disabled={busy === task.id}
                       onClick={() => action(task, "enabled")}
                     >
@@ -362,7 +396,7 @@ export function ScheduledTasksPage() {
                     <Button
                       variant="outline"
                       disabled={task.running || busy === task.id}
-                      onClick={() => setEditor(task)}
+                      onClick={() => openEditor(task)}
                     >
                       <Pencil />
                       编辑
@@ -448,7 +482,7 @@ export function ScheduledTasksPage() {
         title="删除定时任务"
         description={`删除「${deleting?.name ?? ""}」及其全部执行记录，此操作无法撤销。`}
         footer={
-          <>
+          <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               disabled={busy !== null}
@@ -458,32 +492,32 @@ export function ScheduledTasksPage() {
             </Button>
             <Button
               variant="destructive"
+              loading={busyKind === "delete"}
               disabled={busy !== null}
               onClick={async () => {
                 if (!deleting) return;
+                const name = deleting.name;
                 setBusy(deleting.id);
+                setBusyKind("delete");
                 try {
                   await api(`${root}/${deleting.id}`, { method: "DELETE" });
                   setDeleting(null);
+                  setNotice(`「${name}」已删除。`);
                   await refresh();
                 } catch (e) {
                   setDeleteError(messageOf(e));
                 } finally {
                   setBusy(null);
+                  setBusyKind(null);
                 }
               }}
             >
-              {busy !== null ? "删除中…" : "删除任务"}
+              {busyKind === "delete" ? "删除中…" : "删除任务"}
             </Button>
-          </>
+          </div>
         }
       >
-        <p
-          role={deleteError ? "alert" : undefined}
-          className="text-sm text-destructive"
-        >
-          {deleteError}
-        </p>
+        {deleteError ? <Notice tone="error" className="m-4 sm:m-6">{deleteError}</Notice> : null}
       </Dialog>
     </div>
   );
@@ -600,6 +634,7 @@ function TaskEditor({
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<string[]>([]);
   const [previewError, setPreviewError] = useState("");
+  const [previewPending, setPreviewPending] = useState(true);
   const nameRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     nameRef.current?.focus();
@@ -613,17 +648,25 @@ function TaskEditor({
   const timingJson = JSON.stringify(timing);
   useEffect(() => {
     let current = true;
-    setPreview([]);
-    setPreviewError("");
+    // 保留上一次的预览直到新结果返回，避免每次输入都闪成“正在计算…”。
+    setPreviewPending(true);
     const timer = setTimeout(async () => {
       try {
         const result = await api<string[]>(`${root}/preview`, {
           method: "POST",
           body: timingJson,
         });
-        if (current) setPreview(result);
+        if (current) {
+          setPreview(result);
+          setPreviewError("");
+        }
       } catch (e) {
-        if (current) setPreviewError(messageOf(e));
+        if (current) {
+          setPreview([]);
+          setPreviewError(messageOf(e));
+        }
+      } finally {
+        if (current) setPreviewPending(false);
       }
     }, 350);
     return () => {
@@ -693,7 +736,7 @@ function TaskEditor({
   return (
     <form
       onSubmit={save}
-      className="overflow-hidden rounded-2xl border border-border bg-card"
+      className="overflow-clip rounded-2xl border border-border bg-card"
     >
       <div className="flex items-center gap-3 border-b border-border p-4 sm:px-6">
         <Button
@@ -1119,7 +1162,7 @@ function TaskEditor({
               <p className="mt-1 text-xs text-muted">
                 以下时间按浏览器本地时区显示
               </p>
-              <div aria-live="polite" className="mt-3">
+              <div aria-live="polite" aria-busy={previewPending} className={cn("mt-3 transition-opacity", previewPending && preview.length > 0 && "opacity-60")}>
                 {previewError ? (
                   <p className="text-sm leading-6 text-destructive">
                     {previewError}
@@ -1138,7 +1181,7 @@ function TaskEditor({
           </aside>
         </div>
       </fieldset>
-      <div className="space-y-3 border-t border-border p-4 sm:px-6">
+      <div className="space-y-3 border-t border-border bg-card p-4 sm:px-6 lg:sticky lg:bottom-0 lg:z-10">
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -1159,7 +1202,8 @@ function TaskEditor({
             </Button>
             <Button
               type="submit"
-              disabled={saving || loadingHttp || !!previewError}
+              loading={saving}
+              disabled={loadingHttp || !!previewError}
             >
               <Send />
               {saving ? "保存中…" : "保存任务"}
